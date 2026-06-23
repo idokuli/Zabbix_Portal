@@ -34,6 +34,12 @@ export type DashboardLayoutData = {
   scope: "user" | "team";
 };
 
+export type DashboardMeta = {
+  page: string;
+  name: string;
+  updated_at: string | null;
+};
+
 export type MetricLayoutData = {
   widgets: MetricWidgetConfig[];
   scope: "user" | "team";
@@ -822,6 +828,29 @@ export const api = {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ scope, widgets }),
+    }),
+
+  // ── Multiple dashboards ──────────────────────────────────────────────────
+  listDashboards: (scope: "user" | "team" = "user") =>
+    apiFetch<{ dashboards: DashboardMeta[] }>(`/dashboard/list?scope=${scope}`),
+
+  createDashboard: (scope: "user" | "team", name: string) =>
+    apiFetch<{ page: string; name: string }>("/dashboard", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope, name }),
+    }),
+
+  renameDashboard: (scope: "user" | "team", page: string, name: string) =>
+    apiFetch<{ message: string }>(`/dashboard/${encodeURIComponent(page)}/rename`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scope, name }),
+    }),
+
+  deleteDashboard: (scope: "user" | "team", page: string) =>
+    apiFetch<{ message: string }>(`/dashboard/${encodeURIComponent(page)}?scope=${scope}`, {
+      method: "DELETE",
     }),
 
   getMetricLayout: (scope: "user" | "team" = "user") =>

@@ -429,3 +429,78 @@ def save_dashboard_layout(
         return False
     finally:
         conn.close()
+
+
+def list_dashboards(owner_type: str, owner_id: int) -> list:
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT page, name, updated_at FROM dashboard_layouts
+                   WHERE owner_type=%s AND owner_id=%s ORDER BY id ASC""",
+                (owner_type, owner_id),
+            )
+            return cur.fetchall()
+    except Exception as exc:
+        logger.error("list_dashboards failed: %r", exc)
+        return []
+    finally:
+        conn.close()
+
+
+def create_dashboard(owner_type: str, owner_id: int, name: str, page: str) -> bool:
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO dashboard_layouts (owner_type, owner_id, page, name, layout, updated_at)
+                   VALUES (%s, %s, %s, %s, '[]'::jsonb, NOW())""",
+                (owner_type, owner_id, page, name),
+            )
+        conn.commit()
+        return True
+    except Exception as exc:
+        conn.rollback()
+        logger.error("create_dashboard failed: %r", exc)
+        return False
+    finally:
+        conn.close()
+
+
+def rename_dashboard(owner_type: str, owner_id: int, page: str, name: str) -> bool:
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """UPDATE dashboard_layouts SET name=%s, updated_at=NOW()
+                   WHERE owner_type=%s AND owner_id=%s AND page=%s""",
+                (name, owner_type, owner_id, page),
+            )
+            updated = cur.rowcount > 0
+        conn.commit()
+        return updated
+    except Exception as exc:
+        conn.rollback()
+        logger.error("rename_dashboard failed: %r", exc)
+        return False
+    finally:
+        conn.close()
+
+
+def delete_dashboard(owner_type: str, owner_id: int, page: str) -> bool:
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM dashboard_layouts WHERE owner_type=%s AND owner_id=%s AND page=%s",
+                (owner_type, owner_id, page),
+            )
+            deleted = cur.rowcount > 0
+        conn.commit()
+        return deleted
+    except Exception as exc:
+        conn.rollback()
+        logger.error("delete_dashboard failed: %r", exc)
+        return False
+    finally:
+        conn.close()

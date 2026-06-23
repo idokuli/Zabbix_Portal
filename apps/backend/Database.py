@@ -125,6 +125,7 @@ _MIGRATIONS = """
 ALTER TABLE team_users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255) DEFAULT '';
 
 ALTER TABLE dashboard_layouts ADD COLUMN IF NOT EXISTS page VARCHAR(50) NOT NULL DEFAULT 'dashboard';
+ALTER TABLE dashboard_layouts ADD COLUMN IF NOT EXISTS name VARCHAR(100) NOT NULL DEFAULT 'Dashboard';
 ALTER TABLE dashboard_layouts DROP CONSTRAINT IF EXISTS dashboard_layouts_owner_type_owner_id_key;
 DO $$
 BEGIN

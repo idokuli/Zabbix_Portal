@@ -4,6 +4,7 @@ import logging
 import os
 import threading
 import time
+import uuid
 from contextlib import asynccontextmanager
 from io import BytesIO
 from typing import Literal
@@ -1835,22 +1836,91 @@ class DashboardLayoutRequest(BaseModel):
     widgets: list[dict]
 
 
+class DashboardCreateRequest(BaseModel):
+    scope: str
+    name: str
+
+
+class DashboardRenameRequest(BaseModel):
+    scope: str
+    name: str
+
+
+def _dashboard_owner(scope: str, current_user: dict) -> tuple[str, int]:
+    if scope not in ("user", "team"):
+        raise HTTPException(status_code=400, detail="scope must be 'user' or 'team'")
+    if scope == "team":
+        team_id = _live_team_id(current_user)
+        if not team_id:
+            raise HTTPException(status_code=400, detail="You are not in a team.")
+        return "team", int(team_id)
+    return "user", int(current_user.get("sub", 0))
+
+
+@app.get("/dashboard/list", tags=["Dashboard"], summary="List dashboards for a scope")
+def list_dashboards(scope: str = "user", current_user: dict = Depends(get_current_user)):
+    if scope == "team" and not _live_team_id(current_user):
+        return {"dashboards": []}
+    owner_type, owner_id = _dashboard_owner(scope, current_user)
+    dashboards = um.list_dashboards(owner_type, owner_id)
+    if not dashboards:
+        # Every scope always has at least one dashboard to select; the default
+        # "dashboard" page is created lazily on first save.
+        dashboards = [{"page": "dashboard", "name": "Dashboard", "updated_at": None}]
+    return {"dashboards": dashboards}
+
+
+@app.post("/dashboard", tags=["Dashboard"], summary="Create a new dashboard")
+def create_dashboard(
+    data: DashboardCreateRequest, current_user: dict = Depends(get_current_user)
+):
+    name = data.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Dashboard name is required.")
+    owner_type, owner_id = _dashboard_owner(data.scope, current_user)
+    page = f"dash-{uuid.uuid4().hex[:12]}"
+    if not um.create_dashboard(owner_type, owner_id, name, page):
+        raise HTTPException(status_code=500, detail="Failed to create dashboard.")
+    return {"page": page, "name": name}
+
+
+@app.put(
+    "/dashboard/{page}/rename", tags=["Dashboard"], summary="Rename a dashboard"
+)
+def rename_dashboard(
+    page: str,
+    data: DashboardRenameRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    name = data.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Dashboard name is required.")
+    owner_type, owner_id = _dashboard_owner(data.scope, current_user)
+    if not um.rename_dashboard(owner_type, owner_id, page, name):
+        raise HTTPException(status_code=404, detail="Dashboard not found.")
+    return {"message": "Dashboard renamed."}
+
+
+@app.delete("/dashboard/{page}", tags=["Dashboard"], summary="Delete a dashboard")
+def delete_dashboard(
+    page: str, scope: str = "user", current_user: dict = Depends(get_current_user)
+):
+    owner_type, owner_id = _dashboard_owner(scope, current_user)
+    if not um.delete_dashboard(owner_type, owner_id, page):
+        raise HTTPException(status_code=404, detail="Dashboard not found.")
+    return {"message": "Dashboard deleted."}
+
+
 @app.get("/dashboard/layout", tags=["Dashboard"], summary="Get saved dashboard layout")
 def get_dashboard_layout(
     scope: str = "user",
     page: str = "dashboard",
     current_user: dict = Depends(get_current_user),
 ):
-    if scope == "team":
-        team_id = _live_team_id(current_user)
-        if not team_id:
-            return {"widgets": [], "scope": "team"}
-        return {
-            "widgets": um.get_dashboard_layout("team", int(team_id), page),
-            "scope": "team",
-        }
-    user_id = int(current_user.get("sub", 0))
-    return {"widgets": um.get_dashboard_layout("user", user_id, page), "scope": "user"}
+    if scope == "team" and not _live_team_id(current_user):
+        return {"widgets": [], "scope": "team"}
+    owner_type, owner_id = _dashboard_owner(scope, current_user)
+    return {"widgets": um.get_dashboard_layout(owner_type, owner_id, page), "scope": scope}
 
 
 @app.put("/dashboard/layout", tags=["Dashboard"], summary="Save dashboard layout")
@@ -1859,18 +1929,9 @@ def save_dashboard_layout(
     page: str = "dashboard",
     current_user: dict = Depends(get_current_user),
 ):
-    if data.scope not in ("user", "team"):
-        raise HTTPException(status_code=400, detail="scope must be 'user' or 'team'")
-    if data.scope == "team":
-        team_id = _live_team_id(current_user)
-        if not team_id:
-            raise HTTPException(status_code=400, detail="You are not in a team.")
-        if not um.save_dashboard_layout("team", int(team_id), data.widgets, page):
-            raise HTTPException(status_code=500, detail="Failed to save layout.")
-    else:
-        user_id = int(current_user.get("sub", 0))
-        if not um.save_dashboard_layout("user", user_id, data.widgets, page):
-            raise HTTPException(status_code=500, detail="Failed to save layout.")
+    owner_type, owner_id = _dashboard_owner(data.scope, current_user)
+    if not um.save_dashboard_layout(owner_type, owner_id, data.widgets, page):
+        raise HTTPException(status_code=500, detail="Failed to save layout.")
     return {"message": "Layout saved."}
 
 

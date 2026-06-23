@@ -5,7 +5,9 @@ import "react-resizable/css/styles.css";
 
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SaveIcon from "@mui/icons-material/Save";
@@ -65,6 +67,7 @@ import ReactGridLayout, { WidthProvider } from "react-grid-layout";
 import {
   type AlertEvent,
   type DashboardGraph,
+  type DashboardMeta,
   type GraphData,
   type Host,
   type HostMetrics,
@@ -1269,10 +1272,18 @@ const GraphsTab = () => {
   const [widgets, setWidgets] = useState<WidgetConfig[]>([]);
   const [isDirty, setIsDirty] = useState(false);
   const [saveScope, setSaveScope] = useState<"user" | "team">("user");
+  const [dashboards, setDashboards] = useState<DashboardMeta[]>([]);
+  const [currentPage, setCurrentPage] = useState("dashboard");
   const [addOpen, setAddOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [allAlertEvents, setAllAlertEvents] = useState<AlertEvent[]>([]);
+  const [newDashOpen, setNewDashOpen] = useState(false);
+  const [newDashName, setNewDashName] = useState("");
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [dashBusy, setDashBusy] = useState(false);
 
   useEffect(() => {
     const fetchEvents = () => {
@@ -1286,26 +1297,74 @@ const GraphsTab = () => {
     return () => clearInterval(timer);
   }, []);
 
+  const loadDashboards = useCallback((scope: "user" | "team", preferredPage?: string) => {
+    return api.listDashboards(scope).then((res) => {
+      const list = res.dashboards ?? [];
+      setDashboards(list);
+      const target =
+        preferredPage && list.some((d) => d.page === preferredPage)
+          ? preferredPage
+          : (list[0]?.page ?? "dashboard");
+      setCurrentPage(target);
+      return api.getDashboardLayout(scope, target).then((res2) => {
+        setWidgets(res2.widgets ?? []);
+        setIsDirty(false);
+      });
+    });
+  }, []);
+
   useEffect(() => {
-    api
-      .getDashboardLayout("user")
-      .then((res) => {
-        const userWidgets = res.widgets ?? [];
-        if (userWidgets.length > 0) {
-          setWidgets(userWidgets);
-          setSaveScope("user");
-          return;
-        }
-        // No personal layout — fall back to team layout
-        return api.getDashboardLayout("team").then((teamRes) => {
-          const teamWidgets = teamRes.widgets ?? [];
-          setWidgets(teamWidgets);
-          setSaveScope(teamWidgets.length > 0 ? "team" : "user");
-        });
-      })
+    loadDashboards("user")
       .catch(() => {})
       .finally(() => setLoaded(true));
-  }, []);
+  }, [loadDashboards]);
+
+  const currentDashboard = dashboards.find((d) => d.page === currentPage);
+  const currentName = currentDashboard?.name ?? "Dashboard";
+
+  const handleCreateDashboard = useCallback(async () => {
+    const name = newDashName.trim();
+    if (!name) return;
+    setDashBusy(true);
+    try {
+      const res = await api.createDashboard(saveScope, name);
+      await loadDashboards(saveScope, res.page);
+      setNewDashOpen(false);
+      setNewDashName("");
+    } catch {
+      // silently fail — user can retry
+    } finally {
+      setDashBusy(false);
+    }
+  }, [newDashName, saveScope, loadDashboards]);
+
+  const handleRenameDashboard = useCallback(async () => {
+    const name = renameValue.trim();
+    if (!name) return;
+    setDashBusy(true);
+    try {
+      await api.renameDashboard(saveScope, currentPage, name);
+      await loadDashboards(saveScope, currentPage);
+      setRenameOpen(false);
+    } catch {
+      // silently fail — user can retry
+    } finally {
+      setDashBusy(false);
+    }
+  }, [renameValue, saveScope, currentPage, loadDashboards]);
+
+  const handleDeleteDashboard = useCallback(async () => {
+    setDashBusy(true);
+    try {
+      await api.deleteDashboard(saveScope, currentPage);
+      await loadDashboards(saveScope);
+      setDeleteConfirmOpen(false);
+    } catch {
+      // silently fail — user can retry
+    } finally {
+      setDashBusy(false);
+    }
+  }, [saveScope, currentPage, loadDashboards]);
 
   const handleLayoutChange = useCallback(
     (layout: { i: string; x: number; y: number; w: number; h: number }[]) => {
@@ -1360,14 +1419,14 @@ const GraphsTab = () => {
   const saveLayout = useCallback(async () => {
     setSaving(true);
     try {
-      await api.saveDashboardLayout(saveScope, widgets);
+      await api.saveDashboardLayout(saveScope, widgets, currentPage);
       setIsDirty(false);
     } catch {
       // silently fail — user can retry
     } finally {
       setSaving(false);
     }
-  }, [saveScope, widgets]);
+  }, [saveScope, widgets, currentPage]);
 
   const layout = widgets.map((w) => ({
     i: w.i,
@@ -1395,7 +1454,7 @@ const GraphsTab = () => {
   return (
     <Box>
       {/* Toolbar */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2, flexWrap: "wrap" }}>
         <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: "0.85rem" }}>
           Graphs
         </Typography>
@@ -1406,6 +1465,72 @@ const GraphsTab = () => {
             sx={{ height: 18, fontSize: "0.68rem", minWidth: 24 }}
           />
         )}
+
+        <Select
+          size="small"
+          value={currentPage}
+          onChange={(e) => {
+            const page = e.target.value as string;
+            setCurrentPage(page);
+            api
+              .getDashboardLayout(saveScope, page)
+              .then((res) => {
+                setWidgets(res.widgets ?? []);
+                setIsDirty(false);
+              })
+              .catch(() => {});
+          }}
+          sx={{
+            fontSize: "0.72rem",
+            height: 28,
+            ml: 1,
+            minWidth: 130,
+            "& .MuiSelect-select": { py: 0, px: 1, lineHeight: "28px" },
+          }}
+        >
+          {dashboards.map((d) => (
+            <MenuItem key={d.page} value={d.page} sx={{ fontSize: "0.78rem" }}>
+              {d.name}
+            </MenuItem>
+          ))}
+        </Select>
+        <Tooltip title="New dashboard">
+          <IconButton
+            size="small"
+            onClick={() => {
+              setNewDashName("");
+              setNewDashOpen(true);
+            }}
+          >
+            <AddIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="Rename dashboard">
+          <IconButton
+            size="small"
+            onClick={() => {
+              setRenameValue(currentName);
+              setRenameOpen(true);
+            }}
+          >
+            <EditOutlinedIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        </Tooltip>
+        <Tooltip
+          title={dashboards.length <= 1 ? "At least one dashboard is required" : "Delete dashboard"}
+        >
+          <span>
+            <IconButton
+              size="small"
+              color="error"
+              onClick={() => setDeleteConfirmOpen(true)}
+              disabled={dashboards.length <= 1}
+            >
+              <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </span>
+        </Tooltip>
+
         <Box sx={{ flex: 1 }} />
         <Tooltip title="Add graph">
           <IconButton size="small" color="primary" onClick={() => setAddOpen(true)}>
@@ -1418,13 +1543,7 @@ const GraphsTab = () => {
           onChange={(e) => {
             const newScope = e.target.value as "user" | "team";
             setSaveScope(newScope);
-            api
-              .getDashboardLayout(newScope)
-              .then((res) => {
-                setWidgets(res.widgets ?? []);
-                setIsDirty(false);
-              })
-              .catch(() => {});
+            loadDashboards(newScope).catch(() => {});
           }}
           sx={{
             fontSize: "0.72rem",
@@ -1508,6 +1627,87 @@ const GraphsTab = () => {
         onAdd={addWidget}
         existingIds={existingIds}
       />
+
+      <Dialog open={newDashOpen} onClose={() => setNewDashOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>New dashboard</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            label="Dashboard name"
+            value={newDashName}
+            onChange={(e) => setNewDashName(e.target.value)}
+            sx={{ mt: 1 }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleCreateDashboard();
+            }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setNewDashOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleCreateDashboard}
+            disabled={!newDashName.trim() || dashBusy}
+          >
+            Create
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={renameOpen} onClose={() => setRenameOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Rename dashboard</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            label="Dashboard name"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            sx={{ mt: 1 }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleRenameDashboard();
+            }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRenameOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleRenameDashboard}
+            disabled={!renameValue.trim() || dashBusy}
+          >
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Delete dashboard</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            Delete "{currentName}" and all of its graphs? This cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleDeleteDashboard}
+            disabled={dashBusy}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
