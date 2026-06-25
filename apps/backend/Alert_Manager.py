@@ -46,7 +46,15 @@ class Alert_Manager(Zabbix_Base):
                     """INSERT INTO alert_rules
                            (user_id, item_id, item_name, hostname, operator, threshold, severity)
                        VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-                    (user_id, item_id, item_name, hostname, operator, threshold, severity),
+                    (
+                        user_id,
+                        item_id,
+                        item_name,
+                        hostname,
+                        operator,
+                        threshold,
+                        severity,
+                    ),
                 )
                 row = cur.fetchone()
             conn.commit()
@@ -94,7 +102,16 @@ class Alert_Manager(Zabbix_Base):
                            SET operator = %s, threshold = %s, severity = %s,
                                item_id = %s, item_name = %s, hostname = %s
                            WHERE id = %s AND user_id = %s""",
-                        (operator, threshold, severity, item_id, item_name, hostname, rule_id, user_id),
+                        (
+                            operator,
+                            threshold,
+                            severity,
+                            item_id,
+                            item_name,
+                            hostname,
+                            rule_id,
+                            user_id,
+                        ),
                     )
                 else:
                     cur.execute(
@@ -211,10 +228,10 @@ class Alert_Manager(Zabbix_Base):
 
                 op = rule["operator"]
                 firing = (
-                    (op == ">"  and val >  rule["threshold"]) or
-                    (op == "<"  and val <  rule["threshold"]) or
-                    (op == ">=" and val >= rule["threshold"]) or
-                    (op == "<=" and val <= rule["threshold"])
+                    (op == ">" and val > rule["threshold"])
+                    or (op == "<" and val < rule["threshold"])
+                    or (op == ">=" and val >= rule["threshold"])
+                    or (op == "<=" and val <= rule["threshold"])
                 )
 
                 with conn.cursor() as cur:
@@ -229,9 +246,17 @@ class Alert_Manager(Zabbix_Base):
                                    (rule_id, user_id, item_id, item_name, hostname,
                                     operator, threshold, actual_value, severity)
                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                            (rule["id"], rule["user_id"], rule["item_id"],
-                             rule["item_name"], rule["hostname"], op,
-                             rule["threshold"], val, rule["severity"]),
+                            (
+                                rule["id"],
+                                rule["user_id"],
+                                rule["item_id"],
+                                rule["item_name"],
+                                rule["hostname"],
+                                op,
+                                rule["threshold"],
+                                val,
+                                rule["severity"],
+                            ),
                         )
                         cur.execute(
                             "UPDATE alert_rules SET is_firing = TRUE WHERE id = %s",

@@ -35,8 +35,8 @@ route:
   enabled: true
   host: ""  # leave empty — OpenShift auto-generates the hostname from the cluster domain
   tls:
-    enabled: false
-    termination: edge  # edge | passthrough | reencrypt
+    enabled: true          # serve HTTPS; OpenShift router handles termination, no cert needed in the pod
+    termination: edge      # edge | passthrough | reencrypt
 
 resources:
   requests:
@@ -54,7 +54,7 @@ autoscaling:
 
 livenessProbe:
   httpGet:
-    path: /
+    path: /api/ping
     port: 42069
   initialDelaySeconds: 10
   periodSeconds: 20
@@ -63,7 +63,7 @@ livenessProbe:
 
 readinessProbe:
   httpGet:
-    path: /
+    path: /api/ping
     port: 42069
   initialDelaySeconds: 5
   periodSeconds: 10

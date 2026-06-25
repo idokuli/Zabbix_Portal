@@ -31,7 +31,11 @@ export class ErrorBoundary extends Component<PropsWithChildren, State> {
           }}
         >
           <Typography variant="h5">Something went wrong</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 480, textAlign: "center" }}>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ maxWidth: 480, textAlign: "center" }}
+          >
             {this.state.error.message}
           </Typography>
           <Button variant="contained" onClick={() => this.setState({ error: null })}>

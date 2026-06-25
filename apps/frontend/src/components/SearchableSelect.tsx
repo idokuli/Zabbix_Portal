@@ -1,6 +1,6 @@
 "use client";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
-import { InputAdornment, ListSubheader, Select, TextField, type SelectProps } from "@mui/material";
+import { InputAdornment, ListSubheader, Select, type SelectProps, TextField } from "@mui/material";
 import React, { useState, type ReactNode } from "react";
 
 const extractText = (node: ReactNode): string => {
@@ -18,7 +18,7 @@ type Props<T> = Omit<SelectProps<T>, "children"> & {
   searchPlaceholder?: string;
 };
 
-export const SearchableSelect = <T = string,>({
+export const SearchableSelect = <T = string>({
   children,
   searchPlaceholder,
   onClose,
@@ -42,12 +42,10 @@ export const SearchableSelect = <T = string,>({
   };
 
   return (
-    <Select<T>
-      {...rest}
-      onClose={handleClose}
-      MenuProps={{ autoFocus: false, ...menuPropsProp }}
-    >
-      <ListSubheader sx={{ px: 1, pt: 0.75, pb: 0.5, lineHeight: "normal", bgcolor: "background.paper" }}>
+    <Select<T> {...rest} onClose={handleClose} MenuProps={{ autoFocus: false, ...menuPropsProp }}>
+      <ListSubheader
+        sx={{ px: 1, pt: 0.75, pb: 0.5, lineHeight: "normal", bgcolor: "background.paper" }}
+      >
         <TextField
           size="small"
           fullWidth

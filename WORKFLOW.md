@@ -1,6 +1,6 @@
 # Workflow
 
-A complete walkthrough of how the Zabbix Portal codebase moves from a developer's laptop into production. This document covers:
+A complete walkthrough of how the Overwatch codebase moves from a developer's laptop into production. This document covers:
 
 1. The runtime request flow (browser → frontend → backend → Zabbix)
 2. The local development workflow
@@ -161,10 +161,15 @@ flowchart TD
     Tag["git push tag vX.Y.Z"] --> Pre["**.pre** — detect + validate\ncompare prev tag → this tag"]
     Pre --> Lint["**lint**\nruff · mypy · biome · tsc · helm lint/template"]
     Lint --> Build["**build**\nKaniko build + push images"]
-    Build --> Staging["**staging**\nhelm upgrade --install (auto)"]
-    Staging --> Production["**production**\nhelm upgrade --install (manual ▶)"]
-    Production --> DR["**dr**\nhelm upgrade --install on DR (manual ▶)"]
+    Build --> PlanStaging["**plan:staging** (auto)\nresolve tags, preview values"]
+    PlanStaging --> Staging["**deploy:staging** (auto)\nhelm upgrade --install"]
+    Staging --> PlanProd["**plan:production** (auto)"]
+    PlanProd --> Production["**deploy:production**\nhelm upgrade --install (manual ▶)"]
+    Production --> PlanDR["**plan:dr** (auto)"]
+    PlanDR --> DR["**deploy:dr** — own cluster\nhelm upgrade --install (manual ▶)"]
 ```
+
+Each environment is actually **two** jobs: a `plan:<env>` job that resolves image tags and previews the Helm values (fast, safe to re-run, always automatic) and a `deploy:<env>` job that runs the real `helm upgrade --install` (staging: automatic; production/dr: manual gate). See §4.4–4.6.
 
 ### 4.1 Stage `.pre` — change detection + validation (`detect.yml`)
 
@@ -192,7 +197,7 @@ All downstream jobs consume these vars via `artifacts: reports: dotenv`. Jobs fo
 | `helm:lint`          | internal Helm      | `HELM_CHANGED=1`     | `helm lint` on all three charts      |
 | `helm:template`      | internal Helm      | `HELM_CHANGED=1`     | `helm template` to catch render errors |
 
-The lint and typecheck jobs are currently `allow_failure: true` (advisory). Remove that flag once the codebase is clean if you want them to hard-block a release.
+`backend:lint`, `backend:typecheck`, `frontend:lint`, and `frontend:typecheck` are currently `allow_failure: true` (advisory) — remove that flag once the codebase is clean if you want them to hard-block a release. `helm:lint` and `helm:template` do **not** have that flag — a failure there already blocks the pipeline.
 
 ### 4.3 Stage `build` — produce images
 
@@ -207,29 +212,31 @@ Kaniko layer caching is enabled (`--cache=true --cache-ttl=1440h`).
 
 ### 4.4 Stage `staging` — auto-deploy on every tag
 
-`deploy:staging` runs automatically after a successful build. It deploys with Helm directly against the staging cluster API:
+Each environment is split into a `plan:<env>` job (phases 1–3: validate, resolve image tags, print the values that will be applied) and a `deploy:<env>` job (phase 4: the actual `helm upgrade`). `plan:staging` and `deploy:staging` both run automatically after a successful build:
 
 ```bash
 helm upgrade --install "$PROJECT_NAME" "helm/charts/$PROJECT_NAME/" \
   --namespace "$K8S_NAMESPACE" \
   -f values.yaml -f values-staging.yaml \
-  --set backend.image.repository=<registry>/backend \
-  --set frontend.image.repository=<registry>/frontend \
+  --set backend.image.repository="$ARTIFACTORY_REGISTRY/backend" \
+  --set frontend.image.repository="$ARTIFACTORY_REGISTRY/frontend" \
   --set backend.image.tag=<resolved> \
   --set frontend.image.tag=<resolved> \
   --wait --timeout 5m
 # Cluster connection: HELM_KUBEAPISERVER=$STAGING_SERVER, HELM_KUBETOKEN=$STAGING_TOKEN
 ```
 
-**Per-app tag resolution.** Only apps that changed since the previous tag get pinned to the new tag. For unchanged apps, the deploy script reads the last successfully deployed tag out of `helm history` and re-pins that — so an unchanged app is never accidentally moved. `--wait` blocks until all pods pass their readiness probes; if they don't within the timeout, Helm exits non-zero and the job fails.
+**Per-app tag resolution** happens in `plan:staging`: only apps that changed since the previous tag get pinned to the new tag. For unchanged apps, the plan script scans `helm history` (newest revision first, `deployed` or `superseded`) for the last successfully deployed tag and re-pins that — so an unchanged app is never accidentally moved. The resolved tags are written to a `staging-plan.env` dotenv artifact that `deploy:staging` consumes. `--wait` blocks until all pods pass their readiness probes; if they don't within the timeout, Helm exits non-zero and the job fails.
 
 ### 4.5 Stage `production` — manual gate
 
-`deploy:production` requires a manual click in the GitLab pipeline UI. Same Helm command and per-app pinning logic as staging, pointed at the production cluster (`PROD_SERVER` / `PROD_TOKEN`). On its first deploy to an environment with no Helm history, it falls back to the tags resolved by the staging job (passed forward via a dotenv artifact).
+`plan:production` runs automatically (it needs `deploy:staging` to have completed first, to keep the pipeline ordered) and resolves production's own Helm history the same way. If production has **no** prior Helm history for an app (first-ever deploy to that cluster), it falls back to the tag `plan:staging` resolved for that app, via a `STAGING_BACKEND_TAG` / `STAGING_FRONTEND_TAG` dotenv artifact.
 
-### 4.6 Stage `dr` — Disaster Recovery (manual gate)
+`deploy:production` requires a manual click (▶) in the GitLab pipeline UI. It runs the same `helm upgrade --install` as staging, pointed at the production cluster (`PROD_SERVER` / `PROD_TOKEN`), using the tags `plan:production` already resolved.
 
-`deploy:dr` mirrors production to a DR namespace/cluster. By default it reuses the production cluster variables — change `HELM_KUBEAPISERVER` / `HELM_KUBETOKEN` in the job if DR has its own cluster. Run after production is verified healthy. Falls back to the production-resolved tags on first deploy.
+### 4.6 Stage `dr` — Disaster Recovery (manual gate, own cluster)
+
+DR has **its own cluster variables** — `DR_SERVER` / `DR_TOKEN` — it does not reuse the production cluster. `plan:dr` resolves DR's own Helm history, falling back to production's resolved tag (`PRODUCTION_BACKEND_TAG` / `PRODUCTION_FRONTEND_TAG`) only if DR has never been deployed to before. `deploy:dr` is a manual gate, intended to be clicked after production is verified healthy.
 
 ---
 
@@ -250,11 +257,11 @@ flowchart LR
 ### Backend Docker build
 
 - Build context is `apps/backend/`.
-- Multi-stage: `builder` (pip install) → runtime (copies only installed packages). Runs as non-root `USER 1001` with GID 0 for OpenShift's `restricted` SCC.
+- Single-stage: installs `requirements.txt`, copies the app, then `chown -R 1001:0` + `USER 1001` so any OpenShift-assigned UID in GID 0 can read the files (`restricted` SCC). Runs with `uvicorn ... --workers 4`.
 
 ### Frontend Docker build
 
-- Build context is `apps/frontend/` — `docker build -t zabbix-portal-frontend apps/frontend/`.
+- Build context is `apps/frontend/` — `docker build -t overwatch-frontend apps/frontend/`.
 - Multi-stage: `builder` (`npm ci` + `next build`) → `runner` (Next.js standalone, `node server.js`, port 42069). Runs as non-root `USER 1001`.
 - `apps/frontend/.env` is copied into the image and loaded at server startup by `src/instrumentation.ts` via `dotenv.config()`. Set `BACKEND_URL` before building. (In-cluster, the Route handles `/api/*` so this value is unused there.)
 

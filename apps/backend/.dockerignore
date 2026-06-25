@@ -7,7 +7,9 @@ package.json
 
 # Python runtime artifacts
 venv/
+venv*/
 .venv/
+.venv*/
 __pycache__/
 *.py[cod]
 *.pyo

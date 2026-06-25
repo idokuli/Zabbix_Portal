@@ -11,22 +11,32 @@ const read = (key: string): Set<string> => {
 };
 
 const write = (key: string, set: Set<string>) => {
-  try { localStorage.setItem(key, JSON.stringify([...set])); } catch { /* ignore */ }
+  try {
+    localStorage.setItem(key, JSON.stringify([...set]));
+  } catch {
+    /* ignore */
+  }
 };
 
 export const useFavorites = (storageKey: string) => {
   const [favs, setFavs] = useState<Set<string>>(() => read(storageKey));
 
-  useEffect(() => { setFavs(read(storageKey)); }, [storageKey]);
-
-  const toggle = useCallback((id: string) => {
-    setFavs((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      write(storageKey, next);
-      return next;
-    });
+  useEffect(() => {
+    setFavs(read(storageKey));
   }, [storageKey]);
+
+  const toggle = useCallback(
+    (id: string) => {
+      setFavs((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        write(storageKey, next);
+        return next;
+      });
+    },
+    [storageKey],
+  );
 
   const isFav = useCallback((id: string) => favs.has(id), [favs]);
 

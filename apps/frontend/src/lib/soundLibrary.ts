@@ -54,7 +54,10 @@ export const playSoundById = async (id: string): Promise<HTMLAudioElement | null
     const req = tx.objectStore(STORE).get(id);
     req.onsuccess = () => {
       const record = req.result as { id: string; name: string; blob: Blob } | undefined;
-      if (!record) { resolve(null); return; }
+      if (!record) {
+        resolve(null);
+        return;
+      }
       const url = URL.createObjectURL(record.blob);
       const audio = new Audio(url);
       audio.volume = 0.6;
@@ -62,7 +65,10 @@ export const playSoundById = async (id: string): Promise<HTMLAudioElement | null
       void audio
         .play()
         .then(() => resolve(audio))
-        .catch(() => { URL.revokeObjectURL(url); resolve(null); });
+        .catch(() => {
+          URL.revokeObjectURL(url);
+          resolve(null);
+        });
     };
     req.onerror = () => resolve(null);
   });

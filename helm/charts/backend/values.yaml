@@ -33,11 +33,11 @@ service:
 
 resources:
   requests:
-    cpu: '4'
-    memory: 1Gi
+    cpu: 500m   # 4 workers share the node; raise if profiling shows sustained CPU saturation
+    memory: 512Mi
   limits:
-    cpu: '6'
-    memory: 2Gi
+    cpu: '2'
+    memory: 1Gi
 
 autoscaling:
   enabled: false

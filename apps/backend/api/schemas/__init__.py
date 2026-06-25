@@ -1,0 +1,153 @@
+"""Pydantic request/response models for the REST API, grouped by domain.
+
+Re-exports everything so existing `from api.schemas import X` call sites
+work unchanged regardless of which submodule actually defines X.
+"""
+
+from api.schemas.actions import (
+    ActionCreateRequest,
+    MediaTypeCreateRequest,
+    MediaTypeUpdateRequest,
+    ScriptCreateRequest,
+)
+from api.schemas.admin import (
+    AuthSettingsUpdateRequest,
+    HousekeepingUpdateRequest,
+    LdapServerRequest,
+    LdapTestRequest,
+    MacroCreateRequest,
+    MacroUpdateRequest,
+    ProxyConfig,
+    ProxyCreateRequest,
+    ProxyGroupCreateRequest,
+    ProxyUpdateRequest,
+    RoleCreateRequest,
+    RoleUpdateRequest,
+    TokenCreateRequest,
+    UserGroupCreateRequest,
+)
+from api.schemas.alerts import AlertRuleCreate, AlertRuleUpdate
+from api.schemas.auth import LoginRequest
+from api.schemas.dashboard import (
+    DashboardLayoutRequest,
+    DashboardPageCreateRequest,
+    DashboardPageRenameRequest,
+)
+from api.schemas.hosts import (
+    HostRequest,
+    HostTagItem,
+    HostUpdateRequest,
+    TagsUpdateRequest,
+)
+from api.schemas.items import (
+    BrowserItemRequest,
+    BulkItemRequest,
+    CalculatedItemRequest,
+    DbAgent2Request,
+    DbOdbcRequest,
+    DependentItemRequest,
+    ExternalItemRequest,
+    FileWatchRequest,
+    HttpItemRequest,
+    HttpQueryField,
+    InternalItemRequest,
+    IpmiItemRequest,
+    ItemRequest,
+    ItemUpdateRequest,
+    JmxItemRequest,
+    ScriptItemRequest,
+    ScriptParamEntry,
+    ServiceItemRequest,
+    SnmpItemRequest,
+    SnmpTrapRequest,
+    SshItemRequest,
+    TelnetItemRequest,
+    TrapperItemRequest,
+    ZabbixScriptItemRequest,
+)
+from api.schemas.metrics import AcknowledgeRequest
+from api.schemas.services import (
+    HealthMonitorCreateRequest,
+    ServiceCreateRequest,
+    ServiceUpdateRequest,
+    SlaCreateRequest,
+)
+from api.schemas.teams import HostAssignRequest, TeamRequest
+from api.schemas.triggers import (
+    BulkTriggerRequest,
+    TriggerRequest,
+    TriggerUpdateRequest,
+)
+from api.schemas.users import (
+    PasswordChangeRequest,
+    UserRequest,
+    UserUpdateRequest,
+)
+
+__all__ = [
+    "ActionCreateRequest",
+    "MediaTypeCreateRequest",
+    "MediaTypeUpdateRequest",
+    "ScriptCreateRequest",
+    "AuthSettingsUpdateRequest",
+    "HousekeepingUpdateRequest",
+    "LdapServerRequest",
+    "LdapTestRequest",
+    "MacroCreateRequest",
+    "MacroUpdateRequest",
+    "ProxyConfig",
+    "ProxyCreateRequest",
+    "ProxyGroupCreateRequest",
+    "ProxyUpdateRequest",
+    "RoleCreateRequest",
+    "RoleUpdateRequest",
+    "TokenCreateRequest",
+    "UserGroupCreateRequest",
+    "AlertRuleCreate",
+    "AlertRuleUpdate",
+    "LoginRequest",
+    "DashboardLayoutRequest",
+    "DashboardPageCreateRequest",
+    "DashboardPageRenameRequest",
+    "HostRequest",
+    "HostTagItem",
+    "HostUpdateRequest",
+    "TagsUpdateRequest",
+    "BrowserItemRequest",
+    "BulkItemRequest",
+    "CalculatedItemRequest",
+    "DbAgent2Request",
+    "DbOdbcRequest",
+    "DependentItemRequest",
+    "ExternalItemRequest",
+    "FileWatchRequest",
+    "HttpItemRequest",
+    "HttpQueryField",
+    "InternalItemRequest",
+    "IpmiItemRequest",
+    "ItemRequest",
+    "ItemUpdateRequest",
+    "JmxItemRequest",
+    "ScriptItemRequest",
+    "ScriptParamEntry",
+    "ServiceItemRequest",
+    "SnmpItemRequest",
+    "SnmpTrapRequest",
+    "SshItemRequest",
+    "TelnetItemRequest",
+    "TrapperItemRequest",
+    "ZabbixScriptItemRequest",
+    "AcknowledgeRequest",
+    "HealthMonitorCreateRequest",
+    "ServiceCreateRequest",
+    "ServiceUpdateRequest",
+    "SlaCreateRequest",
+    "HostAssignRequest",
+    "TeamRequest",
+    "BulkTriggerRequest",
+    "TriggerRequest",
+    "TriggerUpdateRequest",
+    "PasswordChangeRequest",
+    "UserRequest",
+    "UserUpdateRequest",
+]

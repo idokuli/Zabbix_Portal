@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { PropsWithChildren } from "react";
-import { type AuthUser, clearToken, getToken, setToken } from "../../lib/auth";
+import { type AuthUser, clearToken, setToken } from "../../lib/auth";
 import { api } from "../api";
 
 type AuthContextType = {
@@ -19,15 +19,14 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = getToken();
-    if (token) {
-      api.me()
-        .then((me) => setUser(me))
-        .catch(() => clearToken())
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+    api
+      .me({ skipRedirect: true })
+      .then((me) => setUser(me))
+      .catch(() => {
+        clearToken();
+        if (window.location.pathname !== "/login") window.location.href = "/login";
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   const login = useCallback(async (username: string, password: string) => {

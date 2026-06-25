@@ -27,16 +27,16 @@ If you only want to understand what the pipeline does, read [`WORKFLOW.md`](./WO
 Before your first release ensure:
 
 - You have **Maintainer** access on the GitLab project.
-- These CI variables are configured (Settings → CI/CD → Variables, masked + protected):
-  - `K8S_NAMESPACE` — target namespace (pre-created in OpenShift)
-  - `STAGING_SERVER` / `STAGING_TOKEN` — staging cluster API URL + service-account token
-  - `PROD_SERVER` / `PROD_TOKEN` — production cluster API URL + token (DR reuses these by default)
-  - `STAGING_URL` / `PRODUCTION_URL` / `DR_URL` — environment URLs shown in the GitLab environment tab
+- `RUNNER_TAG`, `KANIKO_IMAGE`, `PYTHON_IMAGE`, `NODE_IMAGE`, `HELM_IMAGE`, `GIT_IMAGE`, `ARTIFACTORY_REGISTRY`, `PROJECT_NAME`, `K8S_NAMESPACE`, `STAGING_SERVER`, `PROD_SERVER`, and `DR_SERVER` are filled in at the top of `.gitlab-ci.yml` (or overridden as GitLab CI/CD Variables).
+- These cluster-access secrets are configured as GitLab CI/CD Variables (Settings → CI/CD → Variables, masked + protected):
+  - `STAGING_TOKEN` — staging cluster service-account token
+  - `PROD_TOKEN` — production cluster service-account token
+  - `DR_TOKEN` — DR cluster service-account token. **DR is its own cluster** (`DR_SERVER` / `DR_TOKEN`) — it does not reuse production's.
 - The container registry is reachable from the GitLab runners and from each cluster.
-- The Artifactory registry path is set where the pipeline pushes/pulls images (search `<your-artifactory-registry>` — see [`PRIVATE_NETWORK.md`](./PRIVATE_NETWORK.md)).
+- The Artifactory registry path is set via `ARTIFACTORY_REGISTRY` at the top of `.gitlab-ci.yml` — see [`PRIVATE_NETWORK.md`](./PRIVATE_NETWORK.md).
 - See [`.cienv-example`](./.cienv-example) for the full list of CI variables.
 
-`validate:variables` in the `.pre` stage hard-fails the pipeline if any required cluster variable is missing, so a misconfiguration is caught before any build runs.
+`validate:variables` in the `.pre` stage hard-fails the pipeline if any required variable above is missing, so a misconfiguration is caught before any build runs.
 
 ---
 
@@ -104,9 +104,9 @@ Whatever tool you use, the moment a tag lands on the remote, CI starts.
 1. **`detect`** (`.pre` stage) — compares the new tag against the previous ancestor tag and emits per-app `BACKEND_CHANGED` / `FRONTEND_CHANGED` / `HELM_CHANGED` flags. `validate:variables` checks required CI variables are set.
 2. **`lint` stage** — ruff, mypy, Biome, tsc, helm lint/template run only for apps that changed.
 3. **`build` stage** — Kaniko builds Docker images for changed apps and pushes them tagged `:<git-tag>`.
-4. **`staging` stage** — `deploy:staging` runs `helm upgrade --install` against the staging cluster, pinning changed apps to the new tag and keeping unchanged apps on their last-deployed tag.
-5. **`production` stage** — `deploy:production` is a manual gate. Click ▶ when staging looks good.
-6. **`dr` stage** — `deploy:dr` is a manual gate to mirror production to the DR namespace/cluster.
+4. **`staging` stage** — `plan:staging` resolves image tags (from Helm history) and previews the values that will be applied; `deploy:staging` then runs `helm upgrade --install` against the staging cluster, pinning changed apps to the new tag and keeping unchanged apps on their last-deployed tag. Both run automatically.
+5. **`production` stage** — `plan:production` runs automatically (falling back to staging's resolved tag if production has no prior Helm history); `deploy:production` is a manual gate. Click ▶ when staging looks good.
+6. **`dr` stage** — DR is its **own cluster** (`DR_SERVER` / `DR_TOKEN`). `plan:dr` runs automatically (falling back to production's resolved tag on a first deploy); `deploy:dr` is a manual gate to deploy to the DR namespace/cluster.
 
 ### 2.4 Validate on staging
 
@@ -122,7 +122,7 @@ If something is wrong: see §6 to roll back, then fix and re-tag.
 
 ### 2.5 Promote to production
 
-Open the pipeline in GitLab → click ▶ on `deploy:production`. The job runs the same `helm upgrade --install` as staging, against the production cluster:
+`plan:production` resolves tags automatically once staging has deployed. Open the pipeline in GitLab → click ▶ on `deploy:production`. The job runs the same `helm upgrade --install` as staging, against the production cluster:
 
 ```bash
 helm upgrade --install "$PROJECT_NAME" "helm/charts/$PROJECT_NAME/" \

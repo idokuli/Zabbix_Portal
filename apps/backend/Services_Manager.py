@@ -7,8 +7,18 @@ from Zabbix_Base import Zabbix_Base
 
 logger = logging.getLogger(__name__)
 
-SERVICE_ALGORITHM = {0: "Set manually", 1: "Most critical of children", 2: "Most critical of child problems"}
-SLA_PERIOD = {"PERIOD_DAILY": "Daily", "PERIOD_WEEKLY": "Weekly", "PERIOD_MONTHLY": "Monthly", "PERIOD_QUARTERLY": "Quarterly", "PERIOD_ANNUALLY": "Annually"}
+SERVICE_ALGORITHM = {
+    0: "Set manually",
+    1: "Most critical of children",
+    2: "Most critical of child problems",
+}
+SLA_PERIOD = {
+    "PERIOD_DAILY": "Daily",
+    "PERIOD_WEEKLY": "Weekly",
+    "PERIOD_MONTHLY": "Monthly",
+    "PERIOD_QUARTERLY": "Quarterly",
+    "PERIOD_ANNUALLY": "Annually",
+}
 
 
 class Services_Manager(Zabbix_Base):
@@ -23,7 +33,15 @@ class Services_Manager(Zabbix_Base):
             return []
         try:
             params: dict = dict(
-                output=["serviceid", "name", "algorithm", "sortorder", "weight", "status", "description"],
+                output=[
+                    "serviceid",
+                    "name",
+                    "algorithm",
+                    "sortorder",
+                    "weight",
+                    "status",
+                    "description",
+                ],
                 selectChildren=["serviceid", "name"],
                 selectParents=["serviceid", "name"],
                 selectTags=["tag", "value"],
@@ -37,7 +55,9 @@ class Services_Manager(Zabbix_Base):
                     "serviceid": s["serviceid"],
                     "name": s["name"],
                     "algorithm": int(s.get("algorithm", 0)),
-                    "algorithm_label": SERVICE_ALGORITHM.get(int(s.get("algorithm", 0)), "Set manually"),
+                    "algorithm_label": SERVICE_ALGORITHM.get(
+                        int(s.get("algorithm", 0)), "Set manually"
+                    ),
                     "sortorder": int(s.get("sortorder", 0)),
                     "weight": int(s.get("weight", 0)),
                     "status": int(s.get("status", -1)),
@@ -52,14 +72,23 @@ class Services_Manager(Zabbix_Base):
             logger.exception("list_services failed")
             return []
 
-    def create_service(self, name: str, algorithm: int = 0, sortorder: int = 0,
-                       weight: int = 0, description: str = "") -> str:
+    def create_service(
+        self,
+        name: str,
+        algorithm: int = 0,
+        sortorder: int = 0,
+        weight: int = 0,
+        description: str = "",
+    ) -> str:
         if not self.zapi:
             raise RuntimeError("Zabbix not connected")
         try:
             result = self.zapi.service.create(
-                name=name, algorithm=algorithm, sortorder=sortorder,
-                weight=weight, description=description,
+                name=name,
+                algorithm=algorithm,
+                sortorder=sortorder,
+                weight=weight,
+                description=description,
             )
             return result["serviceids"][0]
         except Exception as e:
@@ -74,8 +103,13 @@ class Services_Manager(Zabbix_Base):
         except Exception as e:
             raise RuntimeError(str(e))
 
-    def update_service(self, serviceid: str, name: str | None = None,
-                       algorithm: int | None = None, description: str | None = None) -> bool:
+    def update_service(
+        self,
+        serviceid: str,
+        name: str | None = None,
+        algorithm: int | None = None,
+        description: str | None = None,
+    ) -> bool:
         if not self.zapi:
             raise RuntimeError("Zabbix not connected")
         try:
@@ -98,7 +132,16 @@ class Services_Manager(Zabbix_Base):
             return []
         try:
             slas = self.zapi.sla.get(
-                output=["slaid", "name", "slo", "period", "timezone", "description", "status", "effective_date"],
+                output=[
+                    "slaid",
+                    "name",
+                    "slo",
+                    "period",
+                    "timezone",
+                    "description",
+                    "status",
+                    "effective_date",
+                ],
                 selectServiceTags=["tag", "value"],
                 sortfield="name",
             )
@@ -108,7 +151,9 @@ class Services_Manager(Zabbix_Base):
                     "name": s["name"],
                     "slo": float(s.get("slo", 99.9)),
                     "period": s.get("period", "PERIOD_MONTHLY"),
-                    "period_label": SLA_PERIOD.get(s.get("period", "PERIOD_MONTHLY"), s.get("period", "")),
+                    "period_label": SLA_PERIOD.get(
+                        s.get("period", "PERIOD_MONTHLY"), s.get("period", "")
+                    ),
                     "timezone": s.get("timezone", "UTC"),
                     "description": s.get("description", ""),
                     "status": int(s.get("status", 0)),
@@ -121,15 +166,26 @@ class Services_Manager(Zabbix_Base):
             logger.exception("list_slas failed")
             return []
 
-    def create_sla(self, name: str, slo: float, period: str = "PERIOD_MONTHLY",
-                   timezone: str = "UTC", description: str = "",
-                   service_tags: list | None = None) -> str:
+    def create_sla(
+        self,
+        name: str,
+        slo: float,
+        period: str = "PERIOD_MONTHLY",
+        timezone: str = "UTC",
+        description: str = "",
+        service_tags: list | None = None,
+    ) -> str:
         if not self.zapi:
             raise RuntimeError("Zabbix not connected")
         try:
             result = self.zapi.sla.create(
-                name=name, slo=str(slo), period=period, timezone=timezone,
-                description=description, status=0, effective_date=0,
+                name=name,
+                slo=str(slo),
+                period=period,
+                timezone=timezone,
+                description=description,
+                status=0,
+                effective_date=0,
                 service_tags=service_tags or [],
                 schedule=[{"period_from": 0, "period_to": 86400} for _ in range(7)],
             )
@@ -163,21 +219,32 @@ class Services_Manager(Zabbix_Base):
         slug = re.sub(r"[^a-z0-9]", "_", name.lower().strip())[:30].strip("_")
         return slug or "monitor"
 
-    def add_health_monitor(self, hostid: str, name: str, url: str,
-                           expected_contains: str = "ok",
-                           process_name: str | None = None) -> dict:
+    def add_health_monitor(
+        self,
+        hostid: str,
+        name: str,
+        url: str,
+        expected_contains: str = "ok",
+        process_name: str | None = None,
+    ) -> dict:
         if not self.zapi:
             raise RuntimeError("Zabbix not connected")
         try:
             http_key = f"health.http[{self._hm_slug(name)}]"
-            if self.zapi.item.get(hostids=[hostid], filter={"key_": http_key}, output=["itemid"]):
-                raise RuntimeError(f"A health monitor with a similar name already exists on this host.")
+            if self.zapi.item.get(
+                hostids=[hostid], filter={"key_": http_key}, output=["itemid"]
+            ):
+                raise RuntimeError(
+                    "A health monitor with a similar name already exists on this host."
+                )
 
             proc_itemid = None
             proc_created = False
             if process_name:
                 proc_key = f"proc.num[{process_name}]"
-                existing_proc = self.zapi.item.get(hostids=[hostid], filter={"key_": proc_key}, output=["itemid"])
+                existing_proc = self.zapi.item.get(
+                    hostids=[hostid], filter={"key_": proc_key}, output=["itemid"]
+                )
                 if existing_proc:
                     proc_itemid = existing_proc[0]["itemid"]
                 else:
@@ -192,13 +259,15 @@ class Services_Manager(Zabbix_Base):
                     proc_itemid = r["itemids"][0]
                     proc_created = True
 
-            description = json.dumps({
-                "health_monitor": True,
-                "expected": expected_contains,
-                "url": url,
-                "proc_itemid": proc_itemid,
-                "proc_created": proc_created,
-            })
+            description = json.dumps(
+                {
+                    "health_monitor": True,
+                    "expected": expected_contains,
+                    "url": url,
+                    "proc_itemid": proc_itemid,
+                    "proc_created": proc_created,
+                }
+            )
             result = self.zapi.item.create(
                 hostid=hostid,
                 name=f"[HealthMon] {name}",
@@ -225,7 +294,16 @@ class Services_Manager(Zabbix_Base):
             params: dict = dict(
                 search={"key_": "health.http["},
                 startSearch=True,
-                output=["itemid", "name", "key_", "lastvalue", "lastclock", "state", "description", "hostid"],
+                output=[
+                    "itemid",
+                    "name",
+                    "key_",
+                    "lastvalue",
+                    "lastclock",
+                    "state",
+                    "description",
+                    "hostid",
+                ],
                 selectHosts=["hostid", "host"],
             )
             if hostid:
@@ -275,20 +353,22 @@ class Services_Manager(Zabbix_Base):
                 working = running and expected.lower() in lastvalue.lower()
                 host_info = (item.get("hosts") or [{}])[0]
 
-                result.append({
-                    "itemid": item["itemid"],
-                    "name": item["name"].removeprefix("[HealthMon] "),
-                    "host": host_info.get("host", ""),
-                    "hostid": item.get("hostid", ""),
-                    "url": config.get("url", ""),
-                    "expected": expected,
-                    "running": running,
-                    "working": working,
-                    "last_value": lastvalue[:200] if lastvalue else None,
-                    "last_check": lastclock or None,
-                    "proc_itemid": proc_itemid,
-                    "has_proc_check": bool(proc_itemid),
-                })
+                result.append(
+                    {
+                        "itemid": item["itemid"],
+                        "name": item["name"].removeprefix("[HealthMon] "),
+                        "host": host_info.get("host", ""),
+                        "hostid": item.get("hostid", ""),
+                        "url": config.get("url", ""),
+                        "expected": expected,
+                        "running": running,
+                        "working": working,
+                        "last_value": lastvalue[:200] if lastvalue else None,
+                        "last_check": lastclock or None,
+                        "proc_itemid": proc_itemid,
+                        "has_proc_check": bool(proc_itemid),
+                    }
+                )
             return result
         except Exception as e:
             logger.exception("list_health_monitors failed")
@@ -298,7 +378,9 @@ class Services_Manager(Zabbix_Base):
         if not self.zapi:
             raise RuntimeError("Zabbix not connected")
         try:
-            items = self.zapi.item.get(itemids=[itemid], output=["itemid", "description"])
+            items = self.zapi.item.get(
+                itemids=[itemid], output=["itemid", "description"]
+            )
             if not items:
                 raise RuntimeError("Item not found")
             try:

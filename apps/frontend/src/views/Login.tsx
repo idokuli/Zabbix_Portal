@@ -7,6 +7,7 @@ import {
   Box,
   Button,
   CircularProgress,
+  Divider,
   IconButton,
   InputAdornment,
   Snackbar,
@@ -14,7 +15,8 @@ import {
   Typography,
 } from "@mui/material";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { api } from "../app/api";
 import { useAuth } from "../app/context/AuthContext";
 
 type Snack = { open: boolean; message: string; severity: "success" | "error" };
@@ -25,15 +27,22 @@ export const Login = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<"local" | "ldap" | false>(false);
+  const [ldapEnabled, setLdapEnabled] = useState(false);
   const [snack, setSnack] = useState<Snack>({ open: false, message: "", severity: "success" });
+
+  useEffect(() => {
+    api
+      .ldapStatus()
+      .then((r) => setLdapEnabled(r.enabled))
+      .catch(() => {});
+  }, []);
 
   const closeSnack = () => setSnack((s) => ({ ...s, open: false }));
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const doLogin = async (method: "local" | "ldap") => {
     if (!username || !password) return;
-    setLoading(true);
+    setLoading(method);
     try {
       await login(username, password);
       setSnack({ open: true, message: "Login successful! Redirecting…", severity: "success" });
@@ -48,6 +57,11 @@ export const Login = () => {
       });
       setLoading(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await doLogin("local");
   };
 
   return (
@@ -144,15 +158,18 @@ export const Login = () => {
                   endAdornment: (
                     <InputAdornment position="end">
                       <IconButton
+                        aria-label={showPassword ? "Hide password" : "Show password"}
                         onClick={() => setShowPassword((v) => !v)}
                         edge="end"
                         size="small"
                         tabIndex={-1}
                         sx={{ color: "#475569", "&:hover": { color: "#94A3B8" } }}
                       >
-                        {showPassword
-                          ? <VisibilityOffOutlinedIcon sx={{ fontSize: 18 }} />
-                          : <VisibilityOutlinedIcon sx={{ fontSize: 18 }} />}
+                        {showPassword ? (
+                          <VisibilityOffOutlinedIcon sx={{ fontSize: 18 }} />
+                        ) : (
+                          <VisibilityOutlinedIcon sx={{ fontSize: 18 }} />
+                        )}
                       </IconButton>
                     </InputAdornment>
                   ),
@@ -175,7 +192,7 @@ export const Login = () => {
               variant="contained"
               fullWidth
               size="large"
-              disabled={loading || !username || !password}
+              disabled={!!loading || !username || !password}
               sx={{
                 mt: 0.5,
                 py: 1.25,
@@ -190,8 +207,44 @@ export const Login = () => {
                 "&:disabled": { opacity: 0.6 },
               }}
             >
-              {loading ? <CircularProgress size={20} color="inherit" /> : "Sign in"}
+              {loading === "local" ? <CircularProgress size={20} color="inherit" /> : "Sign in"}
             </Button>
+
+            {ldapEnabled && (
+              <>
+                <Divider sx={{ borderColor: "rgba(255,255,255,0.08)", my: 0.5 }}>
+                  <Typography variant="caption" sx={{ color: "#334155", px: 1 }}>
+                    or
+                  </Typography>
+                </Divider>
+                <Button
+                  type="button"
+                  variant="outlined"
+                  fullWidth
+                  size="large"
+                  disabled={!!loading || !username || !password}
+                  onClick={() => doLogin("ldap")}
+                  sx={{
+                    py: 1.25,
+                    fontSize: "0.875rem",
+                    fontWeight: 600,
+                    borderColor: "rgba(99,179,237,0.35)",
+                    color: "#63B3ED",
+                    "&:hover:not(:disabled)": {
+                      borderColor: "#63B3ED",
+                      background: "rgba(99,179,237,0.08)",
+                    },
+                    "&:disabled": { opacity: 0.4 },
+                  }}
+                >
+                  {loading === "ldap" ? (
+                    <CircularProgress size={20} color="inherit" />
+                  ) : (
+                    "Sign in with LDAP"
+                  )}
+                </Button>
+              </>
+            )}
           </Box>
         </Box>
 

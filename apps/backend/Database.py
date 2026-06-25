@@ -24,7 +24,11 @@ _pool: psycopg2.pool.ThreadedConnectionPool | None = None
 class _PooledConn:
     """Wraps a psycopg2 connection so close() returns it to the pool."""
 
-    def __init__(self, conn: psycopg2.extensions.connection, pool: psycopg2.pool.ThreadedConnectionPool) -> None:
+    def __init__(
+        self,
+        conn: psycopg2.extensions.connection,
+        pool: psycopg2.pool.ThreadedConnectionPool,
+    ) -> None:
         self._conn = conn
         self._pool = pool
 
@@ -52,6 +56,7 @@ def get_conn() -> _PooledConn:
         raise RuntimeError("Database pool not initialised — call init_db() first")
     return _PooledConn(_pool.getconn(), _pool)
 
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS teams (
     id          SERIAL PRIMARY KEY,
@@ -69,8 +74,9 @@ CREATE TABLE IF NOT EXISTS team_users (
 );
 
 CREATE TABLE IF NOT EXISTS host_assignments (
-    hostname VARCHAR(255) PRIMARY KEY,
-    team_id  INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE
+    hostname VARCHAR(255) NOT NULL,
+    team_id  INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    UNIQUE(hostname, team_id)
 );
 
 CREATE TABLE IF NOT EXISTS dashboard_layouts (
@@ -80,6 +86,17 @@ CREATE TABLE IF NOT EXISTS dashboard_layouts (
     layout     JSONB NOT NULL DEFAULT '[]',
     updated_at TIMESTAMP DEFAULT NOW(),
     UNIQUE(owner_type, owner_id)
+);
+
+CREATE TABLE IF NOT EXISTS dashboard_pages (
+    id         SERIAL PRIMARY KEY,
+    owner_type VARCHAR(10) NOT NULL CHECK (owner_type IN ('user', 'team')),
+    owner_id   INTEGER NOT NULL,
+    kind       VARCHAR(20) NOT NULL CHECK (kind IN ('dashboard', 'metrics')),
+    page_key   VARCHAR(50) NOT NULL,
+    name       VARCHAR(100) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(owner_type, owner_id, kind, page_key)
 );
 
 CREATE TABLE IF NOT EXISTS alert_rules (
@@ -119,10 +136,28 @@ CREATE TABLE IF NOT EXISTS problem_acknowledgements (
     note            TEXT        NOT NULL DEFAULT '',
     acked_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS portal_settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 """
 
 _MIGRATIONS = """
 ALTER TABLE team_users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255) DEFAULT '';
+
+-- Allow a host to belong to more than one team (existing deployments).
+ALTER TABLE host_assignments DROP CONSTRAINT IF EXISTS host_assignments_pkey;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'host_assignments_hostname_team_id_key'
+  ) THEN
+    ALTER TABLE host_assignments ADD CONSTRAINT host_assignments_hostname_team_id_key
+      UNIQUE (hostname, team_id);
+  END IF;
+END $$;
 
 ALTER TABLE dashboard_layouts ADD COLUMN IF NOT EXISTS page VARCHAR(50) NOT NULL DEFAULT 'dashboard';
 ALTER TABLE dashboard_layouts DROP CONSTRAINT IF EXISTS dashboard_layouts_owner_type_owner_id_key;
@@ -157,15 +192,20 @@ END $$;
 
 ALTER TABLE alert_events ADD COLUMN IF NOT EXISTS item_id VARCHAR(64);
 
+-- Track how each user was created: 'local' (manual), 'zabbix' (synced from Zabbix), 'ldap' (JIT from LDAP).
+ALTER TABLE team_users ADD COLUMN IF NOT EXISTS source VARCHAR(32) NOT NULL DEFAULT 'local';
+
 CREATE INDEX IF NOT EXISTS idx_alert_rules_user_id    ON alert_rules(user_id);
 CREATE INDEX IF NOT EXISTS idx_alert_rules_enabled    ON alert_rules(enabled);
 CREATE INDEX IF NOT EXISTS idx_alert_events_user_id   ON alert_events(user_id);
 CREATE INDEX IF NOT EXISTS idx_alert_events_fired_at  ON alert_events(fired_at DESC);
 CREATE INDEX IF NOT EXISTS idx_dashboard_layouts_owner ON dashboard_layouts(owner_type, owner_id, page);
+CREATE INDEX IF NOT EXISTS idx_dashboard_pages_owner ON dashboard_pages(owner_type, owner_id, kind);
 CREATE INDEX IF NOT EXISTS idx_problem_acks_eventid  ON problem_acknowledgements(eventid);
 CREATE INDEX IF NOT EXISTS idx_problem_acks_acked_at ON problem_acknowledgements(acked_at DESC);
 CREATE INDEX IF NOT EXISTS idx_team_users_team_id    ON team_users(team_id);
 CREATE INDEX IF NOT EXISTS idx_host_assignments_team_id ON host_assignments(team_id);
+CREATE INDEX IF NOT EXISTS idx_host_assignments_hostname ON host_assignments(hostname);
 
 DELETE FROM alert_events WHERE fired_at < NOW() - INTERVAL '90 days';
 """
@@ -184,6 +224,34 @@ def init_db() -> None:
         conn.rollback()
         logger.error("Database init failed: %r", exc)
         raise
+    finally:
+        conn.close()
+
+
+def get_setting(key: str) -> str | None:
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT value FROM portal_settings WHERE key = %s", (key,))
+            row = cur.fetchone()
+            return row["value"] if row else None
+    finally:
+        conn.close()
+
+
+def set_setting(key: str, value: str) -> None:
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO portal_settings (key, value, updated_at)
+                VALUES (%s, %s, NOW())
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+                """,
+                (key, value),
+            )
+        conn.commit()
     finally:
         conn.close()
 

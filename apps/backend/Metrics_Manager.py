@@ -24,6 +24,29 @@ class Metrics_Manager(Zabbix_Base):
         """Return active problems enriched with host name and age (30 s TTL cache)."""
         return self._cached("problems", 30.0, self._fetch_problems)
 
+    def _host_group_map(self) -> dict[str, list[str]]:
+        """hostid -> list of host group names (5 min cache)."""
+        return self._cached("problem_host_groups", 300.0, self._fetch_host_group_map)
+
+    def _fetch_host_group_map(self) -> dict[str, list[str]]:
+        if not self.zapi:
+            return {}
+        try:
+            # Zabbix 6.2+ renamed selectGroups → selectHostGroups on host.get.
+            groups_field = (
+                "selectHostGroups" if self._zabbix_version >= (6, 2) else "selectGroups"
+            )
+            groups_key = "hostgroups" if self._zabbix_version >= (6, 2) else "groups"
+            hosts = self.zapi.host.get(output=["hostid"], **{groups_field: ["name"]})
+            result: dict[str, list[str]] = {}
+            for h in hosts:
+                groups_list = h.get(groups_key) or h.get("groups") or []
+                result[h["hostid"]] = [g["name"] for g in groups_list]
+            return result
+        except Exception as e:
+            logger.error("_fetch_host_group_map failed: %r", e)
+            return {}
+
     def _fetch_problems(self) -> list[dict]:
         if not self.zapi:
             return []
@@ -55,6 +78,7 @@ class Metrics_Manager(Zabbix_Base):
                 selectHosts=["host", "hostid"],
             )
             trigger_map = {t["triggerid"]: t for t in triggers}
+            group_map = self._host_group_map()
 
             now = int(time.time())
             result = []
@@ -62,10 +86,12 @@ class Metrics_Manager(Zabbix_Base):
                 trigger = trigger_map.get(p["objectid"], {})
                 hosts = trigger.get("hosts", [])
                 hostname = hosts[0]["host"] if hosts else "Unknown"
+                groups = group_map.get(hosts[0]["hostid"], []) if hosts else []
                 result.append(
                     {
                         "eventid": p["eventid"],
                         "hostname": hostname,
+                        "groups": groups,
                         "severity": int(p["severity"]),
                         "severity_name": SEVERITY_NAMES.get(p["severity"], "Unknown"),
                         "name": p["name"],
@@ -81,7 +107,9 @@ class Metrics_Manager(Zabbix_Base):
             logger.error("get_problems failed: %r", e)
             return []
 
-    def acknowledge_problem(self, eventid: str, username: str = "portal", note: str = "") -> bool:
+    def acknowledge_problem(
+        self, eventid: str, username: str = "portal", note: str = ""
+    ) -> bool:
         """Acknowledge a Zabbix problem event. Returns True on success."""
         if not self.zapi:
             return False
@@ -121,13 +149,26 @@ class Metrics_Manager(Zabbix_Base):
         try:
             time_till = int(time.time())
             time_from = time_till - hours * 3600
-            logger.debug("get_problem_history: hours=%d time_from=%d time_till=%d", hours, time_from, time_till)
+            logger.debug(
+                "get_problem_history: hours=%d time_from=%d time_till=%d",
+                hours,
+                time_from,
+                time_till,
+            )
 
             events = self.zapi.event.get(
-                output=["eventid", "objectid", "severity", "name", "clock", "r_eventid", "acknowledged"],
-                source=0,   # trigger-generated
-                object=0,   # trigger objects
-                value=1,    # PROBLEM events only (not recovery)
+                output=[
+                    "eventid",
+                    "objectid",
+                    "severity",
+                    "name",
+                    "clock",
+                    "r_eventid",
+                    "acknowledged",
+                ],
+                source=0,  # trigger-generated
+                object=0,  # trigger objects
+                value=1,  # PROBLEM events only (not recovery)
                 time_from=time_from,
                 time_till=time_till,
                 sortfield="clock",
@@ -135,13 +176,18 @@ class Metrics_Manager(Zabbix_Base):
                 limit=limit,
                 selectAcknowledges="extend",  # "username" is not a valid ack field; use extend
             )
-            logger.info("get_problem_history: event.get returned %d events", len(events) if events else 0)
+            logger.info(
+                "get_problem_history: event.get returned %d events",
+                len(events) if events else 0,
+            )
             if not events:
                 return []
 
             # Fetch resolution times: r_eventid points to the recovery event; its
             # clock is the resolution timestamp. Batch all non-zero r_eventids.
-            recovery_ids = [e["r_eventid"] for e in events if e.get("r_eventid", "0") != "0"]
+            recovery_ids = [
+                e["r_eventid"] for e in events if e.get("r_eventid", "0") != "0"
+            ]
             recovery_clock: dict[str, int] = {}
             if recovery_ids:
                 rec_events = self.zapi.event.get(
@@ -172,7 +218,9 @@ class Metrics_Manager(Zabbix_Base):
                         userids=list(all_userids),
                         output=["userid", "username"],
                     )
-                    userid_to_username = {u["userid"]: u["username"] for u in zabbix_users}
+                    userid_to_username = {
+                        u["userid"]: u["username"] for u in zabbix_users
+                    }
                 except Exception:
                     pass
 
@@ -198,25 +246,31 @@ class Metrics_Manager(Zabbix_Base):
 
                 acks = e.get("acknowledges") or []
                 raw_userid = acks[-1].get("userid", "") if acks else ""
-                ack_user = userid_to_username.get(raw_userid, raw_userid) if acks else None
+                ack_user = (
+                    userid_to_username.get(raw_userid, raw_userid) if acks else None
+                )
                 ack_note = acks[-1].get("message", "") if acks else ""
                 ack_time = int(acks[-1].get("clock", 0)) if acks else None
 
-                result.append({
-                    "eventid": e["eventid"],
-                    "name": e.get("name", ""),
-                    "hostname": hostname,
-                    "severity": int(e.get("severity", 0)),
-                    "severity_name": SEVERITY_NAMES.get(str(e.get("severity", "0")), "Unknown"),
-                    "clock": clock,
-                    "r_clock": r_clock,
-                    "resolved": resolved,
-                    "duration_seconds": duration,
-                    "acknowledged": e.get("acknowledged") == "1",
-                    "ack_user": ack_user,
-                    "ack_note": ack_note,
-                    "ack_time": ack_time,
-                })
+                result.append(
+                    {
+                        "eventid": e["eventid"],
+                        "name": e.get("name", ""),
+                        "hostname": hostname,
+                        "severity": int(e.get("severity", 0)),
+                        "severity_name": SEVERITY_NAMES.get(
+                            str(e.get("severity", "0")), "Unknown"
+                        ),
+                        "clock": clock,
+                        "r_clock": r_clock,
+                        "resolved": resolved,
+                        "duration_seconds": duration,
+                        "acknowledged": e.get("acknowledged") == "1",
+                        "ack_user": ack_user,
+                        "ack_note": ack_note,
+                        "ack_time": ack_time,
+                    }
+                )
             return result
         except Exception as exc:
             logger.error("get_problem_history failed: %r", exc)

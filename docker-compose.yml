@@ -2,14 +2,26 @@ services:
   backend:
     build: apps/backend/
     container_name: backend
-    network_mode: bridge
     ports:
       - "6769:6769"
     env_file: apps/backend/.env
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6769/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s  # give uvicorn time to start before probing
 
   frontend:
     build: apps/frontend/
     container_name: frontend
-    network_mode: bridge
     ports:
       - "42069:42069"
+    env_file: apps/frontend/.env
+    environment:
+      # Override the value baked into the image at build time so the
+      # Next.js route handler reaches the backend via container DNS.
+      BACKEND_URL: http://backend:6769  # <-- container service name, not localhost
+    depends_on:
+      backend:
+        condition: service_healthy

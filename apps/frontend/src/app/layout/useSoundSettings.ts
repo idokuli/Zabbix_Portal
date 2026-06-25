@@ -1,0 +1,222 @@
+import { type ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type CustomSound,
+  addSound,
+  deleteSound,
+  isCustomId,
+  listSounds,
+  playSoundById,
+} from "../../lib/soundLibrary";
+import { DEFAULT_SOUND_PRESET, SOUND_PRESETS, playAlertSound } from "./alertSounds";
+
+export const useSoundSettings = () => {
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("alertSound") !== "false";
+  });
+  const [desktopNotifEnabled, setDesktopNotifEnabled] = useState(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) return false;
+    return localStorage.getItem("desktopNotif") === "true" && Notification.permission === "granted";
+  });
+  const [soundPreset, setSoundPreset] = useState(() => {
+    if (typeof window === "undefined") return DEFAULT_SOUND_PRESET;
+    return localStorage.getItem("alertSoundPreset") ?? DEFAULT_SOUND_PRESET;
+  });
+  const [customSounds, setCustomSounds] = useState<CustomSound[]>([]);
+  const [soundMenuAnchor, setSoundMenuAnchor] = useState<null | HTMLElement>(null);
+  const [previewingKey, setPreviewingKey] = useState<string | null>(null);
+
+  const customFileInputRef = useRef<HTMLInputElement>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previewCtxRef = useRef<AudioContext | null>(null);
+
+  const soundRef = useRef(soundEnabled);
+  soundRef.current = soundEnabled;
+  const soundPresetRef = useRef(soundPreset);
+  soundPresetRef.current = soundPreset;
+  const desktopNotifRef = useRef(desktopNotifEnabled);
+  desktopNotifRef.current = desktopNotifEnabled;
+
+  const showDesktopNotification = useCallback((title: string, body: string) => {
+    if (!desktopNotifRef.current) return;
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+    try {
+      const n = new Notification(title, { body, icon: "/favicon.svg", tag: title });
+      n.onclick = () => {
+        window.focus();
+        n.close();
+      };
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const toggleDesktopNotif = useCallback(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (desktopNotifEnabled) {
+      setDesktopNotifEnabled(false);
+      localStorage.setItem("desktopNotif", "false");
+      return;
+    }
+    if (Notification.permission === "granted") {
+      setDesktopNotifEnabled(true);
+      localStorage.setItem("desktopNotif", "true");
+      return;
+    }
+    if (Notification.permission === "denied") return;
+    void Notification.requestPermission().then((perm) => {
+      if (perm === "granted") {
+        setDesktopNotifEnabled(true);
+        localStorage.setItem("desktopNotif", "true");
+      }
+    });
+  }, [desktopNotifEnabled]);
+
+  const reloadCustomSounds = useCallback(() => {
+    listSounds()
+      .then(setCustomSounds)
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    reloadCustomSounds();
+  }, [reloadCustomSounds]);
+
+  const stopPreview = () => {
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause();
+      previewAudioRef.current.currentTime = 0;
+      previewAudioRef.current = null;
+    }
+    if (previewCtxRef.current) {
+      void previewCtxRef.current.close();
+      previewCtxRef.current = null;
+    }
+    setPreviewingKey(null);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause();
+        previewAudioRef.current = null;
+      }
+      if (previewCtxRef.current) {
+        void previewCtxRef.current.close();
+        previewCtxRef.current = null;
+      }
+    };
+  }, []);
+
+  const handlePreview = (key: string) => {
+    if (previewingKey === key) {
+      stopPreview();
+      return;
+    }
+    stopPreview();
+    setPreviewingKey(key);
+    if (isCustomId(key)) {
+      playSoundById(key)
+        .then((audio) => {
+          if (!audio) {
+            setPreviewingKey(null);
+            return;
+          }
+          previewAudioRef.current = audio;
+          audio.onended = () => {
+            previewAudioRef.current = null;
+            setPreviewingKey(null);
+          };
+        })
+        .catch(() => setPreviewingKey(null));
+    } else {
+      try {
+        const AudioCtx =
+          window.AudioContext ??
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (!AudioCtx) {
+          setPreviewingKey(null);
+          return;
+        }
+        const ctx = new AudioCtx();
+        previewCtxRef.current = ctx;
+        (SOUND_PRESETS[key] ?? SOUND_PRESETS[DEFAULT_SOUND_PRESET]).play(ctx, 3);
+        setTimeout(() => {
+          if (previewCtxRef.current === ctx) {
+            void ctx.close();
+            previewCtxRef.current = null;
+            setPreviewingKey(null);
+          }
+        }, 2000);
+      } catch {
+        setPreviewingKey(null);
+      }
+    }
+  };
+
+  const selectSoundPreset = (key: string) => {
+    localStorage.setItem("alertSoundPreset", key);
+    setSoundPreset(key);
+    setSoundMenuAnchor(null);
+    window.dispatchEvent(new Event("alertSoundPresetChanged"));
+    if (isCustomId(key)) {
+      void playSoundById(key);
+    } else {
+      playAlertSound(3, key);
+    }
+  };
+
+  const handleDeleteCustomSound = (id: string) => {
+    deleteSound(id)
+      .then(() => {
+        if (soundPreset === id) {
+          localStorage.setItem("alertSoundPreset", DEFAULT_SOUND_PRESET);
+          setSoundPreset(DEFAULT_SOUND_PRESET);
+          window.dispatchEvent(new Event("alertSoundPresetChanged"));
+        }
+        reloadCustomSounds();
+      })
+      .catch(() => {});
+  };
+
+  const handleCustomFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const name = file.name.replace(/\.[^.]+$/, "");
+    addSound(name, file)
+      .then((id) => {
+        reloadCustomSounds();
+        selectSoundPreset(id);
+      })
+      .catch(() => {});
+    e.target.value = "";
+  };
+
+  const toggleSound = () => {
+    setSoundEnabled((v) => {
+      localStorage.setItem("alertSound", String(!v));
+      return !v;
+    });
+  };
+
+  return {
+    soundEnabled,
+    soundPreset,
+    desktopNotifEnabled,
+    customSounds,
+    soundMenuAnchor,
+    setSoundMenuAnchor,
+    customFileInputRef,
+    previewingKey,
+    showDesktopNotification,
+    toggleDesktopNotif,
+    toggleSound,
+    selectSoundPreset,
+    handlePreview,
+    handleDeleteCustomSound,
+    handleCustomFileChange,
+    soundRef,
+    soundPresetRef,
+  };
+};

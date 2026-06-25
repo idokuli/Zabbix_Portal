@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from typing import Any
 
 import requests as _req
 
@@ -65,7 +66,12 @@ class Dashboard_Manager(Zabbix_Base):
             )
             if hostid:
                 kwargs["hostids"] = [hostid]
-            return self.zapi.graph.get(**kwargs)
+            graphs = self.zapi.graph.get(**kwargs)
+            for g in graphs:
+                hosts = ", ".join(h["host"] for h in g.get("hosts", []))
+                if hosts:
+                    g["name"] = f"{g['name']} ({hosts})"
+            return graphs
         except Exception as e:
             logger.error("get_graphs failed: %r", e)
             return []
@@ -79,7 +85,7 @@ class Dashboard_Manager(Zabbix_Base):
         # Do not send stime — let Zabbix compute "now - period" in its own
         # server timezone. Sending stime in UTC causes a timezone mismatch
         # that shifts the rendered window and shows [no data].
-        params = {
+        params: dict[str, Any] = {
             "graphid": graphid,
             "period": period,
             "width": width,
@@ -186,7 +192,9 @@ class Dashboard_Manager(Zabbix_Base):
                             for r in reversed(raw)
                         ]
                 except Exception as exc:
-                    logger.error("history.get failed for item %s: %r", gi["itemid"], exc)
+                    logger.error(
+                        "history.get failed for item %s: %r", gi["itemid"], exc
+                    )
                     continue
                 color = gi.get("color", "3B82F6")
                 if color and not color.startswith("#"):

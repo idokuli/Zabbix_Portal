@@ -1,6 +1,6 @@
-# Zabbix Portal
+# Overwatch
 
-A full-stack DevOps UI for managing Zabbix hosts, items, triggers, teams, and users — with role-based access control, live metrics, custom alert rules, and a PostgreSQL-backed user database.
+A full-stack DevOps UI for managing Zabbix hosts, items, triggers, teams, and users — with role-based access control, Portal LDAP authentication, live metrics, custom alert rules, and a PostgreSQL-backed user database.
 
 - **Backend** — Python 3.12 / FastAPI (`apps/backend/`)
 - **Frontend** — React 18 / Next.js 15 App Router / TypeScript / MUI (`apps/frontend/`)
@@ -14,15 +14,21 @@ A full-stack DevOps UI for managing Zabbix hosts, items, triggers, teams, and us
 ## Features
 
 - JWT-based login with role-based access control
+- **Portal LDAP authentication** — users sign in with LDAP/AD credentials; accounts are created automatically on first login (JIT provisioning) with the `operator` role
 - Multi-role users — a user can hold multiple roles simultaneously
 - Teams — group users and host assignments together
 - Role cascade (Windows-style) — selecting a higher role auto-selects lower ones
 - Users page — root sees all users platform-wide; team leads see their team
 - List, create, and delete Zabbix hosts; tag hosts to teams
 - Bulk-create hosts from `.csv` / `.xlsx`; export inventory to `.xlsx`
-- Add and delete monitoring items and triggers on hosts
-- **Dashboard** — native Zabbix graphs, per-host last-value metrics, recent items; saveable per-user / per-team widget layouts
-- **Metrics** — live active-problems table, item-history charts, and custom alert rules (threshold conditions with severities)
+- Add and delete monitoring items (~20 item types — agent, HTTP, SNMP, SNMP trap, internal, trapper, external, IPMI, SSH, telnet, JMX, calculated, dependent, Zabbix script, browser, ODBC/Agent2 DB monitors, file watch, service check) and triggers on hosts
+- **Dashboard** — native Zabbix graphs, per-host last-value metrics, recent items; saveable per-user / per-team widget layouts with multiple named pages
+- **Metrics** — live active-problems table with acknowledgement audit, item-history charts (Item Graphs), historical problem windows, and custom alert rules (threshold conditions with severities and per-rule sounds)
+- **Data collection** — template groups, host groups, templates, maintenance windows, event correlation, discovery rules
+- **Services** — business services, SLAs with SLA reports, simple URL/host "health monitor" checks
+- **Reports** — top-100 triggers, audit log, action log, availability report, alert history
+- **Actions & alerting** — trigger/service/discovery/autoregistration/internal actions, media types, scripts, plus per-user threshold alert rules
+- **Administration** — Zabbix user groups & roles, API tokens, proxies & proxy groups (Zabbix 7.x), global macros, the item processing queue, authentication and housekeeping settings
 - Desktop notifications + audible alerts in the sidebar when new problems fire
 - Real-time updates via Server-Sent Events — the UI refreshes when the backend syncs with Zabbix
 - Health check for API / Zabbix connectivity with live status dots in the sidebar
@@ -96,19 +102,29 @@ ADMIN_PASSWORD=change-me
 # ── Frontend proxy hint (not used by the backend itself) ─────
 # Tells the Next.js route handler where to forward /api/* requests.
 BACKEND_URL=http://localhost:6769
+
+# ── CORS ───────────────────────────────────────────────────
+# Comma-separated list of origins allowed to call the API. Defaults to "*".
+ALLOWED_ORIGINS=http://localhost:42069
+
+# ── Alert checker ─────────────────────────────────────────────
+# How often (seconds) Alert_Manager evaluates threshold rules. Default 15, min 5.
+ALERT_CHECK_INTERVAL=15
 ```
 
-| Variable            | Required | Description |
-| ------------------- | -------- | ----------- |
-| `ZABBIX_URL`        | Yes | Full URL of your Zabbix server |
-| `ZABBIX_USER`       | Yes | Zabbix API user (must have API access) |
-| `ZABBIX_PASS`       | Yes | Zabbix API password |
-| `ZABBIX_SSL_VERIFY` | No  | TLS verification for the Zabbix API probe; `true` by default |
-| `DATABASE_URL`      | Yes | PostgreSQL connection string for the shared user/team database |
-| `SECRET_KEY`        | Yes | Secret used to sign JWT tokens — **change before production** |
-| `ADMIN_USERNAME`    | No  | Seed root username (default `Admin`) |
-| `ADMIN_PASSWORD`    | No  | Seed root password (default `admin`, with a startup warning) |
-| `BACKEND_URL`       | No  | Read by the frontend proxy; defaults to `http://localhost:6769` |
+| Variable               | Required | Description |
+| ----------------------- | -------- | ----------- |
+| `ZABBIX_URL`            | Yes | Full URL of your Zabbix server |
+| `ZABBIX_USER`           | Yes | Zabbix API user (must have API access) |
+| `ZABBIX_PASS`           | Yes | Zabbix API password |
+| `ZABBIX_SSL_VERIFY`     | No  | TLS verification for the Zabbix API probe; `true` by default |
+| `DATABASE_URL`          | Yes | PostgreSQL connection string for the shared user/team database |
+| `SECRET_KEY`            | Yes | Secret used to sign JWT tokens — **change before production** |
+| `ADMIN_USERNAME`        | No  | Seed root username (default `Admin`) |
+| `ADMIN_PASSWORD`        | No  | Seed root password (default `admin`, with a startup warning) |
+| `BACKEND_URL`           | No  | Read by the frontend proxy; defaults to `http://localhost:6769` |
+| `ALLOWED_ORIGINS`       | No  | CORS allow-list, comma-separated; defaults to `*` |
+| `ALERT_CHECK_INTERVAL`  | No  | Alert-rule evaluation interval in seconds; defaults to `15` (min `5`) |
 
 On first startup the backend creates the schema and seeds a root user (`ADMIN_USERNAME` / `ADMIN_PASSWORD`). **Change this password immediately after the first login.**
 
@@ -121,10 +137,10 @@ Only one variable is needed. This file is **baked into the Docker image** at bui
 # Local dev:            http://localhost:6769
 # Docker shared net:    http://backend:6769
 # Mac/Windows Desktop:  http://host.docker.internal:6769
-BACKEND_URL=http://localhost:6769
+BACKEND_URL=http://host.docker.internal:6769
 ```
 
-In local development (`npm run dev`) Next.js loads this file automatically. In the Docker image it is loaded once at server startup via `src/instrumentation.ts`. In-cluster the Route handles `/api/*`, so this value is unused there.
+In local development (`npm run dev`) Next.js loads this file automatically. In the Docker image it is loaded once at server startup via `src/instrumentation.ts`. When running with `docker compose`, the `BACKEND_URL` environment variable is injected at runtime (overriding the baked-in value) via the `environment:` block in `docker-compose.yml`. In-cluster the Route handles `/api/*`, so this value is unused there.
 
 ---
 
@@ -171,7 +187,18 @@ A user can hold multiple roles. When a higher role is selected in the UI, lower 
 
 ---
 
-## Running with Docker
+## Authentication
+
+Overwatch supports two authentication methods:
+
+- **Local** — username/password stored in PostgreSQL with bcrypt hashing. The root account always uses local authentication.
+- **Portal LDAP** — users sign in with their LDAP/Active Directory credentials. Accounts are created automatically on first login (JIT provisioning) with the `operator` role. Configured in **Users Management → Authentication → Portal Login**.
+
+Users imported from Zabbix via the background sync are tagged `source='zabbix'` and can be distinguished from local (`source='local'`) and LDAP JIT-provisioned (`source='ldap'`) accounts. The sync never deletes local or LDAP users.
+
+---
+
+## Running with Docker Compose
 
 A `docker-compose.yml` at the repo root wires the two app services together. PostgreSQL is external — set `DATABASE_URL` in `apps/backend/.env` to point at your shared instance.
 
@@ -188,29 +215,30 @@ docker compose down
 
 Open <http://localhost:42069>.
 
+The backend includes a health check (`GET /health`). The frontend waits for the backend to be healthy before starting (`depends_on: condition: service_healthy`), so there is no startup race condition.
+
 ### Running containers individually
 
 ```bash
 # Build images
-docker build -t zabbix-portal-backend  apps/backend/
-docker build -t zabbix-portal-frontend apps/frontend/
+docker build -t overwatch-backend  apps/backend/
+docker build -t overwatch-frontend apps/frontend/
 
-# Shared network
-docker network create zabbix-net
+# Shared network (enables container DNS)
+docker network create overwatch-net
 
 # Backend (DATABASE_URL in .env points at your shared PostgreSQL)
-docker run -d --name backend --network zabbix-net \
+docker run -d --name backend --network overwatch-net \
   --env-file apps/backend/.env \
   -p 6769:6769 \
-  zabbix-portal-backend
+  overwatch-backend
 
 # Frontend
-docker run -d --name frontend --network zabbix-net \
+docker run -d --name frontend --network overwatch-net \
+  -e BACKEND_URL=http://backend:6769 \
   -p 42069:42069 \
-  zabbix-portal-frontend
+  overwatch-frontend
 ```
-
-Set `BACKEND_URL=http://backend:6769` in `apps/frontend/.env` **before building** when both containers are on the same network.
 
 ---
 
@@ -236,31 +264,46 @@ All paths require a `Bearer` JWT unless noted. "Operator+" = root / team_lead / 
 
 ### Hosts
 
-| Method | Path                | Auth      | Description |
-| ------ | ------------------- | --------- | ----------- |
-| GET    | `/hosts`            | Yes       | List hosts (filtered by team for non-root/auditor) |
-| GET    | `/hosts/download`   | Yes       | Export host inventory to `.xlsx` |
-| POST   | `/hosts`            | Operator+ | Create a single host |
-| POST   | `/hosts/bulk`       | Operator+ | Bulk create from CSV / XLSX upload |
-| DELETE | `/hosts/{hostname}` | Operator+ | Delete a host |
+| Method | Path                     | Auth       | Description |
+| ------ | ------------------------ | ---------- | ----------- |
+| GET    | `/hosts`                 | Yes        | List hosts (filtered by team for non-root/auditor) |
+| GET    | `/hosts/download`        | Yes        | Export host inventory to `.xlsx` |
+| GET    | `/templates`             | Yes        | List available Zabbix templates |
+| POST   | `/hosts`                 | Operator+  | Create a single host |
+| POST   | `/hosts/bulk`            | Operator+  | Bulk create from CSV / XLSX upload |
+| PUT    | `/hosts/{hostname}`      | Team Lead+ | Update display name, IP, proxy, or status |
+| PUT    | `/hosts/{hostname}/tags` | Operator+  | Update custom tags on a host |
+| DELETE | `/hosts/{hostname}`      | Operator+  | Delete a host |
 
 ### Items & Triggers
 
 | Method | Path                     | Auth      | Description |
 | ------ | ------------------------ | --------- | ----------- |
+| GET    | `/items`                 | Yes       | List all items across all hosts (`?search=`) |
+| GET    | `/items/keys`            | Yes       | List all item keys from Zabbix templates |
 | GET    | `/items/{hostname}`      | Yes       | List items for a host |
-| POST   | `/items`                 | Operator+ | Add a monitoring item to a host |
+| POST   | `/items`                 | Operator+ | Add a Zabbix agent item to a host |
+| POST   | `/items/bulk`            | Operator+ | Add the same item to multiple hosts |
+| PUT    | `/items/{itemid}`        | Operator+ | Update an item (name, delay, status, key) |
 | DELETE | `/items/{itemid}`        | Operator+ | Delete an item |
+| GET    | `/triggers`              | Yes       | List all triggers across all hosts (`?search=&hostname=`) |
 | GET    | `/triggers/{hostname}`   | Yes       | List triggers for a host |
 | POST   | `/triggers`              | Operator+ | Add a trigger to an item |
+| POST   | `/triggers/bulk`         | Operator+ | Add the same trigger to multiple hosts |
+| PUT    | `/triggers/{triggerid}`  | Operator+ | Update name, severity, status, or expression |
 | DELETE | `/triggers/{triggerid}`  | Operator+ | Delete a trigger |
+
+`POST /items` and its specialized siblings each add a different Zabbix item type — `/items/http`, `/items/service`, `/items/filewatch`, `/items/script`, `/items/db/odbc`, `/items/db/agent2`, `/items/snmp`, `/items/snmptrap`, `/items/internal`, `/items/trapper`, `/items/external`, `/items/ipmi`, `/items/ssh`, `/items/telnet`, `/items/jmx`, `/items/calculated`, `/items/dependent`, `/items/zabbix-script`, `/items/browser` — all `POST`, all Operator+, each with its own request body shape (see `Zabbix_Main.py` for the per-type Pydantic models).
 
 ### Metrics
 
-| Method | Path                        | Auth | Description |
-| ------ | --------------------------- | ---- | ----------- |
-| GET    | `/metrics/problems`         | Yes  | Active Zabbix problems |
-| GET    | `/metrics/history/{itemid}` | Yes  | Item history time-series (`?minutes=`) |
+| Method | Path                          | Auth | Description |
+| ------ | ----------------------------- | ---- | ----------- |
+| GET    | `/metrics/problems`           | Yes  | Active Zabbix problems |
+| POST   | `/metrics/problems/{eventid}/acknowledge` | Yes | Acknowledge a Zabbix problem |
+| GET    | `/metrics/acknowledgements`   | Yes  | Acknowledgement audit log |
+| GET    | `/metrics/problems/history`   | Yes  | Historical problems in a time window |
+| GET    | `/metrics/history/{itemid}`   | Yes  | Item history time-series (`?minutes=`) |
 
 ### Dashboard
 
@@ -295,15 +338,110 @@ All paths require a `Bearer` JWT unless noted. "Operator+" = root / team_lead / 
 | PUT    | `/users/{user_id}/password`| Team Lead+ | Change a user's password |
 | DELETE | `/users/{user_id}`         | Team Lead+ | Delete a user |
 
-### Alerts
+### Alerts (per-user threshold rules)
 
 | Method | Path                            | Auth | Description |
 | ------ | ------------------------------- | ---- | ----------- |
 | GET    | `/alerts/rules`                 | Yes  | List the current user's alert rules |
 | POST   | `/alerts/rules`                 | Yes  | Create an alert rule (threshold condition) |
+| PUT    | `/alerts/rules/{rule_id}`       | Yes  | Update an alert rule |
 | DELETE | `/alerts/rules/{rule_id}`       | Yes  | Delete an alert rule |
 | PATCH  | `/alerts/rules/{rule_id}/toggle`| Yes  | Enable/disable an alert rule |
 | GET    | `/alerts/events`                | Yes  | Recent alert events for the current user |
+
+### Data Collection (`/dc/*`)
+
+Template groups, host groups, templates, maintenance windows, event correlation, and discovery rules — each follows the same `GET` (list, any role) / `POST` (create, Team Lead+) / `DELETE` (Team Lead+) shape, plus `PUT` to rename groups and a `GET .../{groupid}/members` to list contents:
+
+| Resource | List | Create | Rename | Delete | Members |
+| -------- | ---- | ------ | ------ | ------ | ------- |
+| Template groups | `GET /dc/template-groups` | `POST /dc/template-groups` | `PUT /dc/template-groups/{groupid}` | `DELETE /dc/template-groups/{groupid}` | `GET /dc/template-groups/{groupid}/members` |
+| Host groups | `GET /dc/host-groups` | `POST /dc/host-groups` | `PUT /dc/host-groups/{groupid}` | `DELETE /dc/host-groups/{groupid}` | `GET /dc/host-groups/{groupid}/members` |
+| Templates | `GET /dc/templates` | `POST /dc/templates` | — | `DELETE /dc/templates/{templateid}` | — |
+| Maintenance windows | `GET /dc/maintenances` | `POST /dc/maintenances` | — | `DELETE /dc/maintenances/{maintenanceid}` | — |
+| Event correlations | `GET /dc/correlations` | `POST /dc/correlations` | — | `DELETE /dc/correlations/{correlationid}` | — |
+| Discovery rules | `GET /dc/discovery-rules` | `POST /dc/discovery-rules` | — | `DELETE /dc/discovery-rules/{druleid}` | — |
+
+All `GET`s require any authenticated user; all `POST`/`PUT`/`DELETE`s require Team Lead+.
+
+### Reports (read-only)
+
+| Method | Path                     | Auth | Description |
+| ------ | ------------------------ | ---- | ----------- |
+| GET    | `/reports/top-triggers`  | Yes  | Top triggers by problem count (`?limit=&severity_min=&hours=`) |
+| GET    | `/reports/audit-log`     | Yes  | Zabbix audit log (`?limit=&time_from=&userid=`) |
+| GET    | `/reports/action-log`    | Yes  | Action execution log (`?limit=&time_from=`) |
+| GET    | `/reports/availability`  | Yes  | Per-host-group availability (`?hours=&groupid=`) |
+| GET    | `/reports/notifications` | Yes  | Notification history (`?hours=&limit=`) |
+
+### Actions, Media Types & Scripts
+
+| Method | Path                           | Auth      | Description |
+| ------ | ------------------------------ | --------- | ----------- |
+| GET    | `/actions`                     | Yes       | List actions (`?eventsource=` — trigger/discovery/autoregistration/internal/service) |
+| POST   | `/actions`                     | Team Lead+| Create an action |
+| PUT    | `/actions/{actionid}/toggle`   | Team Lead+| Enable/disable an action |
+| DELETE | `/actions/{actionid}`          | Team Lead+| Delete an action |
+| GET    | `/media-types`                 | Yes       | List media types |
+| POST   | `/media-types`                 | Team Lead+| Create a media type |
+| PUT    | `/media-types/{mediatypeid}/toggle` | Team Lead+ | Enable/disable a media type |
+| DELETE | `/media-types/{mediatypeid}`   | Team Lead+| Delete a media type |
+| GET    | `/scripts`                     | Yes       | List scripts |
+| POST   | `/scripts`                     | Team Lead+| Create a script |
+| DELETE | `/scripts/{scriptid}`          | Team Lead+| Delete a script |
+
+### Services, SLA & Health Monitors
+
+| Method | Path                          | Auth       | Description |
+| ------ | ------------------------------ | ---------- | ----------- |
+| GET    | `/services`                    | Yes        | List business services (`?parentid=`) |
+| POST   | `/services`                    | Team Lead+ | Create a service |
+| PUT    | `/services/{serviceid}`        | Team Lead+ | Update a service |
+| DELETE | `/services/{serviceid}`        | Team Lead+ | Delete a service |
+| GET    | `/sla`                         | Yes        | List SLAs |
+| POST   | `/sla`                         | Team Lead+ | Create an SLA |
+| DELETE | `/sla/{slaid}`                 | Team Lead+ | Delete an SLA |
+| GET    | `/sla/{slaid}/report`          | Yes        | SLA report (`?periods=`, 1–12) |
+| GET    | `/health-monitors`             | Yes        | List health-monitor items (`?hostid=`) |
+| POST   | `/health-monitors`             | Operator+  | Add a URL/host health-monitor item |
+| DELETE | `/health-monitors/{itemid}`    | Operator+  | Delete a health-monitor item |
+
+### Administration
+
+Zabbix server administration — most reads are open to any authenticated user, writes are Team Lead+ unless noted. `/api-tokens` and the housekeeping/auth-settings writes are **Root only**.
+
+| Method | Path                          | Auth       | Description |
+| ------ | ------------------------------ | ---------- | ----------- |
+| GET    | `/user-groups`                 | Team Lead+ | List Zabbix user groups |
+| POST   | `/user-groups`                 | Team Lead+ | Create a user group |
+| DELETE | `/user-groups/{usrgrpid}`      | Team Lead+ | Delete a user group |
+| GET    | `/zabbix-users`                 | Team Lead+ | List native Zabbix users (read-only) |
+| GET    | `/roles`                       | Team Lead+ | List Zabbix user roles |
+| POST   | `/roles`                       | Team Lead+ | Create a role |
+| PUT    | `/roles/{roleid}`              | Team Lead+ | Rename a role |
+| DELETE | `/roles/{roleid}`              | Team Lead+ | Delete a role |
+| GET    | `/api-tokens`                  | Root       | List Zabbix API tokens |
+| POST   | `/api-tokens`                  | Root       | Create an API token |
+| DELETE | `/api-tokens/{tokenid}`        | Root       | Delete an API token |
+| GET    | `/proxies`                     | Yes        | List proxies |
+| POST   | `/proxies`                     | Team Lead+ | Create a proxy |
+| PUT    | `/proxies/{proxyid}`           | Team Lead+ | Update a proxy |
+| DELETE | `/proxies/{proxyid}`           | Team Lead+ | Delete a proxy |
+| GET    | `/proxy_groups`                | Yes        | List proxy groups (Zabbix 7.x) |
+| POST   | `/proxy_groups`                | Team Lead+ | Create a proxy group |
+| DELETE | `/proxy_groups/{proxygroupid}` | Team Lead+ | Delete a proxy group |
+| GET    | `/macros`                      | Yes        | List global macros |
+| POST   | `/macros`                      | Team Lead+ | Create a global macro |
+| PUT    | `/macros/{globalmacroid}`      | Team Lead+ | Update a global macro |
+| DELETE | `/macros/{globalmacroid}`      | Team Lead+ | Delete a global macro |
+| GET    | `/admin/queue`                 | Team Lead+ | Item processing queue overview |
+| GET    | `/admin/settings`              | Team Lead+ | Read Zabbix server settings (incl. housekeeping) |
+| PUT    | `/admin/housekeeping`          | Root       | Update housekeeping settings |
+| GET    | `/admin/auth`                  | Root       | Read authentication settings |
+| PUT    | `/admin/auth`                  | Root       | Update authentication settings |
+| GET    | `/admin/auth/portal-ldap`      | Root       | Read Portal LDAP config |
+| PUT    | `/admin/auth/portal-ldap`      | Root       | Save Portal LDAP config |
+| POST   | `/admin/auth/portal-ldap/test` | Root       | Test a Portal LDAP connection |
 
 ### Bulk import file format
 
@@ -356,6 +494,7 @@ This project is designed to run in air-gapped or private-registry environments:
 - All `FROM` lines in Dockerfiles have `# PRIVATE NETWORK:` comments showing the exact image and Artifactory replacement format.
 - npm packages are pinned to **exact versions** (no `^` or `~`) and `.npmrc` is set up for a private registry.
 - Both containers run as **non-root** (`USER 1001`, GID 0) — the frontend as a Next.js standalone server (`node server.js`) on port 42069, with no nginx, so they work under OpenShift's `restricted` SCC.
+- The frontend Route has TLS enabled by default (edge termination); OpenShift's router provides the wildcard certificate automatically when using the auto-generated hostname.
 
 See [`PRIVATE_NETWORK.md`](./PRIVATE_NETWORK.md) for the complete line-by-line checklist of every value to change, and [`CLAUDE.md`](./CLAUDE.md) for the architectural rationale.
 
@@ -368,3 +507,4 @@ See [`PRIVATE_NETWORK.md`](./PRIVATE_NETWORK.md) for the complete line-by-line c
 - [`RELEASING.md`](./RELEASING.md) — release / deployment runbook
 - [`PRIVATE_NETWORK.md`](./PRIVATE_NETWORK.md) — air-gapped configuration checklist
 - [`DEVELOPMENT.md`](./DEVELOPMENT.md) — running the stack with Docker
+- [`OVERWATCH_USER_GUIDE.html`](./OVERWATCH_USER_GUIDE.html) — end-user guide

@@ -43,7 +43,14 @@ class DataCollection_Manager(Zabbix_Base):
                 groupids=[groupid],
                 sortfield="name",
             )
-            return [{"templateid": t["templateid"], "name": t["name"], "description": t.get("description", "")} for t in templates]
+            return [
+                {
+                    "templateid": t["templateid"],
+                    "name": t["name"],
+                    "description": t.get("description", ""),
+                }
+                for t in templates
+            ]
         except Exception as e:
             logger.error("get_template_group_members(%s) failed: %r", groupid, e)
             return []
@@ -82,9 +89,33 @@ class DataCollection_Manager(Zabbix_Base):
             logger.error("delete_template_group(%s) failed: %r", groupid, e)
             return False
 
+    def set_template_group_members(self, groupid: str, templateids: list[str]) -> bool:
+        if not self.zapi:
+            return False
+        try:
+            current = self.zapi.template.get(groupids=[groupid], output=["templateid"])
+            current_ids = {t["templateid"] for t in current}
+            new_ids = set(templateids)
+            to_add = list(new_ids - current_ids)
+            to_remove = list(current_ids - new_ids)
+            if to_add:
+                self.zapi.template.massadd(
+                    templates=[{"templateid": t} for t in to_add],
+                    groups=[{"groupid": groupid}],
+                )
+            if to_remove:
+                self.zapi.template.massremove(templateids=to_remove, groupids=[groupid])
+            return True
+        except Exception as e:
+            logger.error("set_template_group_members(%s) failed: %r", groupid, e)
+            return False
+
     # ── Host Groups ────────────────────────────────────────────────────
 
     def list_host_groups(self) -> list[dict]:
+        return self._cached("host_groups", 300.0, self._fetch_host_groups)
+
+    def _fetch_host_groups(self) -> list[dict]:
         if not self.zapi:
             return []
         try:
@@ -115,7 +146,15 @@ class DataCollection_Manager(Zabbix_Base):
                 groupids=[groupid],
                 sortfield="host",
             )
-            return [{"hostid": h["hostid"], "host": h["host"], "name": h["name"], "status": int(h.get("status", 0))} for h in hosts]
+            return [
+                {
+                    "hostid": h["hostid"],
+                    "host": h["host"],
+                    "name": h["name"],
+                    "status": int(h.get("status", 0)),
+                }
+                for h in hosts
+            ]
         except Exception as e:
             logger.error("get_host_group_members(%s) failed: %r", groupid, e)
             return []
@@ -127,6 +166,7 @@ class DataCollection_Manager(Zabbix_Base):
             result = self.zapi.hostgroup.create(name=name)
             gid = result["groupids"][0]
             logger.info("Created host group %r (ID: %s).", name, gid)
+            self._invalidate("host_groups")
             return gid, None
         except Exception as e:
             logger.error("create_host_group(%r) failed: %r", name, e)
@@ -138,6 +178,7 @@ class DataCollection_Manager(Zabbix_Base):
         try:
             self.zapi.hostgroup.update(groupid=groupid, name=name)
             logger.info("Updated host group %s → %r.", groupid, name)
+            self._invalidate("host_groups")
             return True
         except Exception as e:
             logger.error("update_host_group(%s) failed: %r", groupid, e)
@@ -149,14 +190,42 @@ class DataCollection_Manager(Zabbix_Base):
         try:
             self.zapi.hostgroup.delete([groupid])
             logger.info("Deleted host group %s.", groupid)
+            self._invalidate("host_groups")
             return True
         except Exception as e:
             logger.error("delete_host_group(%s) failed: %r", groupid, e)
             return False
 
+    def set_host_group_members(self, groupid: str, hostids: list[str]) -> bool:
+        if not self.zapi:
+            return False
+        try:
+            current = self.zapi.host.get(groupids=[groupid], output=["hostid"])
+            current_ids = {h["hostid"] for h in current}
+            new_ids = set(hostids)
+            to_add = list(new_ids - current_ids)
+            to_remove = list(current_ids - new_ids)
+            if to_add:
+                self.zapi.host.massadd(
+                    hosts=[{"hostid": h} for h in to_add], groups=[{"groupid": groupid}]
+                )
+            if to_remove:
+                self.zapi.host.massremove(hostids=to_remove, groupids=[groupid])
+            self._invalidate("host_groups")
+            return True
+        except Exception as e:
+            logger.error("set_host_group_members(%s) failed: %r", groupid, e)
+            return False
+
     # ── Templates ─────────────────────────────────────────────────────
 
     def list_templates(self, search: str = "") -> list[dict]:
+        # Bypass cache for filtered searches; cache the full unfiltered list
+        if search:
+            return self._fetch_templates(search)
+        return self._cached("templates_full", 300.0, lambda: self._fetch_templates(""))
+
+    def _fetch_templates(self, search: str) -> list[dict]:
         if not self.zapi:
             return []
         try:
@@ -176,8 +245,14 @@ class DataCollection_Manager(Zabbix_Base):
                     "templateid": t["templateid"],
                     "name": t["name"],
                     "description": t.get("description", ""),
-                    "groups": [{"groupid": g["groupid"], "name": g["name"]} for g in t.get("templategroups", [])],
-                    "linked_templates": [{"templateid": p["templateid"], "name": p["name"]} for p in t.get("parentTemplates", [])],
+                    "groups": [
+                        {"groupid": g["groupid"], "name": g["name"]}
+                        for g in t.get("templategroups", [])
+                    ],
+                    "linked_templates": [
+                        {"templateid": p["templateid"], "name": p["name"]}
+                        for p in t.get("parentTemplates", [])
+                    ],
                 }
                 for t in templates
             ]
@@ -202,19 +277,35 @@ class DataCollection_Manager(Zabbix_Base):
         try:
             params: dict = {
                 "host": name,
-                "name": visible_name.strip() if visible_name and visible_name.strip() else name,
+                "name": visible_name.strip()
+                if visible_name and visible_name.strip()
+                else name,
                 "description": description,
                 "groups": [{"groupid": gid} for gid in group_ids],
             }
             if template_ids:
                 params["templates"] = [{"templateid": tid} for tid in template_ids]
             if tags:
-                params["tags"] = [{"tag": t.get("tag", ""), "value": t.get("value", "")} for t in tags if t.get("tag")]
+                params["tags"] = [
+                    {"tag": t.get("tag", ""), "value": t.get("value", "")}
+                    for t in tags
+                    if t.get("tag")
+                ]
             if macros:
-                params["macros"] = [{"macro": m.get("macro", ""), "value": m.get("value", ""), "description": m.get("description", "")} for m in macros if m.get("macro")]
+                params["macros"] = [
+                    {
+                        "macro": m.get("macro", ""),
+                        "value": m.get("value", ""),
+                        "description": m.get("description", ""),
+                    }
+                    for m in macros
+                    if m.get("macro")
+                ]
             result = self.zapi.template.create(**params)
             tid = result["templateids"][0]
             logger.info("Created template %r (ID: %s).", name, tid)
+            self._invalidate("templates_full")
+            self._invalidate("templates_simple")
             return tid, None
         except Exception as e:
             logger.error("create_template(%r) failed: %r", name, e)
@@ -226,6 +317,8 @@ class DataCollection_Manager(Zabbix_Base):
         try:
             self.zapi.template.delete([templateid])
             logger.info("Deleted template %s.", templateid)
+            self._invalidate("templates_full")
+            self._invalidate("templates_simple")
             return True
         except Exception as e:
             logger.error("delete_template(%s) failed: %r", templateid, e)
@@ -238,7 +331,14 @@ class DataCollection_Manager(Zabbix_Base):
             return []
         try:
             maintenances = self.zapi.maintenance.get(
-                output=["maintenanceid", "name", "maintenance_type", "active_since", "active_till", "description"],
+                output=[
+                    "maintenanceid",
+                    "name",
+                    "maintenance_type",
+                    "active_since",
+                    "active_till",
+                    "description",
+                ],
                 selectHosts=["hostid", "name"],
                 selectGroups=["groupid", "name"],
                 selectTimeperiods=["timeperiodid", "period", "start_date"],
@@ -249,12 +349,20 @@ class DataCollection_Manager(Zabbix_Base):
                 {
                     "maintenanceid": m["maintenanceid"],
                     "name": m["name"],
-                    "maintenance_type": m["maintenance_type"],  # "0"=with data, "1"=no data
+                    "maintenance_type": m[
+                        "maintenance_type"
+                    ],  # "0"=with data, "1"=no data
                     "active_since": int(m["active_since"]),
                     "active_till": int(m["active_till"]),
                     "description": m.get("description", ""),
-                    "hosts": [{"hostid": h["hostid"], "name": h["name"]} for h in m.get("hosts", [])],
-                    "groups": [{"groupid": g["groupid"], "name": g["name"]} for g in m.get("groups", [])],
+                    "hosts": [
+                        {"hostid": h["hostid"], "name": h["name"]}
+                        for h in m.get("hosts", [])
+                    ],
+                    "groups": [
+                        {"groupid": g["groupid"], "name": g["name"]}
+                        for g in m.get("groups", [])
+                    ],
                 }
                 for m in maintenances
             ]
@@ -284,7 +392,13 @@ class DataCollection_Manager(Zabbix_Base):
                 active_since=active_since,
                 active_till=active_till,
                 description=description,
-                timeperiods=[{"timeperiod_type": 0, "start_date": active_since, "period": duration}],
+                timeperiods=[
+                    {
+                        "timeperiod_type": 0,
+                        "start_date": active_since,
+                        "period": duration,
+                    }
+                ],
             )
             if hostids:
                 kwargs["hostids"] = hostids
@@ -355,7 +469,7 @@ class DataCollection_Manager(Zabbix_Base):
             return None, "Zabbix API not connected."
         try:
             cond_list = []
-            for c in (conditions or []):
+            for c in conditions or []:
                 entry: dict = {
                     "type": str(c.get("type", "1")),
                     "operator": str(c.get("operator", "0")),
@@ -394,9 +508,20 @@ class DataCollection_Manager(Zabbix_Base):
     # ── Discovery Rules ────────────────────────────────────────────────
 
     _DCHECK_TYPES: dict[str, int] = {
-        "ssh": 0, "ldap": 1, "smtp": 2, "ftp": 3, "http": 4, "pop": 5,
-        "nntp": 6, "imap": 7, "tcp": 8, "icmp": 9, "snmp": 11,
-        "telnet": 14, "jmx": 16, "zabbix": 18,
+        "ssh": 0,
+        "ldap": 1,
+        "smtp": 2,
+        "ftp": 3,
+        "http": 4,
+        "pop": 5,
+        "nntp": 6,
+        "imap": 7,
+        "tcp": 8,
+        "icmp": 9,
+        "snmp": 11,
+        "telnet": 14,
+        "jmx": 16,
+        "zabbix": 18,
     }
 
     def list_discovery_rules(self) -> list[dict]:

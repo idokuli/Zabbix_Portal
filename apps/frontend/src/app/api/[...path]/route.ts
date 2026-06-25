@@ -1,9 +1,8 @@
-import { type NextRequest, NextResponse } from "next/server";
 import { TOKEN_COOKIE } from "@/lib/auth";
 import { logger } from "@/lib/logger";
+import { type NextRequest, NextResponse } from "next/server";
 
 const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:6769";
-const TOKEN_MAX_AGE = 8 * 3600;
 
 const proxy = async (request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) => {
   const { path } = await params;
@@ -19,8 +18,6 @@ const proxy = async (request: NextRequest, { params }: { params: Promise<{ path:
     }
   });
 
-  // If the client didn't supply a Bearer token explicitly, inject it from the
-  // HttpOnly cookie so the backend always receives a valid Authorization header.
   if (!headers.get("authorization")) {
     const cookieToken = request.cookies.get(TOKEN_COOKIE)?.value;
     if (cookieToken) headers.set("authorization", `Bearer ${cookieToken}`);
@@ -49,24 +46,6 @@ const proxy = async (request: NextRequest, { params }: { params: Promise<{ path:
       responseHeaders.set(key, value);
     }
   });
-
-  // On a successful login response, extract the JWT and set it as an HttpOnly
-  // cookie so client-side JavaScript cannot read or steal it.
-  const isLoginPath = path.join("/") === "auth/login" && request.method === "POST";
-  if (isLoginPath && response.status === 200) {
-    try {
-      const clone = response.clone();
-      const json = await clone.json() as { access_token?: string };
-      if (json.access_token) {
-        responseHeaders.set(
-          "set-cookie",
-          `${TOKEN_COOKIE}=${encodeURIComponent(json.access_token)}; Path=/; Max-Age=${TOKEN_MAX_AGE}; SameSite=Strict; HttpOnly`,
-        );
-      }
-    } catch {
-      // Leave cookie unset if body can't be parsed — the client fallback still works.
-    }
-  }
 
   return new NextResponse(response.body, {
     status: response.status,

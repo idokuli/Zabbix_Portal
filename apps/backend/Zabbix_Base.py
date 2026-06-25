@@ -41,9 +41,13 @@ class Zabbix_Base:
                 ver = str(self.zapi.apiinfo.version())
                 parts = [int(x) for x in ver.split(".")[:2]]
                 self._zabbix_version = (parts[0], parts[1])
-                logger.info("Zabbix API version: %s (parsed %s)", ver, self._zabbix_version)
+                logger.info(
+                    "Zabbix API version: %s (parsed %s)", ver, self._zabbix_version
+                )
             except Exception as ve:
-                logger.warning("Could not detect Zabbix version: %r — defaulting to 5.4 syntax", ve)
+                logger.warning(
+                    "Could not detect Zabbix version: %r — defaulting to 5.4 syntax", ve
+                )
         except Exception as e:
             logger.error("Zabbix connection failed: %r", e)
             self.zapi = None
@@ -59,10 +63,17 @@ class Zabbix_Base:
             f"{clean}/api_jsonrpc.php",
             f"{clean}/zabbix/api_jsonrpc.php",
         ]
-        payload = {"jsonrpc": "2.0", "method": "apiinfo.version", "params": [], "id": 1}
+        payload: dict[str, Any] = {
+            "jsonrpc": "2.0",
+            "method": "apiinfo.version",
+            "params": [],
+            "id": 1,
+        }
         for api_url in candidates:
             try:
-                resp = requests.post(api_url, json=payload, timeout=5, verify=self._ssl_verify)
+                resp = requests.post(
+                    api_url, json=payload, timeout=5, verify=self._ssl_verify
+                )
                 if resp.status_code == 200 and "jsonrpc" in resp.text:
                     logger.info("Zabbix API found at: %s", api_url)
                     return api_url

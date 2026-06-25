@@ -20,4 +20,3 @@ export const setToken = (token: string) => {
 export const clearToken = () => {
   document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0`;
 };
-

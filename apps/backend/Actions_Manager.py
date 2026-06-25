@@ -4,8 +4,21 @@ from Zabbix_Base import Zabbix_Base
 
 logger = logging.getLogger(__name__)
 
-EVENTSOURCE_LABELS = {0: "Trigger", 1: "Discovery", 2: "Autoregistration", 3: "Internal", 4: "Service"}
-MEDIATYPE_TYPES = {0: "Email", 1: "SMS", 2: "Script", 4: "Webhook", 5: "Teams", 6: "Slack"}
+EVENTSOURCE_LABELS = {
+    0: "Trigger",
+    1: "Discovery",
+    2: "Autoregistration",
+    3: "Internal",
+    4: "Service",
+}
+MEDIATYPE_TYPES = {
+    0: "Email",
+    1: "SMS",
+    2: "Script",
+    4: "Webhook",
+    5: "Teams",
+    6: "Slack",
+}
 SCRIPT_EXECUTE_ON = {0: "Agent", 1: "Server", 2: "Proxy or server"}
 SCRIPT_SCOPE = {1: "Action operation", 2: "Manual host", 4: "Manual event"}
 
@@ -36,15 +49,21 @@ class Actions_Manager(Zabbix_Base):
                     "actionid": a["actionid"],
                     "name": a["name"],
                     "eventsource": int(a["eventsource"]),
-                    "eventsource_label": EVENTSOURCE_LABELS.get(int(a["eventsource"]), str(a["eventsource"])),
+                    "eventsource_label": EVENTSOURCE_LABELS.get(
+                        int(a["eventsource"]), str(a["eventsource"])
+                    ),
                     "status": int(a["status"]),
                     "esc_period": a.get("esc_period", "1h"),
                     "condition_count": (
-                        int(a["filter"]) if isinstance(a.get("filter"), (int, str))
-                        else len(a["filter"]) if isinstance(a.get("filter"), list)
+                        int(a["filter"])
+                        if isinstance(a.get("filter"), (int, str))
+                        else len(a["filter"])
+                        if isinstance(a.get("filter"), list)
                         else len(a.get("filter", {}).get("conditions", []))
                     ),
-                    "operation_count": int(a["operations"]) if isinstance(a.get("operations"), (int, str)) else len(a.get("operations", [])),
+                    "operation_count": int(a["operations"])
+                    if isinstance(a.get("operations"), (int, str))
+                    else len(a.get("operations", [])),
                 }
                 for a in actions
             ]
@@ -95,36 +114,96 @@ class Actions_Manager(Zabbix_Base):
             mts = self.zapi.mediatype.get(
                 output=["mediatypeid", "name", "type", "status", "description"],
             )
-            return sorted([
-                {
-                    "mediatypeid": m["mediatypeid"],
-                    "name": m["name"],
-                    "type": int(m["type"]),
-                    "type_label": MEDIATYPE_TYPES.get(int(m["type"]), f"Type {m['type']}"),
-                    "status": int(m["status"]),
-                    "description": m.get("description", ""),
-                }
-                for m in mts
-            ], key=lambda x: x["name"].lower())
+            return sorted(
+                [
+                    {
+                        "mediatypeid": m["mediatypeid"],
+                        "name": m["name"],
+                        "type": int(m["type"]),
+                        "type_label": MEDIATYPE_TYPES.get(
+                            int(m["type"]), f"Type {m['type']}"
+                        ),
+                        "status": int(m["status"]),
+                        "description": m.get("description", ""),
+                    }
+                    for m in mts
+                ],
+                key=lambda x: x["name"].lower(),
+            )
         except Exception as e:
             logger.exception("list_media_types failed")
             raise RuntimeError(str(e))
 
-    def create_media_type(self, name: str, mtype: int, description: str = "",
-                          smtp_server: str = "", smtp_helo: str = "", smtp_email: str = "",
-                          script: str = "", webhook_script: str = "") -> str:
+    def create_media_type(
+        self,
+        name: str,
+        mtype: int,
+        description: str = "",
+        smtp_server: str = "",
+        smtp_helo: str = "",
+        smtp_email: str = "",
+        script: str = "",
+        webhook_script: str = "",
+    ) -> str:
         if not self.zapi:
             raise RuntimeError("Zabbix not connected")
         try:
-            params: dict = {"name": name, "type": mtype, "status": 0, "description": description}
+            params: dict = {
+                "name": name,
+                "type": mtype,
+                "status": 0,
+                "description": description,
+            }
             if mtype == 0:  # email
-                params.update({"smtp_server": smtp_server or "localhost", "smtp_helo": smtp_helo or "localhost", "smtp_email": smtp_email or "zabbix@localhost"})
+                params.update(
+                    {
+                        "smtp_server": smtp_server or "localhost",
+                        "smtp_helo": smtp_helo or "localhost",
+                        "smtp_email": smtp_email or "zabbix@localhost",
+                    }
+                )
             elif mtype == 2:  # script
                 params["exec_path"] = script
             elif mtype == 4:  # webhook
                 params["script"] = webhook_script
             result = self.zapi.mediatype.create(**params)
             return result["mediatypeids"][0]
+        except Exception as e:
+            raise RuntimeError(str(e))
+
+    def update_media_type(
+        self,
+        mediatypeid: str,
+        name: str,
+        mtype: int,
+        description: str = "",
+        smtp_server: str = "",
+        smtp_email: str = "",
+        script: str = "",
+        webhook_script: str = "",
+    ) -> bool:
+        if not self.zapi:
+            raise RuntimeError("Zabbix not connected")
+        try:
+            params: dict = {
+                "mediatypeid": mediatypeid,
+                "name": name,
+                "type": mtype,
+                "description": description,
+            }
+            if mtype == 0:
+                params.update(
+                    {
+                        "smtp_server": smtp_server or "localhost",
+                        "smtp_email": smtp_email or "zabbix@localhost",
+                    }
+                )
+            elif mtype == 2:
+                params["exec_path"] = script
+            elif mtype == 4:
+                params["script"] = webhook_script
+            self.zapi.mediatype.update(**params)
+            return True
         except Exception as e:
             raise RuntimeError(str(e))
 
@@ -153,7 +232,15 @@ class Actions_Manager(Zabbix_Base):
             return []
         try:
             scripts = self.zapi.script.get(
-                output=["scriptid", "name", "command", "execute_on", "scope", "description", "groupid"],
+                output=[
+                    "scriptid",
+                    "name",
+                    "command",
+                    "execute_on",
+                    "scope",
+                    "description",
+                    "groupid",
+                ],
                 sortfield="name",
             )
             return [
@@ -162,9 +249,13 @@ class Actions_Manager(Zabbix_Base):
                     "name": s["name"],
                     "command": s.get("command", ""),
                     "execute_on": int(s.get("execute_on", 1)),
-                    "execute_on_label": SCRIPT_EXECUTE_ON.get(int(s.get("execute_on", 1)), "Server"),
+                    "execute_on_label": SCRIPT_EXECUTE_ON.get(
+                        int(s.get("execute_on", 1)), "Server"
+                    ),
                     "scope": int(s.get("scope", 2)),
-                    "scope_label": SCRIPT_SCOPE.get(int(s.get("scope", 2)), "Manual host"),
+                    "scope_label": SCRIPT_SCOPE.get(
+                        int(s.get("scope", 2)), "Manual host"
+                    ),
                     "description": s.get("description", ""),
                     "groupid": s.get("groupid", "0"),
                 }
@@ -174,14 +265,23 @@ class Actions_Manager(Zabbix_Base):
             logger.exception("list_scripts failed")
             raise RuntimeError(str(e))
 
-    def create_script(self, name: str, command: str, execute_on: int = 1,
-                      scope: int = 2, description: str = "") -> str:
+    def create_script(
+        self,
+        name: str,
+        command: str,
+        execute_on: int = 1,
+        scope: int = 2,
+        description: str = "",
+    ) -> str:
         if not self.zapi:
             raise RuntimeError("Zabbix not connected")
         try:
             result = self.zapi.script.create(
-                name=name, command=command,
-                execute_on=execute_on, scope=scope, description=description,
+                name=name,
+                command=command,
+                execute_on=execute_on,
+                scope=scope,
+                description=description,
             )
             return result["scriptids"][0]
         except Exception as e:

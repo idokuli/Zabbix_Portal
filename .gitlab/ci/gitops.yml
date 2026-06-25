@@ -324,6 +324,10 @@ plan:staging:
     - job: frontend:docker:build
       optional: true
       artifacts: false
+    - job: helm:lint
+      optional: true
+    - job: helm:template
+      optional: true
   environment:
     name: staging
   variables:

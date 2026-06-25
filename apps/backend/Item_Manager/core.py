@@ -1,0 +1,312 @@
+"""Core item CRUD: generic agent items, listing, lookup, deletion, update."""
+
+import logging
+from typing import TYPE_CHECKING, Any, Callable
+
+if TYPE_CHECKING:
+    from zabbix_utils import ZabbixAPI
+
+logger = logging.getLogger(__name__)
+
+
+class CoreItemsMixin:
+    """Mixed into Item_Manager. Assumes `self.zapi`/`self._invalidate`/`self._cached` from Zabbix_Base."""
+
+    if TYPE_CHECKING:
+        zapi: "ZabbixAPI | None"
+        _invalidate: Callable[[str], None]
+        _cached: Callable[..., Any]
+
+    def add_item(
+        self,
+        hostname,
+        item_name,
+        item_key,
+        value_type=3,
+        team_name: str = "",
+        delay: str = "1m",
+        units: str = "",
+        history: str = "31d",
+        trends: str = "365d",
+        description: str = "",
+        status: int = 0,
+        timeout: str = "",
+    ) -> tuple[str | None, str | None]:
+        """
+        Adds a new monitoring item to an existing host.
+        value_type: 0=float, 1=string, 2=log, 3=integer, 4=text
+        Returns (item_id, error_message). item_id is None on failure.
+        """
+        if not self.zapi:
+            return None, "Zabbix API not connected."
+
+        try:
+            host_data = self.zapi.host.get(
+                filter={"host": [hostname]}, output=["hostid"]
+            )
+            if not host_data:
+                return None, f"Host '{hostname}' not found in Zabbix."
+
+            host_id = host_data[0]["hostid"]
+
+            interfaces = self.zapi.hostinterface.get(hostids=host_id)
+            if not interfaces:
+                return None, f"No interfaces found for host '{hostname}'."
+            interface_id = interfaces[0]["interfaceid"]
+
+            kwargs: dict = dict(
+                name=item_name,
+                key_=item_key,
+                hostid=host_id,
+                interfaceid=interface_id,
+                type=0,  # Zabbix Agent (Passive)
+                value_type=value_type,
+                delay=delay or "1m",
+                history=history or "31d",
+                trends=trends or "365d",
+                status=status,
+            )
+            if units:
+                kwargs["units"] = units
+            if description:
+                kwargs["description"] = description
+            if timeout:
+                kwargs["timeout"] = timeout
+            # Only attach tags when non-empty — some older Zabbix versions reject tags=[]
+            if team_name:
+                kwargs["tags"] = [{"tag": "team", "value": team_name}]
+
+            result = self.zapi.item.create(**kwargs)
+            item_id = result["itemids"][0]
+            logger.info(
+                "Item %r (key: %s) added to %r (ID: %s).",
+                item_name,
+                item_key,
+                hostname,
+                item_id,
+            )
+            self._invalidate(f"items_host_{hostname}")
+            return item_id, None
+
+        except Exception as e:
+            msg = str(e)
+            logger.error("add_item(%r, %r) failed: %r", hostname, item_name, e)
+            return None, msg
+
+    def list_items(self, hostname: str, include_inherited: bool = False) -> list[dict]:
+        """List items on a host. include_inherited=True returns template items too."""
+        if not self.zapi:
+            return []
+        try:
+            host_data = self.zapi.host.get(
+                filter={"host": [hostname]}, output=["hostid"]
+            )
+            if not host_data:
+                return []
+            kwargs: dict = dict(
+                hostids=host_data[0]["hostid"],
+                output=["itemid", "name", "key_", "value_type", "delay"],
+                selectTags=["tag", "value"],
+            )
+            if not include_inherited:
+                kwargs["inherited"] = False
+            items = self.zapi.item.get(**kwargs)
+            return items
+        except Exception as e:
+            logger.error("list_items(%r) failed: %r", hostname, e)
+            return []
+
+    def get_item_hostname(self, itemid: str) -> str:
+        """Return the host name for an item, or '' if not found."""
+        if not self.zapi:
+            return ""
+        try:
+            items = self.zapi.item.get(
+                itemids=[itemid], output=["itemid"], selectHosts=["host"]
+            )
+            if items and items[0].get("hosts"):
+                return items[0]["hosts"][0]["host"]
+        except Exception:
+            pass
+        return ""
+
+    def delete_item(self, itemid: str) -> bool:
+        """Delete an item by ID."""
+        if not self.zapi:
+            return False
+        try:
+            self.zapi.item.delete([itemid])
+            logger.info("Deleted item ID %s.", itemid)
+            return True
+        except Exception as e:
+            logger.error("delete_item(%s) failed: %r", itemid, e)
+            return False
+
+    def update_item(
+        self,
+        itemid: str,
+        name: str | None = None,
+        delay: str | None = None,
+        status: str | None = None,
+        key_: str | None = None,
+    ) -> bool:
+        if not self.zapi:
+            raise RuntimeError("Zabbix not connected")
+        try:
+            params: dict = {"itemid": itemid}
+            if name is not None:
+                params["name"] = name
+            if delay is not None:
+                params["delay"] = delay
+            if status is not None:
+                params["status"] = int(status)
+            if key_ is not None:
+                params["key_"] = key_
+            self.zapi.item.update(**params)
+            return True
+        except Exception as e:
+            raise RuntimeError(str(e))
+
+    def list_all_items(
+        self,
+        search: str = "",
+        hostname: str = "",
+        limit: int = 2000,
+    ) -> list[dict]:
+        """List items across all hosts. Custom (non-template) items are sorted first."""
+        # Cache per-host unfiltered results for 30 s; bypass cache for searches
+        if hostname and not search:
+            cache_key = f"items_host_{hostname}"
+            return self._cached(
+                cache_key, 30.0, lambda: self._fetch_all_items(search, hostname, limit)
+            )
+        return self._fetch_all_items(search, hostname, limit)
+
+    def _fetch_all_items(
+        self,
+        search: str = "",
+        hostname: str = "",
+        limit: int = 2000,
+    ) -> list[dict]:
+        if not self.zapi:
+            raise RuntimeError("Zabbix API not connected.")
+        # Fetch more than the requested limit so we can sort custom items first
+        # then truncate — avoids template items crowding out user-created ones.
+        fetch_limit = min(limit * 3, 5000)
+        kwargs: dict = dict(
+            output=[
+                "itemid",
+                "name",
+                "key_",
+                "value_type",
+                "delay",
+                "status",
+                "state",
+                "lastvalue",
+                "lastclock",
+                "templateid",
+            ],
+            selectHosts=["host"],
+            selectTags=["tag", "value"],
+            limit=fetch_limit,
+            sortfield="name",
+            sortorder="ASC",
+        )
+        if hostname:
+            host_data = self.zapi.host.get(
+                filter={"host": [hostname]}, output=["hostid"]
+            )
+            if not host_data:
+                return []
+            kwargs["hostids"] = host_data[0]["hostid"]
+        if search:
+            kwargs["search"] = {"name": search, "key_": search}
+            kwargs["searchByAny"] = True
+        items = self.zapi.item.get(**kwargs)
+        result = []
+        for item in items:
+            hosts = item.get("hosts") or []
+            lc = item.get("lastclock")
+            result.append(
+                {
+                    "itemid": item["itemid"],
+                    "name": item["name"],
+                    "key_": item["key_"],
+                    "value_type": item["value_type"],
+                    "delay": item["delay"],
+                    "status": item["status"],
+                    "state": item.get("state", "0"),
+                    "hostname": hosts[0]["host"] if hosts else "",
+                    "tags": item.get("tags", []),
+                    "lastvalue": item.get("lastvalue", ""),
+                    "lastclock": int(lc) if lc else None,
+                    "templateid": item.get("templateid", "0"),
+                }
+            )
+        # Custom items (templateid=0 = created directly, not from template) come first
+        result.sort(
+            key=lambda x: (0 if str(x["templateid"]) == "0" else 1, x["name"].lower())
+        )
+        logger.info(
+            "list_all_items: returned %d items (search=%r, host=%r).",
+            len(result),
+            search,
+            hostname,
+        )
+        return result[:limit]
+
+    def get_all_item_keys(self) -> list[dict]:
+        """Return all item keys defined in Zabbix templates, grouped by template name.
+        Also includes delay, units, history, trends, description so the UI can
+        pre-fill the add-item form when the user selects a known template key.
+        """
+        if not self.zapi:
+            return []
+        try:
+            templates = self.zapi.template.get(output=["templateid", "name"])
+            if not templates:
+                return []
+            template_ids = [t["templateid"] for t in templates]
+            template_name_map = {t["templateid"]: t["name"] for t in templates}
+
+            items = self.zapi.item.get(
+                output=[
+                    "name",
+                    "key_",
+                    "value_type",
+                    "hostid",
+                    "delay",
+                    "units",
+                    "history",
+                    "trends",
+                    "description",
+                ],
+                hostids=template_ids,
+            )
+            seen_keys: set[str] = set()
+            result = []
+            for item in items:
+                key = item["key_"]
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                group = template_name_map.get(item["hostid"], "Other")
+                result.append(
+                    {
+                        "key_": key,
+                        "name": item["name"],
+                        "value_type": item["value_type"],
+                        "group": group,
+                        "delay": item.get("delay", "1m"),
+                        "units": item.get("units", ""),
+                        "history": item.get("history", "31d"),
+                        "trends": item.get("trends", "365d"),
+                        "description": item.get("description", ""),
+                    }
+                )
+            result.sort(key=lambda x: (x["group"], x["key_"]))
+            logger.info("get_all_item_keys: returned %d unique keys.", len(result))
+            return result
+        except Exception as e:
+            logger.error("get_all_item_keys failed: %r", e)
+            return []

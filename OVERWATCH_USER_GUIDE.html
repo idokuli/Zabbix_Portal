@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; line-height: 1.6; color: #172b4d; max-width: 900px; margin: 0 auto; padding: 32px; }
+  h1 { font-size: 24px; font-weight: 700; border-bottom: 2px solid #dfe1e6; padding-bottom: 8px; margin-top: 40px; color: #0052cc; }
+  h2 { font-size: 18px; font-weight: 700; margin-top: 28px; color: #172b4d; }
+  h3 { font-size: 15px; font-weight: 700; margin-top: 20px; color: #172b4d; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+  th { background: #f4f5f7; text-align: left; padding: 8px 12px; border: 1px solid #dfe1e6; font-weight: 700; font-size: 13px; }
+  td { padding: 8px 12px; border: 1px solid #dfe1e6; vertical-align: top; font-size: 13px; }
+  tr:nth-child(even) td { background: #fafbfc; }
+  .info { background: #deebff; border-left: 4px solid #0052cc; padding: 12px 16px; border-radius: 3px; margin: 12px 0; }
+  .note { background: #fffae6; border-left: 4px solid #ff991f; padding: 12px 16px; border-radius: 3px; margin: 12px 0; }
+  .warning { background: #ffebe6; border-left: 4px solid #de350b; padding: 12px 16px; border-radius: 3px; margin: 12px 0; }
+  .tip { background: #e3fcef; border-left: 4px solid #00875a; padding: 12px 16px; border-radius: 3px; margin: 12px 0; }
+  .panel-title { font-weight: 700; margin-bottom: 4px; font-size: 13px; }
+  code { background: #f4f5f7; padding: 1px 5px; border-radius: 3px; font-family: monospace; font-size: 12px; }
+  ol, ul { margin: 8px 0; padding-left: 24px; }
+  li { margin: 4px 0; }
+  hr { border: none; border-top: 2px solid #dfe1e6; margin: 32px 0; }
+  .toc { background: #f4f5f7; border: 1px solid #dfe1e6; border-radius: 3px; padding: 16px 24px; margin-bottom: 32px; }
+  .toc h2 { margin-top: 0; font-size: 14px; color: #5e6c84; }
+  .toc a { color: #0052cc; text-decoration: none; font-size: 13px; }
+  .toc a:hover { text-decoration: underline; }
+  .toc ul { list-style: none; padding-left: 0; }
+  .toc li { margin: 4px 0; }
+  .toc .toc-sub { padding-left: 16px; }
+</style>
+</head>
+<body>
+
+<div class="toc">
+  <h2>Contents</h2>
+  <ul>
+    <li><a href="#what-is">1. What Is Overwatch?</a></li>
+    <li><a href="#login">2. Logging In</a>
+      <ul class="toc-sub">
+        <li><a href="#login-local">Local login</a></li>
+        <li><a href="#login-ldap">Portal LDAP login</a></li>
+      </ul>
+    </li>
+    <li><a href="#interface">3. The Interface</a></li>
+    <li><a href="#roles">4. Roles and Permissions</a></li>
+    <li><a href="#sections">5. Section Guide</a>
+      <ul class="toc-sub">
+        <li><a href="#overview">Overview</a></li>
+        <li><a href="#hosts">Hosts</a></li>
+        <li><a href="#dashboard">Dashboard</a></li>
+        <li><a href="#monitoring">Monitoring</a></li>
+        <li><a href="#services">Services &amp; SLA</a></li>
+        <li><a href="#reports">Reports</a></li>
+        <li><a href="#datacollection">Data Collection (Admin)</a></li>
+        <li><a href="#alerts">Alerts (Admin)</a></li>
+        <li><a href="#users">Users (Admin)</a></li>
+        <li><a href="#administration">Administration (Admin)</a></li>
+      </ul>
+    </li>
+    <li><a href="#notifications">6. Notification System</a></li>
+    <li><a href="#cicd">7. Releases and CI/CD Pipeline</a></li>
+    <li><a href="#troubleshooting">8. Troubleshooting</a></li>
+  </ul>
+</div>
+
+<hr>
+
+<h1 id="what-is">1. What Is Overwatch?</h1>
+
+<p>Overwatch is the internal monitoring control plane for your infrastructure. It sits in front of a Zabbix monitoring server and adds:</p>
+<ul>
+  <li><strong>Role-based access control</strong> — operators, team leads, admins, and auditors each see different things</li>
+  <li><strong>Team management</strong> — group users into teams with assigned hosts</li>
+  <li><strong>Portal LDAP authentication</strong> — sign in with your Active Directory credentials; your portal account is created automatically on first login</li>
+  <li><strong>Simplified workflows</strong> — add monitoring to a host, define custom alert rules, bulk-import hosts from CSV/Excel, and export inventory</li>
+  <li><strong>Live problem feed</strong> — real-time alerts with sound notifications and acknowledgement</li>
+  <li><strong>Custom dashboards</strong> — build your own widget layouts from Zabbix graphs and metrics, saved per-user or per-team</li>
+</ul>
+
+<div class="info">
+  <div class="panel-title">Important</div>
+  All monitoring data comes from Zabbix in real time. Overwatch does not store metrics itself — it is a control and visibility layer on top of Zabbix.
+</div>
+
+<hr>
+
+<h1 id="login">2. Logging In</h1>
+
+<h2 id="login-local">Local login</h2>
+<ol>
+  <li>Open the Overwatch URL in your browser.</li>
+  <li>Enter your <strong>username</strong> and <strong>password</strong>.</li>
+  <li>Click <strong>Sign In</strong>.</li>
+</ol>
+
+<div class="note">
+  <div class="panel-title">Forgotten password?</div>
+  Passwords can only be reset by an administrator. Contact your team lead or an admin — they can set a new password from the Users page.
+</div>
+
+<h2 id="login-ldap">Portal LDAP login</h2>
+<p>If your organisation uses Active Directory or another LDAP directory, Overwatch can authenticate you with your network credentials. This is separate from Zabbix's own LDAP settings — it is configured inside Overwatch and only applies to portal logins.</p>
+
+<ol>
+  <li>On the login page, click <strong>Sign in with LDAP</strong> (appears below the standard Sign In button when Portal LDAP is enabled).</li>
+  <li>Enter your <strong>LDAP username</strong> (usually your Windows login, not the full email address).</li>
+  <li>Enter your <strong>LDAP password</strong>.</li>
+  <li>Click <strong>Sign In</strong>.</li>
+</ol>
+
+<div class="tip">
+  <div class="panel-title">First login</div>
+  The first time you sign in via LDAP, Overwatch creates your portal account automatically with the <strong>Operator</strong> role. Your team lead can adjust your role and assign you to a team after your account is created.
+</div>
+
+<div class="info">
+  <div class="panel-title">Administrators: enabling Portal LDAP</div>
+  Portal LDAP is configured in <strong>Users Management → Authentication → Portal Login</strong>. See the <a href="#auth-portal-ldap">Portal LDAP setup guide</a> in the Users section below.
+</div>
+
+<hr>
+
+<h1 id="interface">3. The Interface</h1>
+
+<h2>Sidebar</h2>
+<p>The left sidebar is your main navigation.</p>
+
+<table>
+  <tr><th>Element</th><th>Description</th></tr>
+  <tr><td><strong>Overwatch logo</strong></td><td>Always visible at the top</td></tr>
+  <tr><td><strong>Dark / Light mode toggle</strong></td><td>Moon/sun icon next to the logo</td></tr>
+  <tr><td><strong>Navigation groups</strong></td><td>Expandable sections — click a group header to expand or collapse</td></tr>
+  <tr><td><strong>Notification Center</strong></td><td>Inbox icon — opens your full alert history</td></tr>
+  <tr><td><strong>Active problems count</strong></td><td>Shows unacknowledged Zabbix problems; turns red when problems exist</td></tr>
+  <tr><td><strong>Sound controls</strong></td><td>Mute/unmute button and music-note icon for choosing the alert sound</td></tr>
+  <tr><td><strong>Backend API / Zabbix dots</strong></td><td>Green = connected, Red = unreachable — at the bottom of the sidebar</td></tr>
+  <tr><td><strong>Your username and role</strong></td><td>At the very bottom, with a logout button</td></tr>
+</table>
+
+<h2>Status Dots</h2>
+<p>The two coloured dots at the bottom of the sidebar update every <strong>15 seconds</strong>:</p>
+<ul>
+  <li><strong>Backend API</strong> — green means the Overwatch backend is running and reachable</li>
+  <li><strong>Zabbix</strong> — green means the backend can reach your Zabbix server</li>
+</ul>
+
+<div class="warning">
+  <div class="panel-title">Red status dot?</div>
+  If either dot is red, data across the portal will be stale or unavailable. See the Troubleshooting section at the bottom of this page.
+</div>
+
+<h2>Data Refresh</h2>
+<p>Most pages refresh automatically every <strong>15 seconds</strong>. You do not need to manually refresh your browser.</p>
+
+<hr>
+
+<h1 id="roles">4. Roles and Permissions</h1>
+
+<table>
+  <tr><th>Role</th><th>What they can do</th></tr>
+  <tr><td><strong>Root</strong></td><td>Full access to everything. Can manage all users, teams, and system settings. Can grant any role.</td></tr>
+  <tr><td><strong>Team Lead</strong></td><td>Can manage users within their team, assign hosts, and see all admin sections. Cannot manage other team leads or root users.</td></tr>
+  <tr><td><strong>Operator</strong></td><td>Can view hosts, metrics, and problems and acknowledge alerts. Cannot create or delete users or change system settings. The default role assigned to LDAP users on first login.</td></tr>
+  <tr><td><strong>Member</strong></td><td>Read-only access to the team's hosts and monitoring data. Cannot make changes or acknowledge problems.</td></tr>
+  <tr><td><strong>Auditor</strong></td><td>Read-only access across all teams. Can view everything but cannot make changes. Only Root can grant this role.</td></tr>
+</table>
+
+<p>A user can hold multiple roles simultaneously. When a higher role is selected, all lower roles in the hierarchy are automatically selected too (Windows-style cascade). You cannot assign a role higher than your own.</p>
+
+<div class="info">
+  The admin sections (Data Collection, Alerts, Users, Administration) are only visible in the sidebar for <strong>Root</strong> and <strong>Team Lead</strong> roles. The underlying API endpoints are independently gated — a missing nav link is not the only access control.
+</div>
+
+<hr>
+
+<h1 id="sections">5. Section Guide</h1>
+
+<h2 id="overview">Overview</h2>
+<p>The overview page is your main health dashboard. It shows:</p>
+<ul>
+  <li><strong>Total hosts</strong> and how many are currently available vs. unreachable</li>
+  <li><strong>Active problems</strong> count broken down by severity</li>
+  <li><strong>Recent problems</strong> — a live list of the most recent Zabbix trigger events</li>
+  <li><strong>Per-team summary</strong> — how many hosts and active problems each team owns</li>
+</ul>
+
+<hr>
+
+<h2 id="hosts">Hosts</h2>
+
+<h3>Adding a host</h3>
+<ol>
+  <li>Click <strong>Add Host</strong> (top right).</li>
+  <li>Fill in: Hostname, IP address, Host group (required), and Templates (optional).</li>
+  <li>Click <strong>Save</strong>.</li>
+</ol>
+
+<h3>Importing hosts from CSV or Excel</h3>
+<ol>
+  <li>Click <strong>Import</strong>.</li>
+  <li>Download the template first to see the required column format.</li>
+  <li>Required columns: <code>host</code> (or <code>hostname</code>) and <code>ip</code>. Optional: <code>template</code>.</li>
+  <li>Upload your file and confirm.</li>
+</ol>
+
+<h3>Exporting hosts</h3>
+<p>Click <strong>Export</strong> to download the full host inventory as an Excel file (.xlsx). The export includes: Hostname, IP, DNS, Status, Availability, Proxy, Host Groups, Templates, and Description.</p>
+
+<h3>Deleting a host</h3>
+<p>Click the delete icon on the host row. A confirmation dialog will appear.</p>
+<div class="warning">
+  <div class="panel-title">Deletion is permanent</div>
+  Deleting a host removes it from Zabbix. All associated items, triggers, and history are deleted and cannot be recovered.
+</div>
+
+<hr>
+
+<h2 id="dashboard">Dashboard</h2>
+<p>The Dashboard lets you build custom widget layouts from your Zabbix graphs and last-metric values. Layouts are saved automatically and can be scoped to you personally or to your whole team.</p>
+
+<h3>Adding widgets</h3>
+<ol>
+  <li>Click <strong>Add Widget</strong> (top right).</li>
+  <li>Choose a widget type:
+    <ul>
+      <li><strong>Graph</strong> — a Zabbix native graph for a selected host</li>
+      <li><strong>Last Value</strong> — the current reading of a single metric</li>
+      <li><strong>Recent Items</strong> — a table of the most recently added monitoring items</li>
+    </ul>
+  </li>
+  <li>Configure the widget and click <strong>Save</strong>.</li>
+</ol>
+
+<h3>Pages</h3>
+<p>Dashboards support multiple named pages. Use <strong>Add Page</strong> to create tabs within your dashboard, and drag widgets between them.</p>
+
+<h3>Saving and sharing</h3>
+<ul>
+  <li><strong>Save as mine</strong> — only you see this layout</li>
+  <li><strong>Save for team</strong> — all team members see the same layout</li>
+</ul>
+
+<div class="note">If no graphs appear on a graph widget, the host either has no graph definitions configured in Zabbix or is currently unreachable.</div>
+
+<hr>
+
+<h2 id="monitoring">Monitoring</h2>
+
+<p>The Monitoring section has six tabs:</p>
+
+<h3>Latest Data</h3>
+<p>Shows the last collected value for every monitored item on a selected host. Choose a host from the dropdown, then use the search box to filter by item name or key.</p>
+<table>
+  <tr><th>Status chip</th><th>Meaning</th></tr>
+  <tr><td><strong>Enabled</strong> (green)</td><td>Item is active and collecting</td></tr>
+  <tr><td><strong>Disabled</strong> (grey)</td><td>Item exists but is paused</td></tr>
+  <tr><td><strong>No data</strong> (red)</td><td>Item has not reported within its expected interval — usually means the host agent is unreachable</td></tr>
+</table>
+<div class="warning">A yellow banner appears at the top of the table when the host agent is unreachable. All items will show <strong>No data</strong> until the agent comes back online.</div>
+
+<h3>Item Graphs</h3>
+<p>Time-series charts for item values. Select a host and an item, then choose a time range to view historical data. You can zoom in by dragging on the chart.</p>
+
+<h3>Problems</h3>
+<p>Shows all currently active Zabbix trigger problems. Severity is colour-coded:</p>
+<table>
+  <tr><th>Colour</th><th>Severity</th></tr>
+  <tr><td>Dark red</td><td>Critical</td></tr>
+  <tr><td>Red</td><td>High</td></tr>
+  <tr><td>Orange</td><td>Medium</td></tr>
+  <tr><td>Yellow</td><td>Low</td></tr>
+  <tr><td>Blue</td><td>Info</td></tr>
+</table>
+
+<p><strong>Click any row</strong> to expand it and see: full host detail, duration, who acknowledged it, when, and the acknowledgement note.</p>
+
+<h3>Acknowledging a problem</h3>
+<ol>
+  <li>Find the problem in the Problems tab.</li>
+  <li>Click the <strong>Ack</strong> button on the right side of the row.</li>
+  <li>Enter an optional note.</li>
+  <li>Click <strong>Confirm</strong>.</li>
+</ol>
+<div class="info">Acknowledging marks the problem in Zabbix and removes it from the sidebar badge. The problem stays open until its trigger condition clears in Zabbix.</div>
+
+<h3>Problem History</h3>
+<p>Shows resolved (past) problems within a selected time window. Choose a host and a time range to search historical events.</p>
+
+<h3>Alert Rules</h3>
+<p>Custom threshold-based alerts defined in Overwatch (separate from Zabbix triggers). These run on a <strong>15-second check loop</strong>.</p>
+<ol>
+  <li>Click <strong>Add Rule</strong>.</li>
+  <li>Select the host and item to watch.</li>
+  <li>Choose the operator (<code>&gt;</code>, <code>&lt;</code>, <code>=</code>, etc.) and threshold value.</li>
+  <li>Set the severity.</li>
+  <li>Optionally assign a custom alert sound for this rule.</li>
+  <li>Click <strong>Save</strong>.</li>
+</ol>
+<div class="tip">When a rule fires, a notification popup appears in the bottom-right corner and is logged in the Notification Center. The rule stays active until the value drops back below the threshold.</div>
+
+<h3>Alert History</h3>
+<p>A log of all alert-rule events — when each rule fired and when it resolved.</p>
+
+<hr>
+
+<h2 id="services">Services &amp; SLA</h2>
+
+<h3>Services</h3>
+<p>Lists all Zabbix services (logical business nodes such as "Payment API" or "Database Cluster"). You can create, edit, and delete services here. Services can be nested — a parent service aggregates the status of its child services.</p>
+
+<h3>SLA</h3>
+<p>Lists SLA definitions. Each SLA has a target uptime percentage, a measurement period (weekly, monthly, quarterly, or annually), and service tags that define which services it applies to. Click the SLA row to view a detailed report broken down by period.</p>
+<div class="note">SLA is a Zabbix 6.0+ feature. If your Zabbix version is older, the SLA tab will always be empty.</div>
+
+<h3>Health Monitors</h3>
+<p>Simple URL or host reachability checks (HTTP GET / ICMP) that are surfaced as service items. Use this tab to add lightweight uptime monitoring without writing full item definitions.</p>
+
+<hr>
+
+<h2 id="reports">Reports</h2>
+<table>
+  <tr><th>Sub-page</th><th>What it shows</th></tr>
+  <tr><td><strong>Availability</strong></td><td>Uptime percentages per host group over a chosen period</td></tr>
+  <tr><td><strong>Top Triggers</strong></td><td>The top 100 triggers that fired most frequently, filterable by severity and time range</td></tr>
+  <tr><td><strong>Audit Log</strong></td><td>Who did what and when in Zabbix (logins, config changes, API calls)</td></tr>
+  <tr><td><strong>Action Log</strong></td><td>Records of Zabbix actions (notifications sent, remote commands run)</td></tr>
+  <tr><td><strong>Notifications</strong></td><td>History of notifications sent by Zabbix media types (email, webhook, SMS)</td></tr>
+</table>
+
+<hr>
+
+<h2 id="datacollection">Data Collection <em>(Admin only)</em></h2>
+<table>
+  <tr><th>Sub-page</th><th>What it does</th></tr>
+  <tr><td><strong>Template Groups</strong></td><td>Organisational containers for templates — create and rename groups here</td></tr>
+  <tr><td><strong>Host Groups</strong></td><td>Logical groups hosts belong to (required when adding a host) — view members and manage groups</td></tr>
+  <tr><td><strong>Templates</strong></td><td>Reusable monitoring configurations applied to hosts — create templates or delete unused ones</td></tr>
+  <tr><td><strong>Maintenance</strong></td><td>Schedule maintenance windows so problems are suppressed during planned downtime</td></tr>
+  <tr><td><strong>Event Correlation</strong></td><td>Rules for de-duplicating related problems (e.g. correlate a switch outage with all downstream host problems)</td></tr>
+  <tr><td><strong>Discovery</strong></td><td>Automatic host and service discovery rules — configure network ranges and discovery protocols</td></tr>
+</table>
+
+<hr>
+
+<h2 id="alerts">Alerts <em>(Admin only)</em></h2>
+
+<p>The Alerts section manages how Zabbix reacts to events, in addition to the per-user Alert Rules described in the Monitoring section above.</p>
+
+<table>
+  <tr><th>Sub-page</th><th>What it does</th></tr>
+  <tr><td><strong>Trigger Actions</strong></td><td>What Zabbix does automatically when a trigger fires (send email, run script, create a ticket)</td></tr>
+  <tr><td><strong>Service Actions</strong></td><td>Actions triggered by service state changes</td></tr>
+  <tr><td><strong>Discovery Actions</strong></td><td>What to do when auto-discovery finds a new host or service</td></tr>
+  <tr><td><strong>Autoregistration</strong></td><td>Rules for automatically linking newly registered Zabbix agents to host records</td></tr>
+  <tr><td><strong>Internal Actions</strong></td><td>Actions triggered by internal Zabbix events (e.g. an item becoming unsupported)</td></tr>
+  <tr><td><strong>Media Types</strong></td><td>Email servers, webhook URLs, and SMS gateways that Zabbix uses to send notifications</td></tr>
+  <tr><td><strong>Scripts</strong></td><td>Zabbix global scripts that can be run against hosts from the UI</td></tr>
+</table>
+
+<hr>
+
+<h2 id="users">Users <em>(Admin only)</em></h2>
+
+<h3>Users page</h3>
+<p>Lists all portal users. Root sees all users platform-wide; Team Leads see only their own team. You can create, edit role assignments, change passwords, and delete users here.</p>
+<div class="note">
+  <div class="panel-title">Role assignment rules</div>
+  You cannot assign a role higher than your own. Only Root can assign the <strong>Auditor</strong> role. When selecting a higher role, lower roles are automatically selected too.
+</div>
+
+<h3>Teams</h3>
+<p>Teams group users with a shared set of assigned hosts.</p>
+<ol>
+  <li>Click <strong>Create Team</strong>.</li>
+  <li>Enter a team name.</li>
+  <li>Add members and assign their roles within the team.</li>
+  <li>Assign hosts to the team from the host list.</li>
+</ol>
+
+<h3>User Groups</h3>
+<p>Zabbix-side permission groups (separate from portal teams). Manage which Zabbix user groups exist and add/remove members.</p>
+
+<h3>User Roles</h3>
+<p>Zabbix permission profiles — control which Zabbix UI sections and API calls each role can access.</p>
+
+<h3>API Tokens</h3>
+<p>Zabbix API tokens for external integrations. Only Root can create and delete tokens.</p>
+
+<h3 id="auth-portal-ldap">Authentication</h3>
+<p>The Authentication tab has two sections: <strong>Zabbix Settings</strong> (the Zabbix server's own authentication config — LDAP, SAML, HTTP auth) and <strong>Portal Login</strong> (Overwatch's built-in LDAP connector for portal users).</p>
+
+<h4>Portal Login — enabling LDAP authentication</h4>
+<p>This allows users to sign into Overwatch with their Active Directory / LDAP credentials. Accounts are created automatically on first login with the Operator role.</p>
+
+<ol>
+  <li>Go to <strong>Users Management → Authentication → Portal Login</strong>.</li>
+  <li>Toggle <strong>Enable LDAP Authentication</strong> on.</li>
+  <li>Fill in the connection details:
+    <ul>
+      <li><strong>LDAP Host</strong> — the address of your LDAP/AD server (e.g. <code>ldap.company.com</code> or an IP address)</li>
+      <li><strong>Port</strong> — 389 for plain LDAP; 636 for LDAPS</li>
+      <li><strong>Use SSL</strong> — enable for LDAPS (port 636)</li>
+      <li><strong>Base DN</strong> — where to search for users, e.g. <code>DC=company,DC=com</code></li>
+      <li><strong>Bind DN</strong> — a service account Overwatch uses to search the directory, e.g. <code>CN=overwatch-svc,OU=Service Accounts,DC=company,DC=com</code></li>
+      <li><strong>Bind Password</strong> — the service account password</li>
+      <li><strong>User Search Filter</strong> — how to find a user by their login name, e.g. <code>(sAMAccountName={username})</code> for Active Directory</li>
+    </ul>
+  </li>
+  <li>Click <strong>Test Connection</strong> to verify the settings are correct before saving.</li>
+  <li>Click <strong>Save</strong>.</li>
+</ol>
+
+<div class="tip">
+  <div class="panel-title">Active Directory user search filter</div>
+  For most AD environments: <code>(sAMAccountName={username})</code><br>
+  For OpenLDAP: <code>(uid={username})</code><br>
+  The <code>{username}</code> placeholder is replaced with whatever the user types in the login box.
+</div>
+
+<div class="warning">
+  <div class="panel-title">Bind DN credentials</div>
+  The Bind DN account needs read access to the directory — no write permissions required. Store its password securely. Rotating the service account password requires updating the Portal LDAP config and saving again.
+</div>
+
+<div class="info">
+  <div class="panel-title">What happens when an LDAP user logs in</div>
+  On first login, Overwatch creates a portal account tagged <code>source=ldap</code> with the <strong>Operator</strong> role. The Team Lead or Root can then change the role and assign the user to a team. If the LDAP server is unreachable, LDAP login fails gracefully — local accounts are never affected.
+</div>
+
+<hr>
+
+<h2 id="administration">Administration <em>(Admin only)</em></h2>
+<table>
+  <tr><th>Sub-page</th><th>What it does</th></tr>
+  <tr><td><strong>Housekeeping</strong></td><td>Data retention settings — how long Zabbix keeps history and trend data before purging it</td></tr>
+  <tr><td><strong>Proxies</strong></td><td>Zabbix proxy servers used for distributed monitoring across sites or behind firewalls</td></tr>
+  <tr><td><strong>Proxy Groups</strong></td><td>Groups of proxies for load-balanced data collection (Zabbix 7.x+)</td></tr>
+  <tr><td><strong>Macros</strong></td><td>Global Zabbix macros (e.g. <code>{$SNMP_COMMUNITY}</code>) shared across all templates</td></tr>
+  <tr><td><strong>Queue</strong></td><td>Zabbix server's internal item processing queue — useful for diagnosing collection delays or backlogs</td></tr>
+</table>
+
+<hr>
+
+<h1 id="notifications">6. Notification System</h1>
+
+<h2>Popup Notifications</h2>
+<p>When a new problem fires, a notification card appears in the <strong>bottom-right corner</strong>. Each card shows: severity, how long ago it fired, host name, problem description, and an <strong>Acknowledge</strong> button.</p>
+<ul>
+  <li>Low/Info severity notifications auto-dismiss after <strong>8 seconds</strong></li>
+  <li>Critical/High/Medium stay until you dismiss them</li>
+  <li>If more than 3 stack up, a <strong>Dismiss all</strong> link appears</li>
+</ul>
+
+<h2>Notification Center</h2>
+<p>Click the <strong>Inbox icon</strong> in the sidebar to open the Notification Center. It has two tabs:</p>
+<table>
+  <tr><th>Tab</th><th>What it shows</th></tr>
+  <tr><td><strong>Alert History</strong></td><td>Every notification since opening the portal (up to 200, stored in your browser). You can acknowledge directly from here.</td></tr>
+  <tr><td><strong>Active Problems</strong></td><td>All currently open Zabbix problems. You can acknowledge from here too.</td></tr>
+</table>
+<p><strong>Mark all as read</strong> — clears the unread badge without deleting history.<br>
+<strong>Clear history</strong> — hides current history entries. New notifications will still appear.</p>
+
+<h2>Alert Sounds</h2>
+<p>Controls are in the sidebar next to the active problems count:</p>
+<ul>
+  <li><strong>Volume icon</strong> — mute or unmute all alert sounds</li>
+  <li><strong>Music note icon</strong> — choose a preset: Beep, Chime, Ping, or Alarm. Higher severity = more beeps / higher frequency.</li>
+  <li>You can also <strong>upload your own audio file</strong> from the sound menu.</li>
+</ul>
+<div class="tip">Alert sounds are synthesised in the browser — no audio files are downloaded. This works fully offline.</div>
+
+<hr>
+
+<h1 id="cicd">7. Releases and CI/CD Pipeline</h1>
+
+<p>This section explains how Overwatch is built, tested, and deployed. It is relevant to team leads and operators who want to understand what version is currently running, how updates get promoted to production, and how to tell if an environment is out of date.</p>
+
+<h2>How releases work</h2>
+
+<p>Overwatch is deployed from a GitLab CI/CD pipeline. The pipeline runs <strong>only when a version tag is pushed</strong> (e.g. <code>v1.4.0</code>). Branch pushes and merge requests do nothing in CI — they are code review steps only.</p>
+
+<p>This means:</p>
+<ul>
+  <li>Every deployment is traceable to an exact tag with a release note.</li>
+  <li>No code reaches staging or production without an intentional tag.</li>
+  <li>Rolling back is always possible — every deployed version is a known image tag.</li>
+</ul>
+
+<h2>Pipeline stages</h2>
+
+<p>When a tag is pushed, the pipeline runs through these stages in order:</p>
+
+<table>
+  <tr><th>Stage</th><th>What happens</th><th>Automatic or manual?</th></tr>
+  <tr>
+    <td><strong>Detect</strong></td>
+    <td>Compares the new tag against the previous tag to determine which apps actually changed (backend and/or frontend). If nothing in an app changed, its build and deploy jobs are skipped entirely. Also validates that all required CI variables (cluster tokens, registry address, etc.) are set — fails immediately if any are missing.</td>
+    <td>Automatic</td>
+  </tr>
+  <tr>
+    <td><strong>Lint</strong></td>
+    <td>Static checks run for changed apps only: Python lint (ruff), Python type-check (mypy), JavaScript lint (Biome), TypeScript type-check (tsc), and Helm chart validation.</td>
+    <td>Automatic</td>
+  </tr>
+  <tr>
+    <td><strong>Build</strong></td>
+    <td>Docker images are built using Kaniko (rootless, daemonless) and pushed to the private container registry tagged with the release version (e.g. <code>:v1.4.0</code>). Only changed apps are built — an unchanged backend is never rebuilt.</td>
+    <td>Automatic</td>
+  </tr>
+  <tr>
+    <td><strong>Plan: Staging</strong></td>
+    <td>Resolves which image tag each app will use (new tag for changed apps; the currently deployed tag for unchanged apps) and prints a preview of what Helm will apply. Safe to re-run.</td>
+    <td>Automatic</td>
+  </tr>
+  <tr>
+    <td><strong>Deploy: Staging</strong></td>
+    <td>Runs <code>helm upgrade --install</code> against the staging cluster. The deployment waits up to 5 minutes for all pods to pass their health checks before marking the job as successful. If pods don't come up in time, the job fails and staging stays on the previous version.</td>
+    <td>Automatic</td>
+  </tr>
+  <tr>
+    <td><strong>Plan: Production</strong></td>
+    <td>Resolves production's image tags from its own deployment history (falls back to staging's resolved tags if production has never been deployed to before). Prints a preview.</td>
+    <td>Automatic (runs after staging deploys)</td>
+  </tr>
+  <tr>
+    <td><strong>Deploy: Production</strong></td>
+    <td>Runs <code>helm upgrade --install</code> against the production cluster. Requires a human to click ▶ in the GitLab pipeline UI — production is <strong>never deployed automatically</strong>.</td>
+    <td><strong>Manual gate (▶)</strong></td>
+  </tr>
+  <tr>
+    <td><strong>Plan: DR</strong></td>
+    <td>Resolves DR's image tags (from its own history; falls back to production). DR is a completely separate cluster from production — it has its own token and API endpoint.</td>
+    <td>Automatic (runs after production deploys)</td>
+  </tr>
+  <tr>
+    <td><strong>Deploy: DR</strong></td>
+    <td>Deploys to the Disaster Recovery cluster. Also a manual gate — click ▶ when production is verified healthy.</td>
+    <td><strong>Manual gate (▶)</strong></td>
+  </tr>
+</table>
+
+<h2>What "changed" means</h2>
+
+<p>The detect stage compares which files changed between the previous release tag and the current tag:</p>
+<ul>
+  <li>If only <code>apps/frontend/</code> changed — only the frontend is rebuilt and re-deployed. The backend keeps its current image tag.</li>
+  <li>If only <code>apps/backend/</code> changed — only the backend is rebuilt. The frontend is untouched.</li>
+  <li>If both changed — both are rebuilt.</li>
+  <li>If only <code>helm/</code> changed — neither app is rebuilt, but the Helm chart update is still deployed (using each app's currently-deployed image tag).</li>
+</ul>
+
+<p>This means a frontend change never forces an unnecessary backend restart, and vice versa.</p>
+
+<h2>How to know what version is running</h2>
+
+<p>In GitLab, open the project's <strong>Deployments → Environments</strong> page. Each environment (staging, production, DR) shows its most recently deployed tag. The Git tag name is the image version — e.g. the <code>v1.4.0</code> tag built images tagged <code>:v1.4.0</code>.</p>
+
+<p>From the cluster directly:</p>
+<pre><code>helm history zabbix-portal -n &lt;namespace&gt;</code></pre>
+
+<h2>Environments</h2>
+
+<table>
+  <tr><th>Environment</th><th>Purpose</th><th>Deployment</th></tr>
+  <tr>
+    <td><strong>Staging</strong></td>
+    <td>Test every tag before it reaches users. The UI and API are fully functional; data is isolated from production.</td>
+    <td>Automatic on every tag</td>
+  </tr>
+  <tr>
+    <td><strong>Production</strong></td>
+    <td>The live environment users access.</td>
+    <td>Manual gate — click ▶ after validating staging</td>
+  </tr>
+  <tr>
+    <td><strong>DR (Disaster Recovery)</strong></td>
+    <td>A standby deployment on a separate cluster. Used to fail over if the production cluster is unavailable.</td>
+    <td>Manual gate — typically clicked after production is confirmed healthy</td>
+  </tr>
+</table>
+
+<h2>Rollback</h2>
+
+<p>If a deployment causes a problem, administrators can roll back to the previous version without touching the code:</p>
+<pre><code>helm rollback zabbix-portal &lt;previous-revision-number&gt; -n &lt;namespace&gt;</code></pre>
+
+<p>This restores both the Helm chart and the image tags to the previous state. A follow-up tag is created to revert the bad code in the source repository — but users are unaffected immediately after the rollback command completes.</p>
+
+<div class="tip">
+  <div class="panel-title">How to check what revision to roll back to</div>
+  <code>helm history zabbix-portal -n &lt;namespace&gt;</code> lists every revision with its status, timestamp, and chart version. Pick the last <code>deployed</code> revision before the problem started.
+</div>
+
+<hr>
+
+<h1 id="troubleshooting">8. Troubleshooting</h1>
+
+<table>
+  <tr><th>Symptom</th><th>Why it happens</th><th>How to fix it</th></tr>
+  <tr>
+    <td><strong>"Backend API" dot is red</strong></td>
+    <td>The frontend cannot reach the Overwatch backend service.</td>
+    <td>Check the backend pod is running: <code>kubectl get pods -n &lt;namespace&gt;</code>. Read its logs if crashing: <code>kubectl logs &lt;pod-name&gt;</code>. Locally: make sure the backend server is started.</td>
+  </tr>
+  <tr>
+    <td><strong>"Zabbix" dot is red</strong></td>
+    <td>The backend is running but cannot connect to Zabbix.</td>
+    <td>Verify <code>ZABBIX_URL</code>, <code>ZABBIX_USER</code>, and <code>ZABBIX_PASS</code> are correct. Try logging in to the Zabbix web UI directly with those credentials. Check backend logs for <code>ZabbixAPI</code> errors.</td>
+  </tr>
+  <tr>
+    <td><strong>"Invalid credentials" on login</strong></td>
+    <td>Wrong username or password.</td>
+    <td>Check caps lock. Ask an admin to reset your password. Default first-time credentials: username <code>Admin</code>, password <code>admin</code>.</td>
+  </tr>
+  <tr>
+    <td><strong>LDAP login fails — "Authentication failed"</strong></td>
+    <td>Wrong LDAP credentials, or Portal LDAP is misconfigured.</td>
+    <td>Confirm you are using your network/AD username (not email). Ask an admin to check the Portal LDAP config in Users Management → Authentication → Portal Login, and use the <strong>Test Connection</strong> button to verify the settings.</td>
+  </tr>
+  <tr>
+    <td><strong>"Sign in with LDAP" button is not visible</strong></td>
+    <td>Portal LDAP is not enabled.</td>
+    <td>A Root user must enable it in <strong>Users Management → Authentication → Portal Login</strong>.</td>
+  </tr>
+  <tr>
+    <td><strong>Page shows no data / tables are empty</strong></td>
+    <td>Backend or Zabbix is unreachable, or the host has no configured items.</td>
+    <td>Check both status dots are green. Try a full page reload. Confirm the host has items configured in Zabbix.</td>
+  </tr>
+  <tr>
+    <td><strong>"Host agent unreachable" banner</strong></td>
+    <td>Zabbix cannot collect data from the host's agent.</td>
+    <td>Confirm the host is powered on. Check the Zabbix agent service: <code>systemctl status zabbix-agent</code>. Check firewall rules — Zabbix needs port <strong>10050</strong> (passive) or agent needs port <strong>10051</strong> (active).</td>
+  </tr>
+  <tr>
+    <td><strong>Acknowledged problem — badge did not update</strong></td>
+    <td>The badge refreshes every 15 seconds.</td>
+    <td>Wait up to 15 seconds. If it still does not update, refresh the page.</td>
+  </tr>
+  <tr>
+    <td><strong>Export downloads empty or corrupted file</strong></td>
+    <td>Backend unreachable, or no hosts exist to export.</td>
+    <td>Confirm both status dots are green. If the host list is empty, the export will only contain headers.</td>
+  </tr>
+  <tr>
+    <td><strong>Custom alert rule is not firing</strong></td>
+    <td>The check runs every 15 seconds, or the item is not collecting data.</td>
+    <td>Wait up to 15 seconds after the threshold is crossed. Check Latest Data for that item — it should not show a <strong>No data</strong> chip. Verify the operator and threshold are correct.</td>
+  </tr>
+  <tr>
+    <td><strong>SLA tab is always empty</strong></td>
+    <td>No SLAs defined in Zabbix, or Zabbix version is older than 6.0.</td>
+    <td>Confirm SLAs exist in Zabbix directly. Verify the Zabbix service account has read access to services.</td>
+  </tr>
+  <tr>
+    <td><strong>Cannot assign a role / option is greyed out</strong></td>
+    <td>You are trying to assign a role higher than your own.</td>
+    <td>Ask a Root user to make the change.</td>
+  </tr>
+  <tr>
+    <td><strong>Dashboard widget shows "No graphs available"</strong></td>
+    <td>Host has no graph definitions, or the host is unreachable.</td>
+    <td>Confirm graph definitions exist in Zabbix (Monitoring → Hosts → Graphs). Confirm the host has templates applied.</td>
+  </tr>
+  <tr>
+    <td><strong>Staging was deployed but production still shows the old version</strong></td>
+    <td>Production requires a manual gate — it is never deployed automatically.</td>
+    <td>Open the GitLab pipeline for the relevant tag and click ▶ on <strong>deploy:production</strong>.</td>
+  </tr>
+</table>
+
+<h2>Still stuck?</h2>
+<p>Check these in order:</p>
+<ol>
+  <li><strong>Backend logs</strong> — <code>kubectl logs &lt;backend-pod&gt; -n &lt;namespace&gt;</code> (or <code>docker logs backend</code> locally).</li>
+  <li><strong>Browser console</strong> — open Developer Tools (F12) → Console tab. API errors appear there.</li>
+  <li><strong>Network tab</strong> — Developer Tools → Network. Look for red (failed) requests to <code>/api/*</code>. The response body usually contains the error message.</li>
+  <li><strong>Zabbix directly</strong> — log in to the Zabbix web UI to confirm whether the issue is in Zabbix or in Overwatch.</li>
+</ol>
+
+</body>
+</html>

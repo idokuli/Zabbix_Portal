@@ -1,10 +1,11 @@
 import { createTheme } from "@mui/material/styles";
 import type { Shadows } from "@mui/material/styles";
 
-export const createAppTheme = (mode: "dark" | "light") => {
+export const createAppTheme = (mode: "dark" | "light", direction: "ltr" | "rtl" = "ltr") => {
   const isDark = mode === "dark";
 
   return createTheme({
+    direction,
     shape: { borderRadius: 8 },
     typography: {
       fontFamily: "Inter, system-ui, -apple-system, sans-serif",
