@@ -3,6 +3,7 @@ export const TOKEN_COOKIE = "auth_token";
 export type AuthUser = {
   sub: string;
   username: string;
+  display_name: string;
   roles: string[];
   team_id: number | null;
 };

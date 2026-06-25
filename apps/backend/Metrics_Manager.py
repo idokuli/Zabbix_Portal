@@ -66,7 +66,6 @@ class Metrics_Manager(Zabbix_Base):
                 recent=True,
                 sortfield="eventid",
                 sortorder="DESC",
-                limit=200,
             )
             if not problems:
                 return []

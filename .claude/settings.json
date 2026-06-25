@@ -3,5 +3,22 @@
     "ui-ux-designer": "on",
     "python-pro": "on",
     "devops-engineer": "on"
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /Users/idokulishevski/Desktop/Zabbix_Portal/apps/backend && ruff format --quiet . 2>/dev/null || true"
+          },
+          {
+            "type": "command",
+            "command": "cd /Users/idokulishevski/Desktop/Zabbix_Portal/apps/frontend && npx biome format --write . 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
   }
 }

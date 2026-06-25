@@ -6,6 +6,7 @@ _set_usergroup_permission / _user_type / _roleid_for, which live in SyncHelpersM
 """
 
 import logging
+import secrets
 from typing import TYPE_CHECKING, Callable
 
 from ZabbixSync.constants import DEFAULT_GROUP
@@ -65,7 +66,7 @@ class SyncPushMixin:
             else:
                 payload: dict = {
                     self._ufield: username,
-                    "passwd": password,
+                    "passwd": password or secrets.token_urlsafe(16),
                     "usrgrps": usrgrps,
                     "name": username,
                 }

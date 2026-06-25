@@ -195,7 +195,10 @@ class SyncPullMixin:
 
                 existing = portal_users.get(username.lower())
                 if existing:
-                    # Update role/team if changed in Zabbix
+                    # Only let Zabbix drive roles/team for users that originated from Zabbix.
+                    # Local and LDAP users are managed by the portal — don't overwrite them.
+                    if existing.get("source") != "zabbix":
+                        continue
                     current_roles = set(existing.get("roles") or [])
                     if (
                         current_roles != set(roles)

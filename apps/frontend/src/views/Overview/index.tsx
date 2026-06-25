@@ -111,7 +111,7 @@ export const Overview = () => {
       <Box sx={{ mb: 3.5 }}>
         <Typography variant="h4" sx={{ fontWeight: 700, letterSpacing: -0.5, mb: 0.25 }}>
           {greeting}
-          {user?.username ? `, ${user.username}` : ""}
+          {user ? `, ${user.display_name || user.username}` : ""}
         </Typography>
         <Typography color="text.secondary" sx={{ fontSize: "0.875rem" }}>
           {dateStr}

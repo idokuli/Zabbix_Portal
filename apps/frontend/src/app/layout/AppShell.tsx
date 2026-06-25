@@ -1070,9 +1070,10 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
   );
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100%" }}>
+    <Box sx={{ display: "flex", minHeight: "100%", flexDirection: isRtl ? "row-reverse" : "row" }}>
       <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>
         <Drawer
+          anchor={isRtl ? "right" : "left"}
           variant="temporary"
           open={mobileOpen}
           onClose={() => setMobileOpen(false)}
@@ -1089,6 +1090,7 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
           {drawer}
         </Drawer>
         <Drawer
+          anchor={isRtl ? "right" : "left"}
           variant="permanent"
           sx={{
             display: { xs: "none", md: "block" },
@@ -1096,9 +1098,17 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
               width: drawerWidth,
               boxSizing: "border-box",
               overflowY: "hidden",
-              borderRight: isDark
-                ? "1px solid rgba(255,255,255,0.06)"
-                : "1px solid rgba(15,23,42,0.08)",
+              ...(isRtl
+                ? {
+                    borderLeft: isDark
+                      ? "1px solid rgba(255,255,255,0.06)"
+                      : "1px solid rgba(15,23,42,0.08)",
+                  }
+                : {
+                    borderRight: isDark
+                      ? "1px solid rgba(255,255,255,0.06)"
+                      : "1px solid rgba(15,23,42,0.08)",
+                  }),
               backgroundColor: isDark ? "rgba(9,18,34,0.94)" : "rgba(255,255,255,0.97)",
               backdropFilter: "blur(20px)",
             },

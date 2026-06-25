@@ -69,13 +69,18 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_token(
-    user_id: int, username: str, roles: list[str], team_id: int | None
+    user_id: int,
+    username: str,
+    roles: list[str],
+    team_id: int | None,
+    display_name: str = "",
 ) -> str:
     expire = datetime.now(timezone.utc) + timedelta(hours=_HOURS)
     return jwt.encode(
         {
             "sub": str(user_id),
             "username": username,
+            "display_name": display_name or username,
             "roles": roles,
             "team_id": team_id,
             "exp": expire,

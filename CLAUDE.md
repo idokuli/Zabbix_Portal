@@ -6,6 +6,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Variables in code:** whenever you write a variable that the user needs to fill in (CI variables, image names, URLs, tokens, credentials, runner tags, etc.), always use a descriptive dummy name (e.g. `<your-oc-image>`, `staging-runner`, `STAGING_TOKEN`) and add an inline comment explaining exactly what it is and where it needs to be changed. Never leave a variable placeholder without a comment.
 
+## Formatting — mandatory after every edit
+
+After editing any file, always run the formatter for that side before finishing:
+
+| Side | Formatter | Command (run from repo root) |
+|------|-----------|------------------------------|
+| **Backend** (`apps/backend/**/*.py`) | `ruff format` | `cd apps/backend && ruff format .` |
+| **Frontend** (`apps/frontend/**/*.ts`, `*.tsx`) | `biome format` | `cd apps/frontend && npx biome format --write .` |
+
+Never leave backend Python files un-ruff-formatted or frontend TypeScript files un-biome-formatted. A `PostToolUse` hook in `.claude/settings.json` runs both formatters automatically after every Edit/Write, but always verify with `ruff check .` (backend) and `npx biome check .` (frontend) before finishing a task.
+
 ---
 
 ## What this project is

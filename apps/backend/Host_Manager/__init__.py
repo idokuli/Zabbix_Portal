@@ -283,6 +283,8 @@ class Host_Manager(HostExportMixin, Zabbix_Base):
             if hosts:
                 hostids = [h["hostid"] for h in hosts]
                 try:
+                    # problem.get doesn't support selectHosts; use trigger.get (value=1
+                    # means trigger is in problem state) which does support selectHosts.
                     problem_triggers = self.zapi.trigger.get(
                         hostids=hostids,
                         value=1,

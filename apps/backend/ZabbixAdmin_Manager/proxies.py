@@ -133,9 +133,11 @@ class ProxiesMixin:
                 output=[
                     "proxygroupid",
                     "name",
-                    "failover_delay",
+                    "failover",
+                    "delay",
                     "min_online",
                     "description",
+                    "state",
                 ],
                 selectProxies=["proxyid", "name"],
                 sortfield="name",
@@ -144,9 +146,10 @@ class ProxiesMixin:
                 {
                     "proxygroupid": g["proxygroupid"],
                     "name": g["name"],
-                    "failover_delay": g.get("failover_delay", "1m"),
+                    "failover_delay": g.get("delay", "1m"),
                     "min_online": int(g.get("min_online", 1)),
                     "description": g.get("description", ""),
+                    "state": g.get("state", 0),
                     "proxy_count": len(g.get("proxies", [])),
                 }
                 for g in groups

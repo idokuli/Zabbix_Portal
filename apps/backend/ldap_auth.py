@@ -85,10 +85,11 @@ class LdapUserNotFound(Exception):
     """Raised when the username doesn't exist in the LDAP directory at all."""
 
 
-def _do_ldap_auth(cfg: dict, username: str, password: str) -> bool:
+def _do_ldap_auth(cfg: dict, username: str, password: str) -> tuple[bool, str]:
     """
     Core LDAP auth against a given config dict.
-    Returns True on success, False on wrong password.
+    Returns (True, display_name) on success, (False, "") on wrong password.
+    display_name is pulled from AD displayName → cn → falls back to "".
     Raises LdapUserNotFound if the user doesn't exist in the directory.
     Raises RuntimeError on connection/config errors.
     """
@@ -142,13 +143,25 @@ def _do_ldap_auth(cfg: dict, username: str, password: str) -> bool:
             logger.error("LDAP service-account bind failed: %s", err)
             raise RuntimeError(f"LDAP service-account bind failed: {err}")
 
-        service_conn.search(base_dn, search_filter, attributes=["dn"])
+        service_conn.search(
+            base_dn, search_filter, attributes=["dn", "displayName", "cn"]
+        )
         if not service_conn.entries:
             logger.info("LDAP: user %r not found in directory", username)
             service_conn.unbind()
             raise LdapUserNotFound(username)
 
-        user_dn = service_conn.entries[0].entry_dn
+        entry = service_conn.entries[0]
+        user_dn = entry.entry_dn
+
+        def _attr(name: str) -> str:
+            try:
+                v = entry[name].value
+                return str(v).strip() if v else ""
+            except Exception:
+                return ""
+
+        display_name = _attr("displayName") or _attr("cn")
         service_conn.unbind()
 
         user_conn = ldap3.Connection(
@@ -161,12 +174,12 @@ def _do_ldap_auth(cfg: dict, username: str, password: str) -> bool:
         if user_conn.bind():
             user_conn.unbind()
             logger.info("LDAP: authentication succeeded for %r", username)
-            return True
+            return True, display_name
 
         logger.warning(
             "LDAP: wrong password for %r: %s", username, user_conn.last_error
         )
-        return False
+        return False, ""
 
     except (LdapUserNotFound, RuntimeError):
         raise
@@ -175,10 +188,10 @@ def _do_ldap_auth(cfg: dict, username: str, password: str) -> bool:
         raise RuntimeError(f"LDAP connection error: {exc}")
 
 
-def authenticate_ldap(username: str, password: str) -> bool:
+def authenticate_ldap(username: str, password: str) -> tuple[bool, str]:
     """
     Validate username/password against the LDAP server stored in portal config.
-    Returns True on success, False on wrong password.
+    Returns (True, display_name) on success, (False, "") on wrong password.
     Raises LdapUserNotFound when the user isn't in the directory (caller may fall back to local auth).
     Raises RuntimeError on connection/config errors.
     """

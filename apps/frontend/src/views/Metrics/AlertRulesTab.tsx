@@ -15,6 +15,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   IconButton,
   Paper,
   Skeleton,
@@ -30,7 +31,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type AlertRule, api } from "../../app/api";
+import { type AlertEvent, type AlertRule, api } from "../../app/api";
 import { type CustomSound, isCustomId, listSounds, playSoundById } from "../../lib/soundLibrary";
 import {
   AddRuleDialog,
@@ -247,6 +248,27 @@ export const AlertRulesTab = () => {
       showToast(e instanceof Error ? e.message : "Failed to toggle alert rule.", "error");
     }
   };
+
+  // ── Fired events feed ────────────────────────────────────────────────────
+  const [events, setEvents] = useState<AlertEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
+
+  const loadEvents = useCallback(async () => {
+    try {
+      const res = await api.getAlertEvents(50);
+      setEvents(res.events);
+    } catch {
+      // silently ignore — rules table is the primary content
+    } finally {
+      setEventsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadEvents();
+    const t = window.setInterval(loadEvents, 30_000);
+    return () => window.clearInterval(t);
+  }, [loadEvents]);
 
   return (
     <Box>
@@ -527,6 +549,102 @@ export const AlertRulesTab = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* ── Recent fired events ─────────────────────────────────────────── */}
+      <Divider sx={{ my: 3 }} />
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
+        <NotificationsActiveOutlinedIcon sx={{ fontSize: 18, color: "text.secondary" }} />
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: "0.85rem" }}>
+          Recent Firings
+        </Typography>
+        {!eventsLoading && events.length > 0 && (
+          <Chip label={events.length} size="small" sx={{ height: 18, fontSize: "0.68rem" }} />
+        )}
+      </Box>
+      {eventsLoading ? (
+        <Box>
+          {Array.from({ length: 3 }).map((_, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: skeleton placeholders
+            <Skeleton key={i} variant="text" height={40} sx={{ mb: 0.5 }} />
+          ))}
+        </Box>
+      ) : events.length === 0 ? (
+        <Box
+          sx={{
+            py: 4,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            border: "1px dashed",
+            borderColor: "divider",
+            borderRadius: 2,
+          }}
+        >
+          <Typography color="text.secondary" variant="body2">
+            No alert firings yet — events will appear here when rules trigger
+          </Typography>
+        </Box>
+      ) : (
+        <TableContainer component={Paper} variant="outlined">
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Time</TableCell>
+                <TableCell>Host</TableCell>
+                <TableCell>Item</TableCell>
+                <TableCell>Condition</TableCell>
+                <TableCell>Actual</TableCell>
+                <TableCell>Severity</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {events.map((e) => {
+                const sev = SEV_LABELS[e.severity] ?? { label: "Unknown", color: "#888" };
+                const ago = Math.floor(Date.now() / 1000) - e.fired_at;
+                const agoStr =
+                  ago < 60
+                    ? `${ago}s ago`
+                    : ago < 3600
+                      ? `${Math.floor(ago / 60)}m ago`
+                      : `${Math.floor(ago / 3600)}h ago`;
+                return (
+                  <TableRow key={e.id}>
+                    <TableCell sx={{ whiteSpace: "nowrap", color: "text.secondary" }}>
+                      {agoStr}
+                    </TableCell>
+                    <TableCell sx={{ fontFamily: "monospace", fontSize: "0.78rem" }}>
+                      {e.hostname}
+                    </TableCell>
+                    <TableCell sx={{ fontSize: "0.8rem" }}>{e.item_name}</TableCell>
+                    <TableCell sx={{ fontFamily: "monospace", fontSize: "0.78rem" }}>
+                      {e.operator} {e.threshold}
+                    </TableCell>
+                    <TableCell
+                      sx={{ fontFamily: "monospace", fontSize: "0.78rem", color: "error.main" }}
+                    >
+                      {e.actual_value}
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={sev.label}
+                        size="small"
+                        sx={{
+                          height: 20,
+                          fontSize: "0.68rem",
+                          fontWeight: 700,
+                          color: sev.color,
+                          bgcolor: `${sev.color}18`,
+                          border: `1px solid ${sev.color}40`,
+                        }}
+                      />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
 
       <Snackbar
         open={toast.open}

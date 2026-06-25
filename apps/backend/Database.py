@@ -195,6 +195,9 @@ ALTER TABLE alert_events ADD COLUMN IF NOT EXISTS item_id VARCHAR(64);
 -- Track how each user was created: 'local' (manual), 'zabbix' (synced from Zabbix), 'ldap' (JIT from LDAP).
 ALTER TABLE team_users ADD COLUMN IF NOT EXISTS source VARCHAR(32) NOT NULL DEFAULT 'local';
 
+-- Display name pulled from AD/LDAP (cn / displayName). Falls back to username in the UI.
+ALTER TABLE team_users ADD COLUMN IF NOT EXISTS display_name VARCHAR(255) DEFAULT '';
+
 CREATE INDEX IF NOT EXISTS idx_alert_rules_user_id    ON alert_rules(user_id);
 CREATE INDEX IF NOT EXISTS idx_alert_rules_enabled    ON alert_rules(enabled);
 CREATE INDEX IF NOT EXISTS idx_alert_events_user_id   ON alert_events(user_id);

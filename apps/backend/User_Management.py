@@ -68,6 +68,7 @@ def create_user(
     roles: list[str] | None = None,
     team_id: int | None = None,
     source: str = "local",
+    display_name: str = "",
 ) -> dict | None:
     if roles is None:
         roles = ["member"]
@@ -75,10 +76,10 @@ def create_user(
     try:
         with conn.cursor() as cur:
             cur.execute(
-                """INSERT INTO team_users (username, email, roles, team_id, password_hash, source)
-                   VALUES (%s, %s, %s, %s, %s, %s)
-                   RETURNING id, username, email, roles, team_id""",
-                (username, email, roles, team_id, password_hash, source),
+                """INSERT INTO team_users (username, email, roles, team_id, password_hash, source, display_name)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)
+                   RETURNING id, username, email, roles, team_id, source, display_name""",
+                (username, email, roles, team_id, password_hash, source, display_name),
             )
             row = dict(cur.fetchone())
         conn.commit()
@@ -96,7 +97,7 @@ def get_user_by_username(username: str) -> dict | None:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, username, email, roles, team_id, password_hash FROM team_users WHERE username = %s",
+                "SELECT id, username, email, roles, team_id, password_hash, source, display_name FROM team_users WHERE username = %s",
                 (username,),
             )
             row = cur.fetchone()

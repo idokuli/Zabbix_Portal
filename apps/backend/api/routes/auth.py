@@ -20,9 +20,12 @@ def login(request: Request, data: LoginRequest):
 
     # JIT provisioning: LDAP enabled + user not in portal DB → try LDAP and auto-create on success
     ldap_authenticated: bool | None = None  # cache result to avoid a second bind below
+    ldap_display_name: str = ""
     if not user and ldap_on:
         try:
-            ldap_authenticated = authenticate_ldap(data.username, data.password)
+            ldap_authenticated, ldap_display_name = authenticate_ldap(
+                data.username, data.password
+            )
         except LdapUserNotFound:
             ldap_authenticated = False
         except RuntimeError as e:
@@ -38,13 +41,16 @@ def login(request: Request, data: LoginRequest):
                 ),  # unusable local password
                 roles=["operator"],
                 source="ldap",
+                display_name=ldap_display_name,
             )
             if not user:
                 raise HTTPException(
                     status_code=500, detail="Failed to provision user account."
                 )
             logger.info(
-                "JIT-provisioned LDAP user %r with roles=['operator'].", data.username
+                "JIT-provisioned LDAP user %r (display_name=%r) with roles=['operator'].",
+                data.username,
+                ldap_display_name,
             )
         else:
             logger.warning("Failed JIT login for %r from %s.", data.username, client_ip)
@@ -56,15 +62,19 @@ def login(request: Request, data: LoginRequest):
         )
         raise HTTPException(status_code=401, detail="Invalid username or password.")
 
-    # root always uses internal auth — prevents LDAP misconfiguration from locking out the admin
-    is_root = "root" in (user.get("roles") or [])
+    # root always uses internal auth — prevents LDAP misconfiguration from locking out the admin.
+    # Exception: LDAP-sourced users always authenticate via LDAP regardless of their portal role,
+    # because their password_hash is an unusable random value set at JIT-provisioning time.
+    is_root = "root" in (user.get("roles") or []) and user.get("source") != "ldap"
 
     if ldap_authenticated is not None:
         # Already authenticated above during JIT check — reuse the result
         authenticated = ldap_authenticated
     elif ldap_on and not is_root:
         try:
-            authenticated = authenticate_ldap(data.username, data.password)
+            authenticated, ldap_display_name = authenticate_ldap(
+                data.username, data.password
+            )
         except LdapUserNotFound:
             logger.info(
                 "User %r not in LDAP directory, falling back to local auth.",
@@ -84,16 +94,22 @@ def login(request: Request, data: LoginRequest):
         )
         raise HTTPException(status_code=401, detail="Invalid username or password.")
 
+    # Use the freshest display_name: from this login's LDAP response, or whatever is stored in DB.
+    display_name = ldap_display_name or user.get("display_name") or user["username"]
+
     logger.info(
         "User %r logged in (roles=%s) from %s.", data.username, user["roles"], client_ip
     )
-    token = create_token(user["id"], user["username"], user["roles"], user["team_id"])
+    token = create_token(
+        user["id"], user["username"], user["roles"], user["team_id"], display_name
+    )
     return {
         "access_token": token,
         "token_type": "bearer",
         "user": {
             "id": user["id"],
             "username": user["username"],
+            "display_name": display_name,
             "roles": user["roles"],
             "team_id": user["team_id"],
         },
