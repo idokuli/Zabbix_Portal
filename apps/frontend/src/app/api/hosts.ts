@@ -1,5 +1,5 @@
 import { apiFetch } from "./fetch";
-import type { ApiHealth, Host, HostTag } from "./types";
+import type { ApiHealth, Host, HostTag, TemplateItem } from "./types";
 
 export const hostsApi = {
   health: () => apiFetch<ApiHealth>("/health"),
@@ -56,4 +56,61 @@ export const hostsApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tags }),
     }),
+  getHostTemplates: (hostname: string) =>
+    apiFetch<{ templates: Array<{ templateid: string; name: string }> }>(
+      `/hosts/${encodeURIComponent(hostname)}/templates`,
+    ),
+  linkTemplate: (hostname: string, templateid: string) =>
+    apiFetch<{ message: string }>(`/hosts/${encodeURIComponent(hostname)}/templates`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ templateid }),
+    }),
+  unlinkTemplate: (hostname: string, templateid: string) =>
+    apiFetch<{ message: string }>(
+      `/hosts/${encodeURIComponent(hostname)}/templates/${encodeURIComponent(templateid)}`,
+      { method: "DELETE" },
+    ),
+  getTemplateItems: (templateid: string) =>
+    apiFetch<{ items: TemplateItem[] }>(`/templates/${encodeURIComponent(templateid)}/items`),
+  addTemplateItem: (
+    templateid: string,
+    payload: {
+      name: string;
+      key_: string;
+      type_?: number;
+      value_type?: number;
+      delay?: string;
+      history?: string;
+      trends?: string;
+      units?: string;
+      description?: string;
+    },
+  ) =>
+    apiFetch<{ message: string; itemid: string }>(
+      `/templates/${encodeURIComponent(templateid)}/items`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    ),
+  updateTemplateItem: (
+    templateid: string,
+    itemid: string,
+    payload: { name?: string; delay?: string; status?: number; key_?: string },
+  ) =>
+    apiFetch<{ ok: boolean }>(
+      `/templates/${encodeURIComponent(templateid)}/items/${encodeURIComponent(itemid)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    ),
+  deleteTemplateItem: (templateid: string, itemid: string) =>
+    apiFetch<{ message: string }>(
+      `/templates/${encodeURIComponent(templateid)}/items/${encodeURIComponent(itemid)}`,
+      { method: "DELETE" },
+    ),
 };

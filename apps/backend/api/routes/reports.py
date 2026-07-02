@@ -1,4 +1,5 @@
 import time as _time
+from api.deps import zabbix_err
 from fastapi import APIRouter, Depends, HTTPException, Query
 from Auth import get_current_user, require_admin
 from api.managers import report_bot
@@ -20,7 +21,7 @@ def reports_top_triggers(
             )
         }
     except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail=zabbix_err(e))
 
 
 @router.get("/reports/audit-log")
@@ -33,7 +34,7 @@ def reports_audit_log(
     try:
         return {"entries": report_bot.get_audit_log(limit=limit, time_from=time_from)}
     except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail=zabbix_err(e))
 
 
 @router.get("/reports/action-log")
@@ -46,7 +47,7 @@ def reports_action_log(
     try:
         return {"entries": report_bot.get_action_log(limit=limit, time_from=time_from)}
     except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail=zabbix_err(e))
 
 
 @router.get("/reports/availability")
@@ -58,7 +59,7 @@ def reports_availability(
     try:
         return {"hosts": report_bot.get_availability(hours=hours, groupid=groupid)}
     except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail=zabbix_err(e))
 
 
 @router.get("/reports/notifications")
@@ -74,4 +75,4 @@ def reports_notifications(
             )
         }
     except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail=zabbix_err(e))

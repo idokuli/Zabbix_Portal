@@ -1,6 +1,5 @@
 "use client";
-import StorageOutlinedIcon from "@mui/icons-material/StorageOutlined";
-import { Alert, Box, Card, Snackbar, Stack, Typography } from "@mui/material";
+import { Alert, Box, Card, Snackbar, Stack } from "@mui/material";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { CorrelationTab } from "./CorrelationTab";
@@ -32,19 +31,6 @@ const DataCollectionInner = () => {
 
   return (
     <Stack spacing={3}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-        <StorageOutlinedIcon sx={{ fontSize: 28, color: "primary.main" }} />
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>
-            Data Collection
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Manage template groups, host groups, templates, maintenance windows, event correlations,
-            and discovery rules.
-          </Typography>
-        </Box>
-      </Box>
-
       <Card>
         <Box sx={{ p: 2 }}>
           {tab === 0 && <TemplateGroupsTab showToast={showToast} />}

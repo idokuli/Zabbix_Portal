@@ -1,3 +1,4 @@
+---
 # =============================================================================
 # Reusable job templates — shared across all pipeline jobs.
 # All project-specific variables are set in GitLab Settings → CI/CD → Variables.
@@ -6,10 +7,12 @@
 .base:
   interruptible: true
   tags:
-    - $RUNNER_TAG
+    - $SHARED_RUNNERS_TAG
 
 .docker_base:
   extends: .base
+  tags:
+    - $SHARED_RUNNERS_TAG
   image:
     name: $KANIKO_IMAGE
     entrypoint: [""]

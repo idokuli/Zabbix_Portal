@@ -1,6 +1,6 @@
 import logging
 
-from Zabbix_Base import Zabbix_Base
+from Zabbix_Base import Zabbix_Base, zabbix_err
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ class DataCollection_Manager(Zabbix_Base):
             return gid, None
         except Exception as e:
             logger.error("create_template_group(%r) failed: %r", name, e)
-            return None, str(e)
+            return None, zabbix_err(e)
 
     def update_template_group(self, groupid: str, name: str) -> bool:
         if not self.zapi:
@@ -170,7 +170,7 @@ class DataCollection_Manager(Zabbix_Base):
             return gid, None
         except Exception as e:
             logger.error("create_host_group(%r) failed: %r", name, e)
-            return None, str(e)
+            return None, zabbix_err(e)
 
     def update_host_group(self, groupid: str, name: str) -> bool:
         if not self.zapi:
@@ -309,7 +309,112 @@ class DataCollection_Manager(Zabbix_Base):
             return tid, None
         except Exception as e:
             logger.error("create_template(%r) failed: %r", name, e)
-            return None, str(e)
+            return None, zabbix_err(e)
+
+    def get_template_detail(self, templateid: str) -> dict | None:
+        """Fetch full template detail including tags, macros, and item count."""
+        if not self.zapi:
+            return None
+        try:
+            result = self.zapi.template.get(
+                templateids=[templateid],
+                output="extend",
+                selectTemplateGroups=["groupid", "name"],
+                selectParentTemplates=["templateid", "name"],
+                selectTags="extend",
+                selectMacros="extend",
+            )
+            if not result:
+                return None
+            t = result[0]
+            # Count items on this template directly (not inherited)
+            try:
+                items = self.zapi.item.get(
+                    templateids=[templateid], output=["itemid"], inherited=False
+                )
+                item_count = len(items)
+            except Exception:
+                item_count = 0
+            return {
+                "templateid": t["templateid"],
+                "name": t["host"],
+                "visible_name": t.get("name", t["host"]),
+                "description": t.get("description", ""),
+                "groups": [
+                    {"groupid": g["groupid"], "name": g["name"]}
+                    for g in t.get("templategroups", [])
+                ],
+                "linked_templates": [
+                    {"templateid": p["templateid"], "name": p["name"]}
+                    for p in t.get("parentTemplates", [])
+                ],
+                "tags": [
+                    {"tag": tg.get("tag", ""), "value": tg.get("value", "")}
+                    for tg in t.get("tags", [])
+                ],
+                "macros": [
+                    {
+                        "macro": m.get("macro", ""),
+                        "value": m.get("value", ""),
+                        "description": m.get("description", ""),
+                    }
+                    for m in t.get("macros", [])
+                ],
+                "item_count": item_count,
+            }
+        except Exception as e:
+            logger.error("get_template_detail(%s) failed: %r", templateid, e)
+            return None
+
+    def update_template(
+        self,
+        templateid: str,
+        name: str | None = None,
+        visible_name: str | None = None,
+        description: str | None = None,
+        group_ids: list[str] | None = None,
+        template_ids: list[str] | None = None,
+        tags: list[dict] | None = None,
+        macros: list[dict] | None = None,
+    ) -> tuple[bool, str | None]:
+        if not self.zapi:
+            return False, "Zabbix API not connected."
+        try:
+            params: dict = {"templateid": templateid}
+            if name is not None:
+                params["host"] = name
+            if visible_name is not None:
+                params["name"] = visible_name if visible_name.strip() else (name or "")
+            if description is not None:
+                params["description"] = description
+            if group_ids is not None:
+                params["groups"] = [{"groupid": gid} for gid in group_ids]
+            if template_ids is not None:
+                params["templates"] = [{"templateid": tid} for tid in template_ids]
+            if tags is not None:
+                params["tags"] = [
+                    {"tag": t.get("tag", ""), "value": t.get("value", "")}
+                    for t in tags
+                    if t.get("tag")
+                ]
+            if macros is not None:
+                params["macros"] = [
+                    {
+                        "macro": m.get("macro", ""),
+                        "value": m.get("value", ""),
+                        "description": m.get("description", ""),
+                    }
+                    for m in macros
+                    if m.get("macro")
+                ]
+            self.zapi.template.update(**params)
+            self._invalidate("templates_full")
+            self._invalidate("templates_simple")
+            logger.info("Updated template %s.", templateid)
+            return True, None
+        except Exception as e:
+            logger.error("update_template(%s) failed: %r", templateid, e)
+            return False, zabbix_err(e)
 
     def delete_template(self, templateid: str) -> bool:
         if not self.zapi:
@@ -410,7 +515,7 @@ class DataCollection_Manager(Zabbix_Base):
             return mid, None
         except Exception as e:
             logger.error("create_maintenance(%r) failed: %r", name, e)
-            return None, str(e)
+            return None, zabbix_err(e)
 
     def delete_maintenance(self, maintenanceid: str) -> bool:
         if not self.zapi:
@@ -492,7 +597,7 @@ class DataCollection_Manager(Zabbix_Base):
             return cid, None
         except Exception as e:
             logger.error("create_correlation(%r) failed: %r", name, e)
-            return None, str(e)
+            return None, zabbix_err(e)
 
     def delete_correlation(self, correlationid: str) -> bool:
         if not self.zapi:
@@ -583,7 +688,7 @@ class DataCollection_Manager(Zabbix_Base):
             return rid, None
         except Exception as e:
             logger.error("create_discovery_rule(%r) failed: %r", name, e)
-            return None, str(e)
+            return None, zabbix_err(e)
 
     def delete_discovery_rule(self, druleid: str) -> bool:
         if not self.zapi:

@@ -18,6 +18,7 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { type RecentItem, api } from "../../app/api";
+import { TabHeader } from "../../app/components/TabHeader";
 import { formatLastSeen } from "./shared";
 
 const VALUE_TYPE_LABELS: Record<string, string> = {
@@ -47,12 +48,13 @@ export const RecentItemsTab = () => {
 
   return (
     <Box>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
-        <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.8rem" }}>
-          Most recently created monitoring items across all hosts
-        </Typography>
+      <TabHeader
+        title="Recent Items"
+        description="Most recently created monitoring items across all hosts."
+      />
+      <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
         <Tooltip title="Refresh">
-          <IconButton size="small" onClick={load} disabled={loading}>
+          <IconButton size="small" onClick={() => void load()} disabled={loading}>
             <RefreshIcon sx={{ fontSize: 18 }} />
           </IconButton>
         </Tooltip>

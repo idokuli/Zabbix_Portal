@@ -41,6 +41,10 @@ _event_loop: asyncio.AbstractEventLoop | None = None
 _ALERT_CHECK_INTERVAL = max(5, int(os.getenv("ALERT_CHECK_INTERVAL", "15")))
 
 
+# Each entry: [name, thread, restart_fn] — mutable so watchdog can update the ref.
+_managed_threads: list[list] = []
+
+
 def _alert_loop() -> None:
     while True:
         try:
@@ -48,6 +52,27 @@ def _alert_loop() -> None:
         except Exception as exc:
             logger.error("Alert checker error: %r", exc)
         time.sleep(_ALERT_CHECK_INTERVAL)
+
+
+def _start_alert_thread() -> threading.Thread:
+    t = threading.Thread(target=_alert_loop, daemon=True, name="alert-checker")
+    t.start()
+    return t
+
+
+def _watchdog_loop() -> None:
+    while True:
+        time.sleep(30)
+        for entry in _managed_threads:
+            name, thread, restart_fn = entry
+            if not thread.is_alive():
+                logger.error("Background thread %r died — restarting.", name)
+                try:
+                    new_thread = restart_fn()
+                    if new_thread is not None:
+                        entry[1] = new_thread
+                except Exception as exc:
+                    logger.error("Failed to restart thread %r: %r", name, exc)
 
 
 def notify_sync_clients() -> None:
@@ -70,7 +95,7 @@ def _sync_tags() -> None:
         logger.warning("Tag sync failed (non-fatal): %r", exc)
 
 
-_BG_LOCK_PATH = "/tmp/zabbix_portal_bg.lock"
+_BG_LOCK_PATH = "/tmp/overwatch_bg.lock"
 _bg_lock_fd: int | None = None
 
 
@@ -102,13 +127,27 @@ async def lifespan(app: FastAPI):
     # Background threads run in exactly one worker (whichever acquires the lock first).
     # Other workers handle HTTP requests only.
     if _acquire_bg_lock():
-        threading.Thread(target=_alert_loop, daemon=True, name="alert-checker").start()
+        alert_t = _start_alert_thread()
         logger.info(
             "Alert checker started (%s s interval) [bg worker].", _ALERT_CHECK_INTERVAL
         )
         sync_bot._on_sync = notify_sync_clients
-        sync_bot.start_realtime_sync()
-        sync_bot.start_background_sync()
+        notify_t = sync_bot.start_realtime_sync()
+        bg_t = sync_bot.start_background_sync()
+        _managed_threads.extend(
+            [
+                ["alert-checker", alert_t, _start_alert_thread],
+                ["zabbix-notify-listener", notify_t, sync_bot.start_realtime_sync],
+            ]
+        )
+        if bg_t is not None:
+            _managed_threads.append(
+                ["zabbix-sync", bg_t, sync_bot.start_background_sync]
+            )
+        threading.Thread(
+            target=_watchdog_loop, daemon=True, name="thread-watchdog"
+        ).start()
+        logger.info("Thread watchdog started.")
     else:
         logger.info("Background threads already running in another worker — skipping.")
     # Backfill host tags for assignments made before tagging was introduced

@@ -207,6 +207,41 @@ export const itemsApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     }),
+  addProcessItem: (payload: {
+    hostname: string;
+    process_name: string;
+    run_as_user?: string;
+    cmdline_regex?: string;
+    state?: string;
+    item_name?: string;
+    create_trigger?: boolean;
+    trigger_priority?: number;
+    delay?: string;
+    history?: string;
+    trends?: string;
+    description?: string;
+  }) =>
+    apiFetch<{ message: string; itemid: string }>("/items/process", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  addWindowsServiceItem: (payload: {
+    hostname: string;
+    service_name: string;
+    item_name?: string;
+    create_trigger?: boolean;
+    trigger_priority?: number;
+    delay?: string;
+    history?: string;
+    trends?: string;
+    description?: string;
+  }) =>
+    apiFetch<{ message: string; itemid: string }>("/items/winsvc", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
   addFileWatchItem: (payload: {
     hostname: string;
     file_path: string;

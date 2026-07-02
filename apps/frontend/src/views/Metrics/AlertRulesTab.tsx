@@ -4,6 +4,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
 import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
+import SearchIcon from "@mui/icons-material/Search";
 import StopOutlinedIcon from "@mui/icons-material/StopOutlined";
 import VolumeOffOutlinedIcon from "@mui/icons-material/VolumeOffOutlined";
 import {
@@ -11,15 +12,17 @@ import {
   Box,
   Button,
   Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Divider,
+  FormControl,
   IconButton,
+  InputAdornment,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Skeleton,
   Snackbar,
+  Stack,
   Switch,
   Table,
   TableBody,
@@ -27,11 +30,15 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { type AlertEvent, type AlertRule, api } from "../../app/api";
+import { type AlertEvent, type AlertRule, type Host, api } from "../../app/api";
+import { ConfirmDelete } from "../../app/components/ConfirmDelete";
+import { TabHeader } from "../../app/components/TabHeader";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 import { type CustomSound, isCustomId, listSounds, playSoundById } from "../../lib/soundLibrary";
 import {
   AddRuleDialog,
@@ -42,12 +49,13 @@ import {
 import { getRuleSounds } from "./shared";
 
 export const AlertRulesTab = () => {
+  const tick = useRefreshTick();
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [editRule, setEditRule] = useState<AlertRule | null>(null);
   const [ruleSounds, setRuleSoundsState] = useState<Record<string, string>>(getRuleSounds);
-  const [confirmDeleteRuleId, setConfirmDeleteRuleId] = useState<number | null>(null);
+  const [confirmDeleteRule, setConfirmDeleteRule] = useState<AlertRule | null>(null);
   const [toast, setToast] = useState<{
     open: boolean;
     message: string;
@@ -214,6 +222,19 @@ export const AlertRulesTab = () => {
     }
   };
 
+  // ── Filters ──────────────────────────────────────────────────────────────
+  const [search, setSearch] = useState("");
+  const [groupFilter, setGroupFilter] = useState("");
+  const [hostFilter, setHostFilter] = useState("");
+  const [hosts, setHosts] = useState<Host[]>([]);
+
+  useEffect(() => {
+    api
+      .listHosts()
+      .then((r) => setHosts(r.hosts))
+      .catch(() => {});
+  }, []);
+
   const loadRules = useCallback(() => {
     setLoading(true);
     api
@@ -249,6 +270,49 @@ export const AlertRulesTab = () => {
     }
   };
 
+  // ── Derived filter options ───────────────────────────────────────────────
+  const ruleHostnames = useMemo(() => [...new Set(rules.map((r) => r.hostname))].sort(), [rules]);
+
+  const hostToGroups = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const h of hosts) {
+      map.set(
+        h.host,
+        (h.groups ?? []).map((g) => g.name),
+      );
+    }
+    return map;
+  }, [hosts]);
+
+  const availableGroups = useMemo(() => {
+    const groups = new Set<string>();
+    for (const hostname of ruleHostnames) {
+      for (const g of hostToGroups.get(hostname) ?? []) {
+        groups.add(g);
+      }
+    }
+    return [...groups].sort();
+  }, [ruleHostnames, hostToGroups]);
+
+  const visibleHosts = useMemo(
+    () =>
+      groupFilter
+        ? ruleHostnames.filter((h) => (hostToGroups.get(h) ?? []).includes(groupFilter))
+        : ruleHostnames,
+    [groupFilter, ruleHostnames, hostToGroups],
+  );
+
+  const applyFilters = <T extends { hostname: string; item_name: string }>(items: T[]): T[] => {
+    const q = search.toLowerCase();
+    return items.filter((r) => {
+      if (groupFilter && !(hostToGroups.get(r.hostname) ?? []).includes(groupFilter)) return false;
+      if (hostFilter && r.hostname !== hostFilter) return false;
+      if (q && !r.hostname.toLowerCase().includes(q) && !r.item_name.toLowerCase().includes(q))
+        return false;
+      return true;
+    });
+  };
+
   // ── Fired events feed ────────────────────────────────────────────────────
   const [events, setEvents] = useState<AlertEvent[]>([]);
   const [eventsLoading, setEventsLoading] = useState(true);
@@ -266,30 +330,90 @@ export const AlertRulesTab = () => {
 
   useEffect(() => {
     void loadEvents();
-    const t = window.setInterval(loadEvents, 30_000);
-    return () => window.clearInterval(t);
   }, [loadEvents]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) void loadEvents();
+  }, [tick]);
+
+  const filteredRules = applyFilters(rules);
+  const filteredEvents = applyFilters(events);
 
   return (
     <Box>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
-        <NotificationsActiveOutlinedIcon sx={{ fontSize: 18, color: "text.secondary" }} />
-        <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: "0.85rem" }}>
-          Alert Rules
-        </Typography>
-        {!loading && rules.length > 0 && (
-          <Chip label={rules.length} size="small" sx={{ height: 18, fontSize: "0.68rem" }} />
+      <TabHeader
+        title="Alert Rules"
+        description="Define custom threshold rules that trigger notifications based on item values."
+      />
+      {/* Toolbar */}
+      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
+        <TextField
+          placeholder="Search host or item…"
+          size="small"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ flex: 1 }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ fontSize: 18, color: "text.disabled" }} />
+              </InputAdornment>
+            ),
+          }}
+        />
+        <FormControl size="small" sx={{ minWidth: 160 }}>
+          <InputLabel sx={{ fontSize: "0.82rem" }}>Host group</InputLabel>
+          <Select
+            label="Host group"
+            value={groupFilter}
+            onChange={(e) => {
+              setGroupFilter(e.target.value);
+              setHostFilter("");
+            }}
+            sx={{ fontSize: "0.82rem" }}
+          >
+            <MenuItem value="">All groups</MenuItem>
+            {availableGroups.map((g) => (
+              <MenuItem key={g} value={g} sx={{ fontSize: "0.82rem" }}>
+                {g}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <FormControl size="small" sx={{ minWidth: 160 }}>
+          <InputLabel sx={{ fontSize: "0.82rem" }}>Host</InputLabel>
+          <Select
+            label="Host"
+            value={hostFilter}
+            onChange={(e) => setHostFilter(e.target.value)}
+            sx={{ fontSize: "0.82rem" }}
+          >
+            <MenuItem value="">All hosts</MenuItem>
+            {visibleHosts.map((h) => (
+              <MenuItem key={h} value={h} sx={{ fontSize: "0.82rem" }}>
+                {h}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        {!loading && (
+          <Chip
+            label={`${filteredRules.length}${filteredRules.length !== rules.length ? ` / ${rules.length}` : ""}`}
+            size="small"
+            sx={{ height: 20, fontSize: "0.68rem", flexShrink: 0 }}
+          />
         )}
-        <Box sx={{ flex: 1 }} />
         <Button
           size="small"
           variant="contained"
           startIcon={<AddIcon />}
           onClick={() => setAddOpen(true)}
+          sx={{ flexShrink: 0 }}
         >
           Add rule
         </Button>
-      </Box>
+      </Stack>
 
       {loading ? (
         <Box>
@@ -349,151 +473,181 @@ export const AlertRulesTab = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {rules.map((r) => {
-                const sev = SEV_LABELS[r.severity] ?? SEV_LABELS[0];
-                return (
-                  <TableRow
-                    key={r.id}
-                    sx={{ opacity: r.enabled ? 1 : 0.5, "&:hover": { bgcolor: "action.hover" } }}
-                  >
-                    <TableCell>
-                      <Typography variant="body2" sx={{ fontSize: "0.8rem", fontWeight: 500 }}>
-                        {r.item_name}
-                      </Typography>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ fontSize: "0.7rem" }}
-                      >
-                        {r.hostname}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography
-                        variant="body2"
-                        sx={{ fontSize: "0.8rem", fontFamily: "monospace" }}
-                      >
-                        {r.operator} {r.threshold}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={sev.label}
-                        size="small"
-                        sx={{
-                          height: 20,
-                          fontSize: "0.68rem",
-                          fontWeight: 700,
-                          color: sev.color,
-                          bgcolor: `${sev.color}18`,
-                          border: `1px solid ${sev.color}40`,
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      {r.is_firing ? (
-                        <Chip
-                          label="Firing"
-                          size="small"
-                          color="error"
-                          sx={{ height: 20, fontSize: "0.68rem" }}
-                        />
-                      ) : (
-                        <Chip
-                          label="OK"
-                          size="small"
-                          color="success"
-                          variant="outlined"
-                          sx={{ height: 20, fontSize: "0.68rem" }}
-                        />
-                      )}
-                    </TableCell>
-                    <TableCell sx={{ whiteSpace: "nowrap" }}>
-                      {(() => {
-                        const sk = ruleSounds[r.id] ?? "default";
-                        const globalLabel =
-                          soundOptions.find((s) => s.key === globalPreset)?.label ??
-                          globalPreset.charAt(0).toUpperCase() + globalPreset.slice(1);
-                        const label =
-                          sk === "default"
-                            ? `Default (${globalLabel})`
-                            : (soundOptions.find((s) => s.key === sk)?.label ?? sk);
-                        const canPreview = sk !== "none";
-                        const isPreviewing = previewingKey === `row-${r.id}`;
-                        return (
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
-                            <Tooltip
-                              title={
-                                isPreviewing
-                                  ? "Stop preview"
-                                  : canPreview
-                                    ? `Preview: ${label}`
-                                    : label
-                              }
-                            >
-                              <span>
-                                <IconButton
-                                  size="small"
-                                  disabled={!canPreview}
-                                  onClick={() => handleSoundPreview(`row-${r.id}`, sk)}
-                                  sx={{
-                                    color: isPreviewing
-                                      ? "primary.main"
-                                      : sk === "none"
-                                        ? "text.disabled"
-                                        : "text.secondary",
-                                  }}
-                                >
-                                  {isPreviewing ? (
-                                    <StopOutlinedIcon sx={{ fontSize: 15 }} />
-                                  ) : sk === "none" ? (
-                                    <VolumeOffOutlinedIcon sx={{ fontSize: 15 }} />
-                                  ) : (
-                                    <PlayArrowOutlinedIcon sx={{ fontSize: 15 }} />
-                                  )}
-                                </IconButton>
-                              </span>
-                            </Tooltip>
-                            <Typography
-                              variant="caption"
-                              sx={{ fontSize: "0.68rem", color: "text.secondary" }}
-                            >
-                              {label}
-                            </Typography>
-                          </Box>
-                        );
-                      })()}
-                    </TableCell>
-                    <TableCell>
-                      <Switch
-                        size="small"
-                        checked={r.enabled}
-                        onChange={() => handleToggle(r.id)}
-                      />
-                    </TableCell>
-                    <TableCell sx={{ px: 0.5, whiteSpace: "nowrap" }}>
-                      <Tooltip title="Edit rule">
-                        <IconButton
-                          size="small"
-                          onClick={() => setEditRule(r)}
-                          sx={{ color: "action.active", "&:hover": { color: "primary.main" } }}
+              {filteredRules.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} align="center" sx={{ py: 4, color: "text.secondary" }}>
+                    No rules match the current filters
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredRules.map((r) => {
+                  const sev = SEV_LABELS[r.severity] ?? SEV_LABELS[0];
+                  return (
+                    <TableRow
+                      key={r.id}
+                      sx={{ opacity: r.enabled ? 1 : 0.5, "&:hover": { bgcolor: "action.hover" } }}
+                    >
+                      <TableCell>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                          <Typography variant="body2" sx={{ fontSize: "0.8rem", fontWeight: 500 }}>
+                            {r.item_name}
+                          </Typography>
+                          {r.rule_type === "service" && (
+                            <Chip
+                              label="Service"
+                              size="small"
+                              color="info"
+                              sx={{ height: 16, fontSize: "0.62rem" }}
+                            />
+                          )}
+                        </Box>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{ fontSize: "0.7rem" }}
                         >
-                          <EditOutlinedIcon sx={{ fontSize: 16 }} />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Delete rule">
-                        <IconButton
+                          {r.hostname}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        {r.rule_type === "service" ||
+                        r.operator === "contains" ||
+                        r.operator === "!contains" ? (
+                          <Typography
+                            variant="body2"
+                            sx={{ fontSize: "0.78rem", color: "text.secondary" }}
+                          >
+                            {r.operator === "!contains" ? "not " : ""}contains "
+                            {r.expected_contains}"
+                          </Typography>
+                        ) : (
+                          <Typography
+                            variant="body2"
+                            sx={{ fontSize: "0.8rem", fontFamily: "monospace" }}
+                          >
+                            {r.operator} {r.threshold}
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={sev.label}
                           size="small"
-                          onClick={() => setConfirmDeleteRuleId(r.id)}
-                          sx={{ color: "action.active", "&:hover": { color: "error.main" } }}
-                        >
-                          <DeleteOutlineIcon sx={{ fontSize: 16 }} />
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
+                          sx={{
+                            height: 20,
+                            fontSize: "0.68rem",
+                            fontWeight: 700,
+                            color: sev.color,
+                            bgcolor: `${sev.color}18`,
+                            border: `1px solid ${sev.color}40`,
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        {r.is_firing ? (
+                          <Chip
+                            label="Firing"
+                            size="small"
+                            color="error"
+                            sx={{ height: 20, fontSize: "0.68rem" }}
+                          />
+                        ) : (
+                          <Chip
+                            label="OK"
+                            size="small"
+                            color="success"
+                            variant="outlined"
+                            sx={{ height: 20, fontSize: "0.68rem" }}
+                          />
+                        )}
+                      </TableCell>
+                      <TableCell sx={{ whiteSpace: "nowrap" }}>
+                        {(() => {
+                          const sk = ruleSounds[r.id] ?? "default";
+                          const globalLabel =
+                            soundOptions.find((s) => s.key === globalPreset)?.label ??
+                            globalPreset.charAt(0).toUpperCase() + globalPreset.slice(1);
+                          const label =
+                            sk === "default"
+                              ? `Default (${globalLabel})`
+                              : (soundOptions.find((s) => s.key === sk)?.label ?? sk);
+                          const canPreview = sk !== "none";
+                          const isPreviewing = previewingKey === `row-${r.id}`;
+                          return (
+                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
+                              <Tooltip
+                                title={
+                                  isPreviewing
+                                    ? "Stop preview"
+                                    : canPreview
+                                      ? `Preview: ${label}`
+                                      : label
+                                }
+                              >
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    disabled={!canPreview}
+                                    onClick={() => handleSoundPreview(`row-${r.id}`, sk)}
+                                    sx={{
+                                      color: isPreviewing
+                                        ? "primary.main"
+                                        : sk === "none"
+                                          ? "text.disabled"
+                                          : "text.secondary",
+                                    }}
+                                  >
+                                    {isPreviewing ? (
+                                      <StopOutlinedIcon sx={{ fontSize: 15 }} />
+                                    ) : sk === "none" ? (
+                                      <VolumeOffOutlinedIcon sx={{ fontSize: 15 }} />
+                                    ) : (
+                                      <PlayArrowOutlinedIcon sx={{ fontSize: 15 }} />
+                                    )}
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                              <Typography
+                                variant="caption"
+                                sx={{ fontSize: "0.68rem", color: "text.secondary" }}
+                              >
+                                {label}
+                              </Typography>
+                            </Box>
+                          );
+                        })()}
+                      </TableCell>
+                      <TableCell>
+                        <Switch
+                          size="small"
+                          checked={r.enabled}
+                          onChange={() => handleToggle(r.id)}
+                        />
+                      </TableCell>
+                      <TableCell sx={{ px: 0.5, whiteSpace: "nowrap" }}>
+                        <Tooltip title="Edit rule">
+                          <IconButton
+                            size="small"
+                            onClick={() => setEditRule(r)}
+                            sx={{ color: "action.active", "&:hover": { color: "primary.main" } }}
+                          >
+                            <EditOutlinedIcon sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Delete rule">
+                          <IconButton
+                            size="small"
+                            onClick={() => setConfirmDeleteRule(r)}
+                            sx={{ color: "action.active", "&:hover": { color: "error.main" } }}
+                          >
+                            <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
             </TableBody>
           </Table>
         </TableContainer>
@@ -521,34 +675,22 @@ export const AlertRulesTab = () => {
         ruleSounds={ruleSounds}
       />
 
-      <Dialog
-        open={confirmDeleteRuleId !== null}
-        onClose={() => setConfirmDeleteRuleId(null)}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle sx={{ fontWeight: 700 }}>Delete alert rule?</DialogTitle>
-        <DialogContent>
-          <Typography>
-            This will permanently remove the alert rule and its sound assignment. This cannot be
-            undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmDeleteRuleId(null)}>Cancel</Button>
-          <Button
-            color="error"
-            variant="contained"
-            onClick={async () => {
-              if (confirmDeleteRuleId === null) return;
-              await handleDelete(confirmDeleteRuleId);
-              setConfirmDeleteRuleId(null);
-            }}
-          >
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDelete
+        open={confirmDeleteRule !== null}
+        name={confirmDeleteRule?.item_name ?? ""}
+        description={
+          <>
+            Permanently delete alert rule for <strong>{confirmDeleteRule?.item_name}</strong> on{" "}
+            <strong>{confirmDeleteRule?.hostname}</strong>? This cannot be undone.
+          </>
+        }
+        onConfirm={async () => {
+          if (confirmDeleteRule === null) return;
+          await handleDelete(confirmDeleteRule.id);
+          setConfirmDeleteRule(null);
+        }}
+        onClose={() => setConfirmDeleteRule(null)}
+      />
 
       {/* ── Recent fired events ─────────────────────────────────────────── */}
       <Divider sx={{ my: 3 }} />
@@ -558,7 +700,11 @@ export const AlertRulesTab = () => {
           Recent Firings
         </Typography>
         {!eventsLoading && events.length > 0 && (
-          <Chip label={events.length} size="small" sx={{ height: 18, fontSize: "0.68rem" }} />
+          <Chip
+            label={`${filteredEvents.length}${filteredEvents.length !== events.length ? ` / ${events.length}` : ""}`}
+            size="small"
+            sx={{ height: 18, fontSize: "0.68rem" }}
+          />
         )}
       </Box>
       {eventsLoading ? (
@@ -598,49 +744,57 @@ export const AlertRulesTab = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {events.map((e) => {
-                const sev = SEV_LABELS[e.severity] ?? { label: "Unknown", color: "#888" };
-                const ago = Math.floor(Date.now() / 1000) - e.fired_at;
-                const agoStr =
-                  ago < 60
-                    ? `${ago}s ago`
-                    : ago < 3600
-                      ? `${Math.floor(ago / 60)}m ago`
-                      : `${Math.floor(ago / 3600)}h ago`;
-                return (
-                  <TableRow key={e.id}>
-                    <TableCell sx={{ whiteSpace: "nowrap", color: "text.secondary" }}>
-                      {agoStr}
-                    </TableCell>
-                    <TableCell sx={{ fontFamily: "monospace", fontSize: "0.78rem" }}>
-                      {e.hostname}
-                    </TableCell>
-                    <TableCell sx={{ fontSize: "0.8rem" }}>{e.item_name}</TableCell>
-                    <TableCell sx={{ fontFamily: "monospace", fontSize: "0.78rem" }}>
-                      {e.operator} {e.threshold}
-                    </TableCell>
-                    <TableCell
-                      sx={{ fontFamily: "monospace", fontSize: "0.78rem", color: "error.main" }}
-                    >
-                      {e.actual_value}
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={sev.label}
-                        size="small"
-                        sx={{
-                          height: 20,
-                          fontSize: "0.68rem",
-                          fontWeight: 700,
-                          color: sev.color,
-                          bgcolor: `${sev.color}18`,
-                          border: `1px solid ${sev.color}40`,
-                        }}
-                      />
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
+              {filteredEvents.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} align="center" sx={{ py: 3, color: "text.secondary" }}>
+                    No firings match the current filters
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredEvents.map((e) => {
+                  const sev = SEV_LABELS[e.severity] ?? { label: "Unknown", color: "#888" };
+                  const ago = Math.floor(Date.now() / 1000) - e.fired_at;
+                  const agoStr =
+                    ago < 60
+                      ? `${ago}s ago`
+                      : ago < 3600
+                        ? `${Math.floor(ago / 60)}m ago`
+                        : `${Math.floor(ago / 3600)}h ago`;
+                  return (
+                    <TableRow key={e.id}>
+                      <TableCell sx={{ whiteSpace: "nowrap", color: "text.secondary" }}>
+                        {agoStr}
+                      </TableCell>
+                      <TableCell sx={{ fontFamily: "monospace", fontSize: "0.78rem" }}>
+                        {e.hostname}
+                      </TableCell>
+                      <TableCell sx={{ fontSize: "0.8rem" }}>{e.item_name}</TableCell>
+                      <TableCell sx={{ fontFamily: "monospace", fontSize: "0.78rem" }}>
+                        {e.operator} {e.threshold}
+                      </TableCell>
+                      <TableCell
+                        sx={{ fontFamily: "monospace", fontSize: "0.78rem", color: "error.main" }}
+                      >
+                        {e.actual_value}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={sev.label}
+                          size="small"
+                          sx={{
+                            height: 20,
+                            fontSize: "0.68rem",
+                            fontWeight: 700,
+                            color: sev.color,
+                            bgcolor: `${sev.color}18`,
+                            border: `1px solid ${sev.color}40`,
+                          }}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
             </TableBody>
           </Table>
         </TableContainer>

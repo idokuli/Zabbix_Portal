@@ -1,4 +1,5 @@
 "use client";
+import { generateId } from "../../../app/utils";
 import ClearIcon from "@mui/icons-material/Clear";
 import {
   Box,
@@ -1272,9 +1273,7 @@ export const ZabbixScriptItemPanel = ({
             size="small"
             variant="text"
             sx={{ alignSelf: "flex-start", fontSize: "0.75rem" }}
-            onClick={() =>
-              setParams((p) => [...p, { _key: crypto.randomUUID(), name: "", value: "" }])
-            }
+            onClick={() => setParams((p) => [...p, { _key: generateId(), name: "", value: "" }])}
           >
             + Add parameter
           </Button>
@@ -1453,9 +1452,7 @@ export const BrowserItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: 
             size="small"
             variant="text"
             sx={{ alignSelf: "flex-start", fontSize: "0.75rem" }}
-            onClick={() =>
-              setParams((p) => [...p, { _key: crypto.randomUUID(), name: "", value: "" }])
-            }
+            onClick={() => setParams((p) => [...p, { _key: generateId(), name: "", value: "" }])}
           >
             + Add parameter
           </Button>

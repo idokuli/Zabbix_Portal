@@ -1,6 +1,7 @@
 """Trigger CRUD and the change/age trigger helpers used by file-watch items."""
 
 import logging
+from Zabbix_Base import zabbix_err
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -137,7 +138,7 @@ class TriggersMixin:
             logger.error(
                 "add_string_trigger(%r, %r) failed: %r", hostname, trigger_name, e
             )
-            return None, str(e)
+            return None, zabbix_err(e)
 
     def get_trigger_hostname(self, triggerid: str) -> str:
         """Return the host name for a trigger, or '' if not found."""
@@ -149,8 +150,8 @@ class TriggersMixin:
             )
             if triggers and triggers[0].get("hosts"):
                 return triggers[0]["hosts"][0]["host"]
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("get_hostname_for_trigger failed: %s", exc)
         return ""
 
     def list_triggers(self, hostname: str) -> tuple[list[dict], str]:

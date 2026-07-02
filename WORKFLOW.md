@@ -10,10 +10,10 @@ A complete walkthrough of how the Overwatch codebase moves from a developer's la
 6. The Helm deployment flow (staging / production / DR)
 7. How a single code change traverses all of the above
 
-> **Deployment today runs via direct `helm upgrade --install` from GitLab CI.**
-> ArgoCD manifests live in `argocd/` and are the planned future deploy path, but
-> they are **not yet wired into the pipeline** — the CI talks to each cluster's
-> API directly with a kube token. See §6.
+> **Deployment uses a GitOps flow.**
+> The CI pipeline pushes image tags to a separate `zabbix-portal-gitops` repo;
+> ArgoCD watches that repo and syncs each environment. Staging auto-syncs;
+> production and DR require a manual sync click in ArgoCD. See §6.
 
 ---
 
@@ -114,13 +114,9 @@ npm run typecheck  # tsc
 ruff check . && mypy . --ignore-missing-imports
 ```
 
-### Editing Helm
+### Editing Helm charts
 
-```bash
-helm dependency build helm/charts/zabbix-portal/
-helm template zabbix-portal helm/charts/zabbix-portal/ --debug | less
-helm lint helm/charts/{backend,frontend,zabbix-portal}
-```
+Helm charts now live in the `zabbix-portal-gitops` repo under `helm-charts/`. Edit them there — the GitOps repo's own pipeline runs `helm lint` and `helm template` on every push.
 
 ---
 
@@ -145,13 +141,13 @@ Workflow: branch off `main` → develop → lint/typecheck locally → open MR �
 The pipeline is modular. `.gitlab-ci.yml` declares stages and includes five files:
 
 ```yaml
-stages: [.pre, lint, build, staging, production, dr]
+stages: [.pre, lint, build, promote]
 include:
   - .gitlab/ci/common.yml    # reusable job templates (runner tag, Kaniko base image)
   - .gitlab/ci/detect.yml    # change detection + variable validation
   - .gitlab/ci/python.yml    # backend jobs
   - .gitlab/ci/node.yml      # frontend jobs
-  - .gitlab/ci/gitops.yml    # helm lint/template + helm deploy jobs
+  - .gitlab/ci/gitops.yml    # yamllint, helm lint, push-image-tags
 ```
 
 ### Pipeline overview
@@ -159,45 +155,43 @@ include:
 ```mermaid
 flowchart TD
     Tag["git push tag vX.Y.Z"] --> Pre["**.pre** — detect + validate\ncompare prev tag → this tag"]
-    Pre --> Lint["**lint**\nruff · mypy · biome · tsc · helm lint/template"]
-    Lint --> Build["**build**\nKaniko build + push images"]
-    Build --> PlanStaging["**plan:staging** (auto)\nresolve tags, preview values"]
-    PlanStaging --> Staging["**deploy:staging** (auto)\nhelm upgrade --install"]
-    Staging --> PlanProd["**plan:production** (auto)"]
-    PlanProd --> Production["**deploy:production**\nhelm upgrade --install (manual ▶)"]
-    Production --> PlanDR["**plan:dr** (auto)"]
-    PlanDR --> DR["**deploy:dr** — own cluster\nhelm upgrade --install (manual ▶)"]
+    Pre --> Lint["**lint**\nyamllint · ruff · mypy · biome · tsc · helm lint"]
+    Lint --> Build["**build**\nKaniko build + push images to Artifactory"]
+    Build --> Promote["**promote** — push-image-tags\nclone GitOps repo → update image tags → commit + push"]
+    Promote --> ArgoStaging["ArgoCD auto-syncs staging"]
+    Promote --> ArgoProd["ArgoCD shows OutOfSync\n→ operator clicks Sync for prod/DR"]
 ```
 
-Each environment is actually **two** jobs: a `plan:<env>` job that resolves image tags and previews the Helm values (fast, safe to re-run, always automatic) and a `deploy:<env>` job that runs the real `helm upgrade --install` (staging: automatic; production/dr: manual gate). See §4.4–4.6.
+After `push-image-tags` commits updated tags to the GitOps repo, ArgoCD takes over:
+- **Staging** — syncs automatically (automated syncPolicy).
+- **Production / DR** — show OutOfSync in the ArgoCD UI; an operator triggers the sync manually.
 
 ### 4.1 Stage `.pre` — change detection + validation (`detect.yml`)
 
-`detect` runs once at the start of every tag pipeline. It compares the current tag against the most recent ancestor tag and writes three booleans (+ the previous tag) to a dotenv artifact:
+`detect` runs once at the start of every tag pipeline. It compares the current tag against the most recent ancestor tag and writes two booleans (+ the previous tag) to a dotenv artifact:
 
 ```
 BACKEND_CHANGED=1
 FRONTEND_CHANGED=0
-HELM_CHANGED=0
 PREV_TAG=v1.3.0
 ```
 
 All downstream jobs consume these vars via `artifacts: reports: dotenv`. Jobs for unchanged apps are skipped entirely. On the first-ever tag (or with `FORCE_BUILD=1`) everything is marked changed.
 
-`validate:variables` also runs in `.pre`. It prints all pipeline variables and **hard-fails** if any required cluster variable (`K8S_NAMESPACE`, `STAGING_SERVER`, `PROD_SERVER`, `STAGING_TOKEN`, `PROD_TOKEN`) is missing — surfacing misconfiguration early instead of as a cryptic Helm error later.
+`validate:variables` also runs in `.pre`. It prints all pipeline variables and **hard-fails** if any required variable (`GITOPS_REPO_URL`, `GITOPS_DEPLOY_KEY`, `ARTIFACTORY_REGISTRY`, etc.) is missing — surfacing misconfiguration early.
 
 ### 4.2 Stage `lint` — fast-fail static checks
 
-| Job                  | Image              | Runs when            | What it does                         |
-| -------------------- | ------------------ | -------------------- | ------------------------------------ |
-| `backend:lint`       | internal Python    | `BACKEND_CHANGED=1`  | `ruff check .` + `ruff format --check .` |
-| `backend:typecheck`  | internal Python    | `BACKEND_CHANGED=1`  | `mypy . --ignore-missing-imports`    |
-| `frontend:lint`      | internal Node      | `FRONTEND_CHANGED=1` | `npm run lint` (Biome)               |
-| `frontend:typecheck` | internal Node      | `FRONTEND_CHANGED=1` | `npm run typecheck` (tsc)            |
-| `helm:lint`          | internal Helm      | `HELM_CHANGED=1`     | `helm lint` on all three charts      |
-| `helm:template`      | internal Helm      | `HELM_CHANGED=1`     | `helm template` to catch render errors |
+| Job                  | Image              | Runs when            | What it does                               |
+| -------------------- | ------------------ | -------------------- | ------------------------------------------ |
+| `yamllint`           | internal Python    | always               | `yamllint` on all pipeline + compose YAMLs |
+| `backend:lint`       | internal Python    | `BACKEND_CHANGED=1`  | `ruff check .` + `ruff format --check .`   |
+| `backend:typecheck`  | internal Python    | `BACKEND_CHANGED=1`  | `mypy . --ignore-missing-imports`          |
+| `frontend:lint`      | internal Node      | `FRONTEND_CHANGED=1` | `npm run lint` (Biome)                     |
+| `frontend:typecheck` | internal Node      | `FRONTEND_CHANGED=1` | `npm run typecheck` (tsc)                  |
+| `helm:lint`          | internal Helm      | always (no-op)       | placeholder — charts lint in the GitOps repo's own pipeline |
 
-`backend:lint`, `backend:typecheck`, `frontend:lint`, and `frontend:typecheck` are currently `allow_failure: true` (advisory) — remove that flag once the codebase is clean if you want them to hard-block a release. `helm:lint` and `helm:template` do **not** have that flag — a failure there already blocks the pipeline.
+`backend:lint`, `backend:typecheck`, `frontend:lint`, and `frontend:typecheck` are currently `allow_failure: true` (advisory). `yamllint` runs on every tag and blocks if any pipeline YAML is malformed.
 
 ### 4.3 Stage `build` — produce images
 
@@ -210,33 +204,11 @@ Images are built with **Kaniko** (rootless, daemonless — works in restricted C
 
 Kaniko layer caching is enabled (`--cache=true --cache-ttl=1440h`).
 
-### 4.4 Stage `staging` — auto-deploy on every tag
+### 4.4 Stage `promote` — update image tags in the GitOps repo
 
-Each environment is split into a `plan:<env>` job (phases 1–3: validate, resolve image tags, print the values that will be applied) and a `deploy:<env>` job (phase 4: the actual `helm upgrade`). `plan:staging` and `deploy:staging` both run automatically after a successful build:
+`push-image-tags` clones the `zabbix-portal-gitops` repo (via `GITOPS_DEPLOY_KEY`), updates the `tag:` line in `environments/{staging,production,dr}/values.yaml` for each changed app, then commits and pushes back. The commit message references the pipeline URL, commit SHA, and changed apps.
 
-```bash
-helm upgrade --install "$PROJECT_NAME" "helm/charts/$PROJECT_NAME/" \
-  --namespace "$K8S_NAMESPACE" \
-  -f values.yaml -f values-staging.yaml \
-  --set backend.image.repository="$ARTIFACTORY_REGISTRY/backend" \
-  --set frontend.image.repository="$ARTIFACTORY_REGISTRY/frontend" \
-  --set backend.image.tag=<resolved> \
-  --set frontend.image.tag=<resolved> \
-  --wait --timeout 5m
-# Cluster connection: HELM_KUBEAPISERVER=$STAGING_SERVER, HELM_KUBETOKEN=$STAGING_TOKEN
-```
-
-**Per-app tag resolution** happens in `plan:staging`: only apps that changed since the previous tag get pinned to the new tag. For unchanged apps, the plan script scans `helm history` (newest revision first, `deployed` or `superseded`) for the last successfully deployed tag and re-pins that — so an unchanged app is never accidentally moved. The resolved tags are written to a `staging-plan.env` dotenv artifact that `deploy:staging` consumes. `--wait` blocks until all pods pass their readiness probes; if they don't within the timeout, Helm exits non-zero and the job fails.
-
-### 4.5 Stage `production` — manual gate
-
-`plan:production` runs automatically (it needs `deploy:staging` to have completed first, to keep the pipeline ordered) and resolves production's own Helm history the same way. If production has **no** prior Helm history for an app (first-ever deploy to that cluster), it falls back to the tag `plan:staging` resolved for that app, via a `STAGING_BACKEND_TAG` / `STAGING_FRONTEND_TAG` dotenv artifact.
-
-`deploy:production` requires a manual click (▶) in the GitLab pipeline UI. It runs the same `helm upgrade --install` as staging, pointed at the production cluster (`PROD_SERVER` / `PROD_TOKEN`), using the tags `plan:production` already resolved.
-
-### 4.6 Stage `dr` — Disaster Recovery (manual gate, own cluster)
-
-DR has **its own cluster variables** — `DR_SERVER` / `DR_TOKEN` — it does not reuse the production cluster. `plan:dr` resolves DR's own Helm history, falling back to production's resolved tag (`PRODUCTION_BACKEND_TAG` / `PRODUCTION_FRONTEND_TAG`) only if DR has never been deployed to before. `deploy:dr` is a manual gate, intended to be clicked after production is verified healthy.
+Only changed apps get a new tag — unchanged apps stay pinned to whatever was already in the values file. If neither app changed, the job exits cleanly with no commit.
 
 ---
 
@@ -269,29 +241,27 @@ flowchart LR
 
 ## 6. Deployment flow
 
-### Today — direct Helm from CI
+### GitOps via ArgoCD
 
 ```mermaid
 sequenceDiagram
     participant CI as GitLab CI
     participant Reg as Artifactory
-    participant Cluster as Cluster API
+    participant GitOps as GitOps Repo
+    participant ArgoCD as ArgoCD
     participant K8s as Kubernetes
 
     CI->>Reg: kaniko push :vX.Y.Z
-    CI->>Cluster: helm upgrade --install (kube token)
-    Cluster->>K8s: apply rendered manifests
+    CI->>GitOps: push updated image tags (environments/*/values.yaml)
+    GitOps-->>ArgoCD: webhook / poll detects change
+    ArgoCD->>K8s: apply rendered Helm manifests (staging: auto, prod/DR: manual sync)
     K8s->>Reg: pull image:vX.Y.Z
-    K8s-->>Cluster: pods Ready
-    Cluster-->>CI: helm --wait → success
+    K8s-->>ArgoCD: pods Healthy
 ```
 
-- `helm upgrade --install` is the unit of deploy. `--wait` is the health gate.
-- Rollback is `helm rollback` (see `RELEASING.md`).
-
-### Planned — ArgoCD (not yet active)
-
-The `argocd/` directory contains an AppProject, ApplicationSet, and per-environment values for a future GitOps migration. These manifests are **not applied by the current pipeline**. When you switch over, `deploy:*` jobs would be replaced by `argocd app set` / `argocd app sync`, and ArgoCD would reconcile the cluster from Git. Until then, treat `argocd/` as reference scaffolding.
+- Helm charts live in `zabbix-portal-gitops/helm-charts/`. ArgoCD renders them at sync time using each environment's `values.yaml`.
+- **Staging** syncs automatically when values change. **Production and DR** show OutOfSync in the ArgoCD UI until an operator triggers a manual sync.
+- Rollback: in ArgoCD, sync the application to a previous Git revision, or update the tag in `values.yaml` back to the old version and push.
 
 ---
 
@@ -308,15 +278,16 @@ flowchart TD
     E --> F["detect: FRONTEND_CHANGED=1\nBACKEND_CHANGED=0"]
     F --> G["lint: frontend:lint + frontend:typecheck"]
     G --> H["build: frontend:docker:build\npush :v1.4.0"]
-    H --> I["staging: helm upgrade (auto)"]
-    I --> J["QA: validate staging"]
-    J --> K["▶ production: helm upgrade (manual)"]
-    K --> L["▶ dr: helm upgrade on DR (manual)"]
+    H --> I["promote: push-image-tags to GitOps repo"]
+    I --> J["ArgoCD auto-syncs staging"]
+    J --> K["QA: validate staging"]
+    K --> L["▶ ArgoCD: manual sync production"]
+    L --> M["▶ ArgoCD: manual sync DR"]
 ```
 
 Key invariants:
 
 - **Only changed apps rebuild.** If only `apps/frontend/` changed, backend jobs are skipped entirely.
-- **Unchanged apps keep their deployed tag.** The deploy script reads it back from `helm history`.
-- **Production never auto-updates.** Each promotion is an explicit manual gate.
-- **Rollback is always available.** `helm rollback` to a previous revision. See `RELEASING.md`.
+- **Unchanged apps keep their deployed tag.** `push-image-tags` only writes tags for apps that changed.
+- **Production never auto-updates.** Each promotion requires a manual sync click in ArgoCD.
+- **Rollback is always available.** Sync ArgoCD to a previous Git revision, or pin the old tag in the GitOps repo. See `RELEASING.md`.

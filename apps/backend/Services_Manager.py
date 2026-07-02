@@ -392,8 +392,11 @@ class Services_Manager(Zabbix_Base):
             if proc_itemid and config.get("proc_created"):
                 try:
                     self.zapi.item.delete([proc_itemid])
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug(
+                        "Failed to delete proc item during health-monitor cleanup: %s",
+                        exc,
+                    )
             return True
         except RuntimeError:
             raise

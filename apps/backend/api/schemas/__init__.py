@@ -36,6 +36,7 @@ from api.schemas.dashboard import (
 from api.schemas.hosts import (
     HostRequest,
     HostTagItem,
+    HostTemplateLinkRequest,
     HostUpdateRequest,
     TagsUpdateRequest,
 )
@@ -49,6 +50,9 @@ from api.schemas.items import (
     ExternalItemRequest,
     FileWatchRequest,
     HttpItemRequest,
+    ProcessItemRequest,
+    TemplateItemRequest,
+    WindowsServiceItemRequest,
     HttpQueryField,
     InternalItemRequest,
     IpmiItemRequest,
@@ -72,7 +76,7 @@ from api.schemas.services import (
     ServiceUpdateRequest,
     SlaCreateRequest,
 )
-from api.schemas.teams import HostAssignRequest, TeamRequest
+from api.schemas.teams import HostAssignRequest, MemberRequest, TeamRequest
 from api.schemas.triggers import (
     BulkTriggerRequest,
     TriggerRequest,
@@ -111,6 +115,7 @@ __all__ = [
     "DashboardPageRenameRequest",
     "HostRequest",
     "HostTagItem",
+    "HostTemplateLinkRequest",
     "HostUpdateRequest",
     "TagsUpdateRequest",
     "BrowserItemRequest",
@@ -121,6 +126,9 @@ __all__ = [
     "DependentItemRequest",
     "ExternalItemRequest",
     "FileWatchRequest",
+    "ProcessItemRequest",
+    "TemplateItemRequest",
+    "WindowsServiceItemRequest",
     "HttpItemRequest",
     "HttpQueryField",
     "InternalItemRequest",
@@ -143,6 +151,7 @@ __all__ = [
     "ServiceUpdateRequest",
     "SlaCreateRequest",
     "HostAssignRequest",
+    "MemberRequest",
     "TeamRequest",
     "BulkTriggerRequest",
     "TriggerRequest",

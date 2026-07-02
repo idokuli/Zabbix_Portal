@@ -29,6 +29,7 @@ import {
 import { useTheme } from "@mui/material/styles";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../../app/api";
+import { TabHeader } from "../../app/components/TabHeader";
 import { SeverityChip } from "./shared";
 
 // ── Problem History tab ───────────────────────────────────────────────
@@ -115,6 +116,10 @@ export const ProblemHistoryTab = () => {
 
   return (
     <Stack spacing={2}>
+      <TabHeader
+        title="Problem History"
+        description="Browse resolved and active problems with severity and host filters."
+      />
       {/* Filters */}
       <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1.5, alignItems: "center" }}>
         <Box sx={{ display: "flex", gap: 0.5 }}>
@@ -130,20 +135,6 @@ export const ProblemHistoryTab = () => {
             </Button>
           ))}
         </Box>
-        <FormControl size="small" sx={{ minWidth: 140 }}>
-          <InputLabel>Min severity</InputLabel>
-          <Select
-            value={severityMin}
-            label="Min severity"
-            onChange={(e) => setSeverityMin(Number(e.target.value))}
-          >
-            <MenuItem value={0}>All</MenuItem>
-            <MenuItem value={2}>Low+</MenuItem>
-            <MenuItem value={3}>Medium+</MenuItem>
-            <MenuItem value={4}>High+</MenuItem>
-            <MenuItem value={5}>Critical only</MenuItem>
-          </Select>
-        </FormControl>
         <TextField
           size="small"
           placeholder="Filter by problem or host…"
@@ -160,9 +151,23 @@ export const ProblemHistoryTab = () => {
             ) : undefined,
           }}
         />
+        <FormControl size="small" sx={{ minWidth: 140 }}>
+          <InputLabel>Min severity</InputLabel>
+          <Select
+            value={severityMin}
+            label="Min severity"
+            onChange={(e) => setSeverityMin(Number(e.target.value))}
+          >
+            <MenuItem value={0}>All</MenuItem>
+            <MenuItem value={2}>Low+</MenuItem>
+            <MenuItem value={3}>Medium+</MenuItem>
+            <MenuItem value={4}>High+</MenuItem>
+            <MenuItem value={5}>Critical only</MenuItem>
+          </Select>
+        </FormControl>
         <Tooltip title="Refresh">
           <span>
-            <IconButton size="small" onClick={load} disabled={loading}>
+            <IconButton size="small" onClick={() => void load()} disabled={loading}>
               <RefreshIcon fontSize="small" />
             </IconButton>
           </span>

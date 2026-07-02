@@ -199,6 +199,37 @@ def create_dc_template(
     return {"templateid": tid, "message": f"Template '{name}' created."}
 
 
+@router.get(
+    "/dc/templates/{templateid}", tags=["DataCollection"], summary="Get template detail"
+)
+def get_dc_template(templateid: str, current_user: dict = Depends(get_current_user)):
+    detail = dc_bot.get_template_detail(templateid)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Template not found.")
+    return detail
+
+
+@router.put(
+    "/dc/templates/{templateid}", tags=["DataCollection"], summary="Update template"
+)
+def update_dc_template(
+    templateid: str, body: dict = Body(...), current_user: dict = Depends(require_admin)
+):
+    ok, err = dc_bot.update_template(
+        templateid,
+        name=body.get("name"),
+        visible_name=body.get("visible_name"),
+        description=body.get("description"),
+        group_ids=body.get("group_ids"),
+        template_ids=body.get("template_ids"),
+        tags=body.get("tags"),
+        macros=body.get("macros"),
+    )
+    if not ok:
+        raise HTTPException(status_code=400, detail=err or "Failed to update template.")
+    return {"message": "Template updated."}
+
+
 @router.delete(
     "/dc/templates/{templateid}", tags=["DataCollection"], summary="Delete template"
 )

@@ -17,8 +17,9 @@ class Alert_Manager(Zabbix_Base):
         try:
             with conn.cursor() as cur:
                 cur.execute(
-                    """SELECT id, item_id, item_name, hostname, operator,
-                              threshold, severity, enabled, is_firing, created_at
+                    """SELECT id, rule_type, item_id, item_name, hostname, operator,
+                              threshold, severity, enabled, is_firing, created_at,
+                              expected_contains
                        FROM alert_rules WHERE user_id = %s ORDER BY created_at DESC""",
                     (user_id,),
                 )
@@ -36,16 +37,19 @@ class Alert_Manager(Zabbix_Base):
         item_name: str,
         hostname: str,
         operator: str,
-        threshold: float,
+        threshold: float | None,
         severity: int,
+        rule_type: str = "item",
+        expected_contains: str = "ok",
     ) -> dict:
         conn = get_conn()
         try:
             with conn.cursor() as cur:
                 cur.execute(
                     """INSERT INTO alert_rules
-                           (user_id, item_id, item_name, hostname, operator, threshold, severity)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                           (user_id, item_id, item_name, hostname, operator, threshold,
+                            severity, rule_type, expected_contains)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
                     (
                         user_id,
                         item_id,
@@ -54,6 +58,8 @@ class Alert_Manager(Zabbix_Base):
                         operator,
                         threshold,
                         severity,
+                        rule_type,
+                        expected_contains,
                     ),
                 )
                 row = cur.fetchone()
@@ -86,17 +92,41 @@ class Alert_Manager(Zabbix_Base):
         self,
         rule_id: int,
         user_id: int,
-        operator: str,
-        threshold: float,
         severity: int,
+        operator: str | None = None,
+        threshold: float | None = None,
         item_id: str | None = None,
         item_name: str | None = None,
         hostname: str | None = None,
+        expected_contains: str | None = None,
     ) -> bool:
         conn = get_conn()
         try:
             with conn.cursor() as cur:
-                if item_id and item_name and hostname:
+                # Fetch rule_type so we know which fields to update
+                cur.execute(
+                    "SELECT rule_type FROM alert_rules WHERE id = %s AND user_id = %s",
+                    (rule_id, user_id),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return False
+                rule_type = row["rule_type"]
+
+                if rule_type == "service":
+                    cur.execute(
+                        """UPDATE alert_rules
+                           SET severity = %s, expected_contains = COALESCE(%s, expected_contains)
+                           WHERE id = %s AND user_id = %s""",
+                        (severity, expected_contains, rule_id, user_id),
+                    )
+                elif (
+                    item_id
+                    and item_name
+                    and hostname
+                    and operator is not None
+                    and threshold is not None
+                ):
                     cur.execute(
                         """UPDATE alert_rules
                            SET operator = %s, threshold = %s, severity = %s,
@@ -116,7 +146,9 @@ class Alert_Manager(Zabbix_Base):
                 else:
                     cur.execute(
                         """UPDATE alert_rules
-                           SET operator = %s, threshold = %s, severity = %s
+                           SET operator = COALESCE(%s, operator),
+                               threshold = COALESCE(%s, threshold),
+                               severity = %s
                            WHERE id = %s AND user_id = %s""",
                         (operator, threshold, severity, rule_id, user_id),
                     )
@@ -175,21 +207,21 @@ class Alert_Manager(Zabbix_Base):
     def run_checks(self) -> None:
         """Evaluate all enabled rules; insert alert_events on ok→firing transitions.
 
-        At most one new firing is allowed per item per cycle, ordered by severity
-        ascending (mildest first).  This prevents a fast-rising metric from
-        triggering every threshold simultaneously — each threshold fires in a
-        separate cycle, giving operators time to react before the next escalation.
+        Item rules: numeric threshold comparison on Zabbix item last value.
+        Service rules: check whether the health-monitor response body contains the
+        expected string — fires when the service stops working.
+
+        At most one new firing is allowed per item per cycle for item rules.
         """
         if not self.zapi:
             return
 
         conn = get_conn()
         try:
-            # Phase 1: read rules — sort by severity ASC so mildest fires first
             with conn.cursor() as cur:
                 cur.execute(
-                    """SELECT id, user_id, item_id, item_name, hostname,
-                              operator, threshold, severity, is_firing
+                    """SELECT id, user_id, rule_type, item_id, item_name, hostname,
+                              operator, threshold, severity, is_firing, expected_contains
                        FROM alert_rules WHERE enabled = TRUE
                        ORDER BY severity ASC, threshold ASC"""
                 )
@@ -198,75 +230,146 @@ class Alert_Manager(Zabbix_Base):
             if not rules:
                 return
 
-            # Phase 2: fetch latest values from Zabbix
-            item_ids = list({r["item_id"] for r in rules})
-            try:
-                items = self.zapi.item.get(
-                    itemids=item_ids,
-                    output=["itemid", "lastvalue", "value_type"],
-                )
-                value_map = {i["itemid"]: i for i in items}
-            except Exception as exc:
-                logger.error("Alert checker: failed to fetch items: %r", exc)
-                return
+            item_rules = [r for r in rules if r["rule_type"] == "item"]
+            service_rules = [r for r in rules if r["rule_type"] == "service"]
 
-            # Phase 3: evaluate and write updates.
-            # Track which item_ids have already fired a new event this cycle so
-            # that only one threshold escalates per item per check interval.
-            fired_this_cycle: set[str] = set()
-
-            for rule in rules:
-                item = value_map.get(rule["item_id"])
-                if not item or not item.get("lastvalue"):
-                    continue
-                if int(item.get("value_type", 1)) not in (0, 3):
-                    continue
+            # ── Item rules ────────────────────────────────────────────────
+            if item_rules:
+                item_ids = list({r["item_id"] for r in item_rules})
                 try:
-                    val = float(item["lastvalue"])
-                except (ValueError, TypeError):
-                    continue
+                    items = self.zapi.item.get(
+                        itemids=item_ids,
+                        output=["itemid", "lastvalue", "value_type"],
+                    )
+                    value_map = {i["itemid"]: i for i in items}
+                except Exception as exc:
+                    logger.error("Alert checker: failed to fetch items: %r", exc)
+                    value_map = {}
 
-                op = rule["operator"]
-                firing = (
-                    (op == ">" and val > rule["threshold"])
-                    or (op == "<" and val < rule["threshold"])
-                    or (op == ">=" and val >= rule["threshold"])
-                    or (op == "<=" and val <= rule["threshold"])
-                )
+                fired_this_cycle: set[str] = set()
+                for rule in item_rules:
+                    item = value_map.get(rule["item_id"])
+                    if not item or item.get("lastvalue") is None:
+                        continue
 
-                with conn.cursor() as cur:
-                    if firing and not rule["is_firing"]:
-                        if rule["item_id"] in fired_this_cycle:
-                            # Another rule for this item already fired this cycle;
-                            # leave is_firing=False so this rule fires next cycle.
+                    op = rule["operator"]
+                    value_type = int(item.get("value_type", 1))
+                    lastvalue = str(item.get("lastvalue") or "")
+
+                    if op in ("contains", "!contains"):
+                        expected = (rule["expected_contains"] or "").lower()
+                        match = expected in lastvalue.lower()
+                        firing = match if op == "contains" else not match
+                        actual_val = 0.0
+                    elif value_type in (0, 3):
+                        try:
+                            val = float(lastvalue)
+                        except (ValueError, TypeError):
                             continue
-                        fired_this_cycle.add(rule["item_id"])
-                        cur.execute(
-                            """INSERT INTO alert_events
-                                   (rule_id, user_id, item_id, item_name, hostname,
-                                    operator, threshold, actual_value, severity)
-                               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                            (
-                                rule["id"],
-                                rule["user_id"],
-                                rule["item_id"],
-                                rule["item_name"],
-                                rule["hostname"],
-                                op,
-                                rule["threshold"],
-                                val,
-                                rule["severity"],
-                            ),
+                        firing = (
+                            (op == ">" and val > rule["threshold"])
+                            or (op == "<" and val < rule["threshold"])
+                            or (op == ">=" and val >= rule["threshold"])
+                            or (op == "<=" and val <= rule["threshold"])
                         )
-                        cur.execute(
-                            "UPDATE alert_rules SET is_firing = TRUE WHERE id = %s",
-                            (rule["id"],),
-                        )
-                    elif not firing and rule["is_firing"]:
-                        cur.execute(
-                            "UPDATE alert_rules SET is_firing = FALSE WHERE id = %s",
-                            (rule["id"],),
-                        )
+                        actual_val = val
+                    else:
+                        # non-numeric item with a numeric operator — skip
+                        continue
+
+                    with conn.cursor() as cur:
+                        if firing and not rule["is_firing"]:
+                            if rule["item_id"] in fired_this_cycle:
+                                continue
+                            fired_this_cycle.add(rule["item_id"])
+                            cur.execute(
+                                """INSERT INTO alert_events
+                                       (rule_id, user_id, item_id, item_name, hostname,
+                                        operator, threshold, actual_value, severity)
+                                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                                (
+                                    rule["id"],
+                                    rule["user_id"],
+                                    rule["item_id"],
+                                    rule["item_name"],
+                                    rule["hostname"],
+                                    op,
+                                    rule["threshold"],
+                                    actual_val,
+                                    rule["severity"],
+                                ),
+                            )
+                            cur.execute(
+                                "UPDATE alert_rules SET is_firing = TRUE WHERE id = %s",
+                                (rule["id"],),
+                            )
+                        elif not firing and rule["is_firing"]:
+                            cur.execute(
+                                "UPDATE alert_rules SET is_firing = FALSE WHERE id = %s",
+                                (rule["id"],),
+                            )
+
+            # ── Service rules ─────────────────────────────────────────────
+            if service_rules:
+                svc_item_ids = list({r["item_id"] for r in service_rules})
+                try:
+                    svc_items = self.zapi.item.get(
+                        itemids=svc_item_ids,
+                        output=["itemid", "lastvalue", "lastclock", "state"],
+                    )
+                    svc_map = {i["itemid"]: i for i in svc_items}
+                except Exception as exc:
+                    logger.error(
+                        "Alert checker: failed to fetch service items: %r", exc
+                    )
+                    svc_map = {}
+
+                import time as _time
+
+                now = _time.time()
+                for rule in service_rules:
+                    svc = svc_map.get(rule["item_id"])
+                    if not svc:
+                        continue
+                    lastclock = int(svc.get("lastclock") or 0)
+                    lastvalue = svc.get("lastvalue") or ""
+                    state = int(svc.get("state", 1))
+                    # stale if not checked in the last 10 minutes
+                    fresh = state == 0 and lastclock > 0 and (now - lastclock) < 600
+                    working = (
+                        fresh and rule["expected_contains"].lower() in lastvalue.lower()
+                    )
+                    firing = not working
+
+                    with conn.cursor() as cur:
+                        if firing and not rule["is_firing"]:
+                            cur.execute(
+                                """INSERT INTO alert_events
+                                       (rule_id, user_id, item_id, item_name, hostname,
+                                        operator, threshold, actual_value, severity)
+                                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                                (
+                                    rule["id"],
+                                    rule["user_id"],
+                                    rule["item_id"],
+                                    rule["item_name"],
+                                    rule["hostname"],
+                                    "!=",
+                                    0,
+                                    0,
+                                    rule["severity"],
+                                ),
+                            )
+                            cur.execute(
+                                "UPDATE alert_rules SET is_firing = TRUE WHERE id = %s",
+                                (rule["id"],),
+                            )
+                        elif not firing and rule["is_firing"]:
+                            cur.execute(
+                                "UPDATE alert_rules SET is_firing = FALSE WHERE id = %s",
+                                (rule["id"],),
+                            )
+
             conn.commit()
         except Exception as exc:
             conn.rollback()

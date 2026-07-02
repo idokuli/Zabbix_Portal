@@ -15,7 +15,7 @@ load_dotenv(dotenv_path=dotenv_path, override=False)
 
 _DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres:postgres@localhost:5432/zabbix_portal",
+    "postgresql://postgres:postgres@localhost:5432/overwatch",
 )
 
 _pool: psycopg2.pool.ThreadedConnectionPool | None = None
@@ -142,6 +142,24 @@ CREATE TABLE IF NOT EXISTS portal_settings (
     value      TEXT NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS user_team_memberships (
+    user_id INTEGER NOT NULL REFERENCES team_users(id) ON DELETE CASCADE,
+    team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, team_id)
+);
+
+CREATE TABLE IF NOT EXISTS notification_history (
+    id          TEXT    NOT NULL,
+    user_id     INTEGER NOT NULL REFERENCES team_users(id) ON DELETE CASCADE,
+    source      TEXT    NOT NULL DEFAULT 'zabbix',
+    hostname    TEXT    NOT NULL DEFAULT '',
+    severity    INTEGER NOT NULL DEFAULT 0,
+    name        TEXT    NOT NULL DEFAULT '',
+    clock       INTEGER NOT NULL DEFAULT 0,
+    acknowledged BOOLEAN NOT NULL DEFAULT FALSE,
+    PRIMARY KEY (id, user_id)
+);
 """
 
 _MIGRATIONS = """
@@ -210,7 +228,33 @@ CREATE INDEX IF NOT EXISTS idx_team_users_team_id    ON team_users(team_id);
 CREATE INDEX IF NOT EXISTS idx_host_assignments_team_id ON host_assignments(team_id);
 CREATE INDEX IF NOT EXISTS idx_host_assignments_hostname ON host_assignments(hostname);
 
+-- Multi-team membership: copy existing single-team assignments into the join table (idempotent).
+INSERT INTO user_team_memberships (user_id, team_id)
+SELECT id, team_id FROM team_users
+WHERE team_id IS NOT NULL
+ON CONFLICT DO NOTHING;
+
+CREATE INDEX IF NOT EXISTS idx_user_team_memberships_user_id ON user_team_memberships(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_team_memberships_team_id ON user_team_memberships(team_id);
+
 DELETE FROM alert_events WHERE fired_at < NOW() - INTERVAL '90 days';
+
+CREATE INDEX IF NOT EXISTS idx_notification_history_user_clock ON notification_history(user_id, clock DESC);
+
+DELETE FROM notification_history WHERE clock < EXTRACT(EPOCH FROM NOW() - INTERVAL '90 days');
+
+-- Team-level roles: members inherit these on login (union with their personal roles).
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS roles TEXT[] DEFAULT '{}';
+
+-- Service-status alert rules: 'item' (numeric threshold) or 'service' (health-monitor string check).
+ALTER TABLE alert_rules ADD COLUMN IF NOT EXISTS rule_type VARCHAR(16) NOT NULL DEFAULT 'item';
+ALTER TABLE alert_rules ADD COLUMN IF NOT EXISTS expected_contains TEXT NOT NULL DEFAULT 'ok';
+
+-- Widen operator column and extend check constraint to support text-match operators.
+ALTER TABLE alert_rules ALTER COLUMN operator TYPE VARCHAR(16);
+ALTER TABLE alert_rules DROP CONSTRAINT IF EXISTS alert_rules_operator_check;
+ALTER TABLE alert_rules ADD CONSTRAINT alert_rules_operator_check
+  CHECK (operator IN ('>', '<', '>=', '<=', 'contains', '!contains'));
 """
 
 
@@ -273,33 +317,40 @@ def install_notify_triggers() -> None:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("""
-                CREATE OR REPLACE FUNCTION zabbix_portal_notify()
-                RETURNS trigger AS $$
-                BEGIN
-                    PERFORM pg_notify('zabbix_changes', TG_TABLE_NAME);
-                    RETURN COALESCE(NEW, OLD);
-                END;
-                $$ LANGUAGE plpgsql;
-            """)
-            for table in _WATCHED_ZABBIX_TABLES:
-                cur.execute("SAVEPOINT sp")
-                trigger_name = f"zabbix_portal_notify_{table}"
-                try:
-                    cur.execute(
-                        psycopg2.sql.SQL(
-                            "DROP TRIGGER IF EXISTS {trigger} ON {table};"
-                            " CREATE TRIGGER {trigger}"
-                            " AFTER INSERT OR UPDATE OR DELETE ON {table}"
-                            " FOR EACH ROW EXECUTE FUNCTION zabbix_portal_notify();"
-                        ).format(
-                            trigger=psycopg2.sql.Identifier(trigger_name),
-                            table=psycopg2.sql.Identifier(table),
+            # Serialize across workers: only one installs at a time; others wait then skip
+            # (triggers are idempotent once the first worker finishes).
+            # Advisory lock key is a fixed arbitrary integer — scoped to this session.
+            cur.execute("SELECT pg_advisory_lock(8472910234)")
+            try:
+                cur.execute("""
+                    CREATE OR REPLACE FUNCTION overwatch_notify()
+                    RETURNS trigger AS $$
+                    BEGIN
+                        PERFORM pg_notify('zabbix_changes', TG_TABLE_NAME);
+                        RETURN COALESCE(NEW, OLD);
+                    END;
+                    $$ LANGUAGE plpgsql;
+                """)
+                for table in _WATCHED_ZABBIX_TABLES:
+                    cur.execute("SAVEPOINT sp")
+                    trigger_name = f"overwatch_notify_{table}"
+                    try:
+                        cur.execute(
+                            psycopg2.sql.SQL(
+                                "DROP TRIGGER IF EXISTS {trigger} ON {table};"
+                                " CREATE TRIGGER {trigger}"
+                                " AFTER INSERT OR UPDATE OR DELETE ON {table}"
+                                " FOR EACH ROW EXECUTE FUNCTION overwatch_notify();"
+                            ).format(
+                                trigger=psycopg2.sql.Identifier(trigger_name),
+                                table=psycopg2.sql.Identifier(table),
+                            )
                         )
-                    )
-                    cur.execute("RELEASE SAVEPOINT sp")
-                except Exception:
-                    cur.execute("ROLLBACK TO SAVEPOINT sp")
+                        cur.execute("RELEASE SAVEPOINT sp")
+                    except Exception:
+                        cur.execute("ROLLBACK TO SAVEPOINT sp")
+            finally:
+                cur.execute("SELECT pg_advisory_unlock(8472910234)")
         conn.commit()
         logger.info("ZabbixSync: notify triggers installed on Zabbix tables.")
     except Exception as exc:

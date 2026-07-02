@@ -80,21 +80,6 @@ async def _log_requests(request: Request, call_next):
 
 register_routes(app)
 
-# Re-export manager instances for any code that imported them from Zabbix_Main
-from api.managers import (  # noqa: E402, F401
-    actions_bot,
-    alert_bot,
-    dashboard_bot,
-    dc_bot,
-    host_bot,
-    item_bot,
-    metrics_bot,
-    report_bot,
-    services_bot,
-    sync_bot,
-    zadmin_bot,
-)
-
 if __name__ == "__main__":
     import uvicorn
 

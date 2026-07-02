@@ -21,6 +21,8 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { type ProxyConfig, api } from "../../app/api";
+import { TabHeader } from "../../app/components/TabHeader";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 import {
   ConfirmDelete,
   DEFAULT_PROXY_FORM,
@@ -44,22 +46,31 @@ export const ProxiesTab = ({
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<ProxyConfig>(DEFAULT_PROXY_FORM);
   const [editForm, setEditForm] = useState<ProxyConfig>(DEFAULT_PROXY_FORM);
+  const tick = useRefreshTick();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [r, g] = await Promise.all([api.listProxies(), api.listProxyGroups()]);
-      setItems(r.proxies);
-      setProxyGroups(g.proxy_groups);
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : String(e), "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [showToast]);
+  const load = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+      try {
+        const [r, g] = await Promise.all([api.listProxies(), api.listProxyGroups()]);
+        setItems(r.proxies);
+        setProxyGroups(g.proxy_groups);
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : String(e), "error");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [showToast],
+  );
   useEffect(() => {
     void load();
   }, [load]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) void load(true);
+  }, [tick]);
 
   const onAdd = async () => {
     setSaving(true);
@@ -103,6 +114,10 @@ export const ProxiesTab = ({
 
   return (
     <>
+      <TabHeader
+        title="Proxies"
+        description="Manage Zabbix proxies, their connection mode, and assigned hosts."
+      />
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
@@ -116,7 +131,7 @@ export const ProxiesTab = ({
         </Box>
         <Stack direction="row" spacing={1}>
           <Tooltip title="Refresh">
-            <IconButton size="small" onClick={load} disabled={loading}>
+            <IconButton size="small" onClick={() => void load()} disabled={loading}>
               <RefreshIcon sx={{ fontSize: 16 }} />
             </IconButton>
           </Tooltip>

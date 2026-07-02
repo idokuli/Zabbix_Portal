@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import threading
 import time
 from pathlib import Path
@@ -10,6 +11,21 @@ from dotenv import load_dotenv
 from zabbix_utils import ZabbixAPI
 
 logger = logging.getLogger(__name__)
+
+_ZBX_WRAPPER = re.compile(
+    r"^(?:APIRequestError|ProcessingError|ZabbixAPIException)\('?(.+?)'?\)$",
+    re.DOTALL,
+)
+_INVALID_PARAMS = re.compile(r"^Invalid params\.\s*")
+
+
+def zabbix_err(e: Exception) -> str:
+    """Return a clean, user-facing message from a Zabbix (or any) exception."""
+    msg = str(e).strip()
+    m = _ZBX_WRAPPER.match(msg)
+    if m:
+        msg = m.group(1).strip()
+    return _INVALID_PARAMS.sub("", msg).strip() or str(e)
 
 
 class Zabbix_Base:
@@ -103,6 +119,6 @@ class Zabbix_Base:
             try:
                 self.zapi.logout()
                 logger.info("Zabbix session closed.")
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Zabbix logout failed during close: %s", exc)
             self.zapi = None

@@ -1,4 +1,5 @@
 "use client";
+import { generateId } from "../../../app/utils";
 import ClearIcon from "@mui/icons-material/Clear";
 import {
   Box,
@@ -226,7 +227,7 @@ export const HttpItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
             variant="text"
             sx={{ alignSelf: "flex-start", fontSize: "0.75rem" }}
             onClick={() =>
-              setQueryFields((p) => [...p, { _key: crypto.randomUUID(), name: "", value: "" }])
+              setQueryFields((p) => [...p, { _key: generateId(), name: "", value: "" }])
             }
           >
             + Add query field
@@ -401,9 +402,7 @@ export const HttpItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
             size="small"
             variant="text"
             sx={{ alignSelf: "flex-start", fontSize: "0.75rem" }}
-            onClick={() =>
-              setHeaders((p) => [...p, { _key: crypto.randomUUID(), name: "", value: "" }])
-            }
+            onClick={() => setHeaders((p) => [...p, { _key: generateId(), name: "", value: "" }])}
           >
             + Add header
           </Button>

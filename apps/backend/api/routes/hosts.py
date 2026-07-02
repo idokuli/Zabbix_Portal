@@ -2,12 +2,19 @@ import logging
 from io import BytesIO
 import pandas as pd
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 import User_Management as um
 from Auth import get_current_user, require_admin, require_operator
 from api.deps import live_team_id, team_hostname_filter
 from api.managers import host_bot
-from api.schemas import HostRequest, HostUpdateRequest, TagsUpdateRequest
+from api.deps import zabbix_call
+from api.schemas import (
+    HostRequest,
+    HostTemplateLinkRequest,
+    HostUpdateRequest,
+    TagsUpdateRequest,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Hosts"])
@@ -79,7 +86,7 @@ def list_templates(current_user: dict = Depends(get_current_user)):
 @router.post("/hosts", tags=["Hosts"], summary="Create New Host", status_code=201)
 def create_host(data: HostRequest, current_user: dict = Depends(require_operator)):
     """Creates a new Zabbix host. Auto-assigns to the creator's team if they have one."""
-    result = host_bot.create_server(
+    result, err = host_bot.create_server(
         data.hostname,
         data.ip,
         group_ids=data.group_ids or None,
@@ -87,9 +94,7 @@ def create_host(data: HostRequest, current_user: dict = Depends(require_operator
         proxyid=data.proxyid or None,
     )
     if not result:
-        raise HTTPException(
-            status_code=400, detail="Failed to create host. Check logs."
-        )
+        raise HTTPException(status_code=400, detail=err or "Failed to create host.")
     team_id = live_team_id(current_user)
     if team_id:
         team_name = um.get_team_name(team_id)
@@ -152,40 +157,49 @@ async def bulk_create_hosts(
             detail="File must contain hostname (or host) and ip (or ip_address) columns.",
         )
 
-    created: list[dict] = []
-    failed: list[dict] = []
     default_template = "Linux by Zabbix agent"
     team_id = live_team_id(current_user)
     team_name = um.get_team_name(team_id) if team_id else None
 
-    for idx, row in df.iterrows():
-        hostname = str(row.get(hostname_col, "")).strip()
-        ip = str(row.get(ip_col, "")).strip()
-        template = str(row.get(template_col, "")).strip() if template_col else ""
-        if not hostname or hostname.lower() == "nan" or not ip or ip.lower() == "nan":
-            failed.append({"row": int(idx) + 2, "reason": "Missing hostname/ip"})
-            continue
+    def _process() -> tuple[list[dict], list[dict]]:
+        created: list[dict] = []
+        failed: list[dict] = []
+        for idx, row in df.iterrows():
+            hostname = str(row.get(hostname_col, "")).strip()
+            ip = str(row.get(ip_col, "")).strip()
+            template = str(row.get(template_col, "")).strip() if template_col else ""
+            if (
+                not hostname
+                or hostname.lower() == "nan"
+                or not ip
+                or ip.lower() == "nan"
+            ):
+                failed.append({"row": int(idx) + 2, "reason": "Missing hostname/ip"})
+                continue
 
-        hostid = host_bot.create_server(
-            hostname, ip, template_name=template or default_template
-        )
-        if hostid:
-            if team_id:
-                um.assign_host(team_id, hostname)
-            if team_name:
-                host_bot.tag_host(hostname, team_name)
-                host_bot.add_host_to_hostgroup(hostname, team_name)
-            created.append(
-                {"row": int(idx) + 2, "hostname": hostname, "hostid": hostid}
+            hostid, err = host_bot.create_server(
+                hostname, ip, template_name=template or default_template
             )
-        else:
-            failed.append(
-                {
-                    "row": int(idx) + 2,
-                    "hostname": hostname,
-                    "reason": "Zabbix create failed",
-                }
-            )
+            if hostid:
+                if team_id:
+                    um.assign_host(team_id, hostname)
+                if team_name:
+                    host_bot.tag_host(hostname, team_name)
+                    host_bot.add_host_to_hostgroup(hostname, team_name)
+                created.append(
+                    {"row": int(idx) + 2, "hostname": hostname, "hostid": hostid}
+                )
+            else:
+                failed.append(
+                    {
+                        "row": int(idx) + 2,
+                        "hostname": hostname,
+                        "reason": err or "Unknown error",
+                    }
+                )
+        return created, failed
+
+    created, failed = await run_in_threadpool(_process)
 
     return {
         "message": "Bulk host import completed.",
@@ -195,6 +209,54 @@ async def bulk_create_hosts(
         "created": created,
         "failed": failed,
     }
+
+
+@router.get(
+    "/hosts/{hostname}/templates",
+    tags=["Hosts"],
+    summary="List templates linked to a host",
+)
+def get_host_templates(hostname: str, current_user: dict = Depends(get_current_user)):
+    """Return templates linked to the host as [{templateid, name}]."""
+    with zabbix_call():
+        return {"templates": host_bot.get_host_templates(hostname)}
+
+
+@router.post(
+    "/hosts/{hostname}/templates",
+    tags=["Hosts"],
+    summary="Link a template to a host",
+    status_code=201,
+)
+def link_template(
+    hostname: str,
+    data: HostTemplateLinkRequest,
+    _user: dict = Depends(require_operator),
+):
+    """Add a template to a host without removing existing templates."""
+    with zabbix_call():
+        ok, err = host_bot.link_template(hostname, data.templateid)
+    if not ok:
+        raise HTTPException(status_code=400, detail=err or "Failed to link template.")
+    return {"message": "Template linked."}
+
+
+@router.delete(
+    "/hosts/{hostname}/templates/{templateid}",
+    tags=["Hosts"],
+    summary="Unlink a template from a host",
+)
+def unlink_template(
+    hostname: str,
+    templateid: str,
+    _user: dict = Depends(require_operator),
+):
+    """Remove a template from a host and clear its inherited items."""
+    with zabbix_call():
+        ok, err = host_bot.unlink_template(hostname, templateid)
+    if not ok:
+        raise HTTPException(status_code=400, detail=err or "Failed to unlink template.")
+    return {"message": "Template unlinked."}
 
 
 @router.put(

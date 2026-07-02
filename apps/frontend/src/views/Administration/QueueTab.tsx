@@ -18,6 +18,8 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../app/api";
+import { TabHeader } from "../../app/components/TabHeader";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 
 export const QueueTab = ({
   showToast,
@@ -28,20 +30,29 @@ export const QueueTab = ({
     error?: string;
   } | null>(null);
   const [loading, setLoading] = useState(false);
+  const tick = useRefreshTick();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      setData(await api.getQueue());
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : String(e), "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [showToast]);
+  const load = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+      try {
+        setData(await api.getQueue());
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : String(e), "error");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [showToast],
+  );
   useEffect(() => {
     void load();
   }, [load]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) void load(true);
+  }, [tick]);
 
   const fmtNext = (ts: string | number) => {
     const t = typeof ts === "string" ? Number.parseInt(ts, 10) : ts;
@@ -59,6 +70,10 @@ export const QueueTab = ({
 
   return (
     <Stack spacing={2}>
+      <TabHeader
+        title="Item Queue"
+        description="Current item processing queue showing delayed and stuck checks."
+      />
       <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
         <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
           Queue Overview
@@ -76,7 +91,7 @@ export const QueueTab = ({
           )
         )}
         <Tooltip title="Refresh">
-          <IconButton size="small" onClick={load} disabled={loading}>
+          <IconButton size="small" onClick={() => void load()} disabled={loading}>
             <RefreshIcon sx={{ fontSize: 16 }} />
           </IconButton>
         </Tooltip>

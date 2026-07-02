@@ -1,21 +1,15 @@
 "use client";
-import ClearIcon from "@mui/icons-material/Clear";
+import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import EditIcon from "@mui/icons-material/Edit";
 import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 import HttpIcon from "@mui/icons-material/Http";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
+import MonitorHeartOutlinedIcon from "@mui/icons-material/MonitorHeartOutlined";
 import NetworkCheckIcon from "@mui/icons-material/NetworkCheck";
 import PlaylistAddOutlinedIcon from "@mui/icons-material/PlaylistAddOutlined";
-import RefreshIcon from "@mui/icons-material/Refresh";
 import RouterIcon from "@mui/icons-material/Router";
-import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
-import StarIcon from "@mui/icons-material/Star";
-import StarBorderIcon from "@mui/icons-material/StarBorder";
 import StorageOutlinedIcon from "@mui/icons-material/StorageOutlined";
 import TerminalIcon from "@mui/icons-material/Terminal";
-import WifiOffIcon from "@mui/icons-material/WifiOff";
 import {
   Alert,
   Box,
@@ -24,34 +18,30 @@ import {
   CardContent,
   Chip,
   CircularProgress,
-  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   FormControl,
   IconButton,
-  InputAdornment,
   InputLabel,
   MenuItem,
   Select,
-  Skeleton,
   Snackbar,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
+  Tab,
+  Tabs,
   TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { type Host, api } from "../../app/api";
-import { SearchableSelect } from "../../components/SearchableSelect";
+import { hostsApi } from "../../app/api/hosts";
+import type { TemplateItem } from "../../app/api/types";
+import { ConfirmDelete } from "../../app/components/ConfirmDelete";
 import { useFavorites } from "../../lib/favorites";
+import { ItemsBrowseTable } from "./ItemsBrowseTable";
 import { AgentItemPanel } from "./panels/AgentItemPanel";
 import { DatabasePanel } from "./panels/DatabasePanel";
 import {
@@ -69,15 +59,22 @@ import {
 } from "./panels/GenericItemPanels";
 import { HttpItemPanel } from "./panels/HttpItemPanel";
 import { ScriptPanel } from "./panels/ScriptPanel";
-import { FileWatchPanel, ServicePanel } from "./panels/ServiceFilePanel";
+import {
+  FileWatchPanel,
+  ProcessPanel,
+  ServicePanel,
+  WindowsServicePanel,
+} from "./panels/ServiceFilePanel";
 import { SnmpPanel, SnmpTrapPanel } from "./panels/SnmpPanel";
 import type { PanelProps } from "./panels/shared";
-import { type AllItem, type ServerItemKey, isItemStale, timeAgo, valueTypes } from "./shared";
+import type { AllItem, ServerItemKey } from "./shared";
 
 type ItemType =
   | "agent"
   | "http"
   | "service"
+  | "winsvc"
+  | "process"
   | "script"
   | "filewatch"
   | "database"
@@ -121,6 +118,28 @@ const ITEM_TYPE_META: {
       <Alert severity="info" icon={<NetworkCheckIcon fontSize="small" />} sx={{ py: 0.5 }}>
         The Zabbix server tests reachability (ICMP / TCP). The host needs an{" "}
         <strong>agent interface</strong> but not necessarily a running agent.
+      </Alert>
+    ),
+  },
+  {
+    value: "winsvc",
+    label: "Windows Service",
+    icon: <MonitorHeartOutlinedIcon sx={{ fontSize: 18 }} />,
+    alert: (
+      <Alert severity="info" icon={<MonitorHeartOutlinedIcon fontSize="small" />} sx={{ py: 0.5 }}>
+        Uses <strong>service.info[name,state]</strong> — Windows-only. The Zabbix agent must be
+        installed on the host. Use the internal service name, not the display name.
+      </Alert>
+    ),
+  },
+  {
+    value: "process",
+    label: "Process Monitor",
+    icon: <MonitorHeartOutlinedIcon sx={{ fontSize: 18 }} />,
+    alert: (
+      <Alert severity="info" icon={<MonitorHeartOutlinedIcon fontSize="small" />} sx={{ py: 0.5 }}>
+        Uses <strong>proc.num[]</strong> to count matching processes. Filter by name, OS user, or
+        command line. A trigger fires when the count drops to 0.
       </Alert>
     ),
   },
@@ -316,6 +335,10 @@ const ItemPanel = ({
       return <HttpItemPanel {...panelProps} />;
     case "service":
       return <ServicePanel {...panelProps} />;
+    case "winsvc":
+      return <WindowsServicePanel {...panelProps} />;
+    case "process":
+      return <ProcessPanel {...panelProps} />;
     case "filewatch":
       return <FileWatchPanel {...panelProps} />;
     case "script":
@@ -399,7 +422,7 @@ export const Items = () => {
   }, [serverItemKeys.length]);
 
   // ── Edit / delete state ───────────────────────────────────────────────
-  const [confirmDeleteItemId, setConfirmDeleteItemId] = useState<string | null>(null);
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState<AllItem | null>(null);
   const [editItem, setEditItem] = useState<AllItem | null>(null);
   const [editForm, setEditForm] = useState({ name: "", delay: "", status: "0", key_: "" });
   const [editSaving, setEditSaving] = useState(false);
@@ -444,6 +467,94 @@ export const Items = () => {
 
   const { toggle: toggleFavItem, isFav: isFavItem } = useFavorites("favorite_items");
 
+  // ── Main tab (Host Items / Template Items) ────────────────────────────
+  const [mainTab, setMainTab] = useState<0 | 1>(0);
+
+  // ── Template Items tab state ──────────────────────────────────────────
+  const [allTemplates, setAllTemplates] = useState<Array<{ templateid: string; name: string }>>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [templateItems, setTemplateItems] = useState<TemplateItem[]>([]);
+  const [templateItemsLoading, setTemplateItemsLoading] = useState(false);
+  const [templateItemSearch, setTemplateItemSearch] = useState("");
+
+  const [addTplItemOpen, setAddTplItemOpen] = useState(false);
+  const [addTplItemForm, setAddTplItemForm] = useState({
+    name: "",
+    key_: "",
+    type_: "0",
+    value_type: "3",
+    delay: "1m",
+    history: "31d",
+    trends: "365d",
+    units: "",
+    description: "",
+  });
+  const [addTplItemSaving, setAddTplItemSaving] = useState(false);
+
+  const [editTplItem, setEditTplItem] = useState<TemplateItem | null>(null);
+  const [editTplForm, setEditTplForm] = useState({ name: "", delay: "", key_: "" });
+  const [editTplSaving, setEditTplSaving] = useState(false);
+  const [confirmDeleteTplItem, setConfirmDeleteTplItem] = useState<TemplateItem | null>(null);
+
+  const loadAllTemplates = useCallback(() => {
+    if (allTemplates.length > 0) return;
+    setTemplatesLoading(true);
+    hostsApi
+      .listTemplates()
+      .then((r) => setAllTemplates(r.templates.sort((a, b) => a.name.localeCompare(b.name))))
+      .catch(() => {})
+      .finally(() => setTemplatesLoading(false));
+  }, [allTemplates.length]);
+
+  const loadTemplateItems = useCallback((tid: string) => {
+    if (!tid) return;
+    setTemplateItemsLoading(true);
+    hostsApi
+      .getTemplateItems(tid)
+      .then((r) => setTemplateItems(r.items))
+      .catch(() => {})
+      .finally(() => setTemplateItemsLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (mainTab === 1) loadAllTemplates();
+  }, [mainTab, loadAllTemplates]);
+
+  useEffect(() => {
+    if (selectedTemplateId) loadTemplateItems(selectedTemplateId);
+    else setTemplateItems([]);
+  }, [selectedTemplateId, loadTemplateItems]);
+
+  const ITEM_TYPE_NAMES: Record<string, string> = {
+    "0": "Agent",
+    "1": "SNMPv1",
+    "2": "Trapper",
+    "3": "Simple check",
+    "4": "SNMPv2c",
+    "5": "Internal",
+    "6": "SNMPv3",
+    "7": "Agent (active)",
+    "10": "External check",
+    "11": "DB monitor",
+    "13": "SNMP trap",
+    "14": "JMX agent",
+    "15": "Calculated",
+    "16": "Dependent",
+    "17": "HTTP agent",
+    "18": "SNMP agent",
+    "19": "Script",
+    "20": "Browser",
+  };
+
+  const VALUE_TYPE_NAMES: Record<string, string> = {
+    "0": "Numeric (float)",
+    "1": "Character",
+    "2": "Log",
+    "3": "Numeric (uint)",
+    "4": "Text",
+  };
+
   const browseFiltered = browseItems
     .filter((item) => {
       const words = browseSearch.toLowerCase().split(/\s+/).filter(Boolean);
@@ -477,488 +588,441 @@ export const Items = () => {
 
   const activeTypeMeta = ITEM_TYPE_META.find((t) => t.value === itemType);
 
+  const tplFiltered = templateItems.filter((i) => {
+    const q = templateItemSearch.toLowerCase();
+    return !q || i.name.toLowerCase().includes(q) || i.key_.toLowerCase().includes(q);
+  });
+
   return (
     <Stack spacing={3}>
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-          <PlaylistAddOutlinedIcon sx={{ fontSize: 28, color: "primary.main" }} />
-          <Box>
-            <Typography variant="h5" sx={{ fontWeight: 700 }}>
-              Items
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Manage monitoring items and service health monitors.
-            </Typography>
-          </Box>
+      <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>
+            Items
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+            Manage monitoring items and service health monitors.
+          </Typography>
         </Box>
-        <Button variant="contained" startIcon={<PlaylistAddOutlinedIcon />} onClick={openAddDialog}>
-          Add Item
-        </Button>
+        {mainTab === 0 ? (
+          <Button
+            variant="contained"
+            startIcon={<PlaylistAddOutlinedIcon />}
+            onClick={openAddDialog}
+          >
+            Add Item
+          </Button>
+        ) : (
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            disabled={!selectedTemplateId}
+            onClick={() => setAddTplItemOpen(true)}
+          >
+            Add Item to Template
+          </Button>
+        )}
       </Box>
 
-      <Card>
-        <CardContent>
-          <Stack spacing={2}>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems="center">
-              <TextField
-                size="small"
-                placeholder="Search by name or key…"
-                value={browseSearch}
-                onChange={(e) => setBrowseSearch(e.target.value)}
-                sx={{ flex: 1 }}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchOutlinedIcon sx={{ fontSize: 18, color: "text.disabled" }} />
-                    </InputAdornment>
-                  ),
-                  endAdornment: browseSearch ? (
-                    <InputAdornment position="end">
-                      <IconButton size="small" onClick={() => setBrowseSearch("")}>
-                        <ClearIcon sx={{ fontSize: 16 }} />
-                      </IconButton>
-                    </InputAdornment>
-                  ) : undefined,
-                }}
-              />
-              <FormControl size="small" sx={{ minWidth: 200 }}>
-                <InputLabel>Filter by host</InputLabel>
-                <SearchableSelect
-                  label="Filter by host"
-                  value={browseHostFilter}
-                  onChange={(e) => setBrowseHostFilter(e.target.value)}
-                >
-                  <MenuItem value="">
-                    <em>All hosts</em>
-                  </MenuItem>
-                  {hosts.map((h) => (
-                    <MenuItem key={h.hostid} value={h.host}>
-                      {h.host}
-                    </MenuItem>
-                  ))}
-                </SearchableSelect>
-              </FormControl>
-              <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
-                {browseLoading
-                  ? "Loading…"
-                  : `${browseFiltered.length} of ${browseItems.length} items${browseItems.length === 2000 ? " (limit)" : ""}`}
-              </Typography>
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={browseLoading ? <CircularProgress size={14} /> : <RefreshIcon />}
-                onClick={() => void onLoadAllItems()}
-                disabled={browseLoading}
-              >
-                Refresh
-              </Button>
-            </Stack>
+      <Tabs
+        value={mainTab}
+        onChange={(_, v) => setMainTab(v as 0 | 1)}
+        sx={{ borderBottom: 1, borderColor: "divider", mb: -1 }}
+      >
+        <Tab label="Host Items" />
+        <Tab label="Template Items" />
+      </Tabs>
 
-            {(() => {
-              if (!browseHostFilter) return null;
-              const h = hosts.find((hh) => hh.host === browseHostFilter);
-              if (!h?.interfaces?.length) return null;
-              const primary = h.interfaces.find((i) => i.type === "1") ?? h.interfaces[0];
-              if (primary?.available !== "2") return null;
-              return (
-                <Alert
-                  severity="warning"
-                  icon={<WifiOffIcon fontSize="inherit" />}
-                  sx={{ py: 0.5, fontSize: "0.82rem" }}
-                >
-                  <strong>Host agent unreachable.</strong> Zabbix cannot collect data from this
-                  host. Items showing a <strong>No data</strong> chip have not reported within their
-                  expected polling interval — values below are stale.
-                </Alert>
-              );
-            })()}
-
-            <TableContainer
-              sx={{
-                border: "1px solid",
-                borderColor: "divider",
-                borderRadius: 1.5,
-                maxHeight: 520,
-                overflow: "auto",
+      {mainTab === 0 && (
+        <Card>
+          <CardContent>
+            <ItemsBrowseTable
+              items={browseFiltered}
+              allCount={browseItems.length}
+              loading={browseLoading}
+              browseSearch={browseSearch}
+              onSearchChange={setBrowseSearch}
+              browseHostFilter={browseHostFilter}
+              onHostFilterChange={setBrowseHostFilter}
+              hosts={hosts}
+              expandedItemId={expandedItemId}
+              onExpand={setExpandedItemId}
+              onEdit={(item) => {
+                setEditItem(item);
+                setEditForm({
+                  name: item.name,
+                  delay: item.delay,
+                  status: item.status,
+                  key_: item.key_,
+                });
               }}
-            >
-              <Table size="small" stickyHeader>
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ width: 28, pr: 0, bgcolor: "background.paper" }} />
-                    <TableCell sx={{ width: 36, bgcolor: "background.paper" }} />
-                    <TableCell sx={{ fontWeight: 700, bgcolor: "background.paper" }}>
-                      Name
-                    </TableCell>
-                    <TableCell
-                      sx={{ fontWeight: 700, whiteSpace: "nowrap", bgcolor: "background.paper" }}
-                    >
-                      Host
-                    </TableCell>
-                    <TableCell
-                      sx={{ fontWeight: 700, whiteSpace: "nowrap", bgcolor: "background.paper" }}
-                    >
-                      Status
-                    </TableCell>
-                    <TableCell
-                      sx={{ fontWeight: 700, whiteSpace: "nowrap", bgcolor: "background.paper" }}
-                    >
-                      Last Value
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 700, bgcolor: "background.paper" }}>Key</TableCell>
-                    <TableCell
-                      sx={{ fontWeight: 700, whiteSpace: "nowrap", bgcolor: "background.paper" }}
-                    >
-                      Interval
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 700, bgcolor: "background.paper" }}>
-                      Tags
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 700, width: 50, bgcolor: "background.paper" }} />
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {browseLoading ? (
-                    Array.from({ length: 6 }).map((_, i) => (
-                      // biome-ignore lint/suspicious/noArrayIndexKey: skeleton rows
-                      <TableRow key={i}>
-                        {Array.from({ length: 9 }).map((__, j) => (
-                          // biome-ignore lint/suspicious/noArrayIndexKey: skeleton cells
-                          <TableCell key={j}>
-                            <Skeleton variant="text" />
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))
-                  ) : browseFiltered.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={9} align="center" sx={{ py: 4, color: "text.secondary" }}>
-                        {!browseHostFilter
-                          ? "Select a host above to view its items."
-                          : browseSearch
-                            ? "No items match the search."
-                            : "No items found on this host."}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    browseFiltered.map((item) => {
-                      const isExpanded = expandedItemId === item.itemid;
-                      return (
-                        <>
-                          <TableRow
-                            key={item.itemid}
-                            hover
-                            onClick={() => setExpandedItemId(isExpanded ? null : item.itemid)}
-                            sx={{
-                              cursor: "pointer",
-                              ...(isItemStale(item) ? { bgcolor: "rgba(239,68,68,0.04)" } : {}),
+              onDelete={setConfirmDeleteItem}
+              isFav={isFavItem}
+              toggleFav={toggleFavItem}
+              onRefresh={() => void onLoadAllItems()}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {mainTab === 1 && (
+        <Card>
+          <CardContent>
+            <Stack spacing={2}>
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                <TextField
+                  size="small"
+                  placeholder="Search items…"
+                  value={templateItemSearch}
+                  onChange={(e) => setTemplateItemSearch(e.target.value)}
+                  sx={{ flex: 1 }}
+                />
+                <FormControl size="small" sx={{ minWidth: 300 }}>
+                  <InputLabel id="tpl-select-label">
+                    {templatesLoading ? "Loading templates…" : "Template"}
+                  </InputLabel>
+                  <Select
+                    labelId="tpl-select-label"
+                    label={templatesLoading ? "Loading templates…" : "Template"}
+                    value={selectedTemplateId}
+                    onChange={(e) => setSelectedTemplateId(e.target.value)}
+                  >
+                    {allTemplates.map((t) => (
+                      <MenuItem key={t.templateid} value={t.templateid}>
+                        {t.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <Tooltip title="Reload">
+                  <IconButton
+                    onClick={() => selectedTemplateId && loadTemplateItems(selectedTemplateId)}
+                    disabled={!selectedTemplateId}
+                  >
+                    <RouterIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+
+              {!selectedTemplateId && (
+                <Typography color="text.secondary" variant="body2">
+                  Select a template to view its items.
+                </Typography>
+              )}
+
+              {templateItemsLoading && <CircularProgress size={24} />}
+
+              {!templateItemsLoading && selectedTemplateId && tplFiltered.length === 0 && (
+                <Typography color="text.secondary" variant="body2">
+                  No items found on this template.
+                </Typography>
+              )}
+
+              {!templateItemsLoading && tplFiltered.length > 0 && (
+                <Box sx={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr>
+                        {["Name", "Key", "Type", "Value type", "Interval", "Status", "Actions"].map(
+                          (h) => (
+                            <th
+                              key={h}
+                              style={{
+                                textAlign: "left",
+                                padding: "6px 10px",
+                                borderBottom: "1px solid rgba(128,128,128,0.2)",
+                                fontSize: 12,
+                                fontWeight: 600,
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {h}
+                            </th>
+                          ),
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tplFiltered.map((item) => (
+                        <tr key={item.itemid}>
+                          <td style={{ padding: "6px 10px", fontSize: 13 }}>{item.name}</td>
+                          <td
+                            style={{
+                              padding: "6px 10px",
+                              fontSize: 12,
+                              fontFamily: "monospace",
+                              color: "rgba(128,128,128,0.9)",
                             }}
                           >
-                            <TableCell sx={{ width: 28, pr: 0 }}>
-                              <IconButton size="small" sx={{ p: 0.25 }}>
-                                {isExpanded ? (
-                                  <KeyboardArrowDownIcon sx={{ fontSize: 16 }} />
-                                ) : (
-                                  <KeyboardArrowRightIcon sx={{ fontSize: 16 }} />
-                                )}
+                            {item.key_}
+                          </td>
+                          <td style={{ padding: "6px 10px", fontSize: 12 }}>
+                            {ITEM_TYPE_NAMES[item.type] ?? item.type}
+                          </td>
+                          <td style={{ padding: "6px 10px", fontSize: 12 }}>
+                            {VALUE_TYPE_NAMES[item.value_type] ?? item.value_type}
+                          </td>
+                          <td style={{ padding: "6px 10px", fontSize: 12 }}>{item.delay}</td>
+                          <td style={{ padding: "6px 10px" }}>
+                            <Chip
+                              label={item.status === "0" ? "Enabled" : "Disabled"}
+                              size="small"
+                              color={item.status === "0" ? "success" : "default"}
+                            />
+                          </td>
+                          <td style={{ padding: "6px 4px", whiteSpace: "nowrap" }}>
+                            <Tooltip title="Edit">
+                              <IconButton
+                                size="small"
+                                onClick={() => {
+                                  setEditTplItem(item);
+                                  setEditTplForm({
+                                    name: item.name,
+                                    delay: item.delay,
+                                    key_: item.key_,
+                                  });
+                                }}
+                              >
+                                <EditIcon fontSize="small" />
                               </IconButton>
-                            </TableCell>
-                            <TableCell padding="checkbox">
-                              <Tooltip
-                                title={
-                                  isFavItem(item.itemid)
-                                    ? "Remove from favourites"
-                                    : "Add to favourites"
-                                }
+                            </Tooltip>
+                            <Tooltip title="Delete">
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => setConfirmDeleteTplItem(item)}
                               >
-                                <IconButton
-                                  size="small"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleFavItem(item.itemid);
-                                  }}
-                                  sx={{
-                                    color: isFavItem(item.itemid)
-                                      ? "warning.main"
-                                      : "action.disabled",
-                                  }}
-                                >
-                                  {isFavItem(item.itemid) ? (
-                                    <StarIcon sx={{ fontSize: 16 }} />
-                                  ) : (
-                                    <StarBorderIcon sx={{ fontSize: 16 }} />
-                                  )}
-                                </IconButton>
-                              </Tooltip>
-                            </TableCell>
-                            <TableCell>
-                              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                                <Typography variant="body2">{item.name}</Typography>
-                                {item.templateid === "0" && (
-                                  <Chip
-                                    label="custom"
-                                    size="small"
-                                    color="primary"
-                                    variant="outlined"
-                                    sx={{
-                                      height: 14,
-                                      fontSize: "0.55rem",
-                                      fontWeight: 700,
-                                      px: 0.25,
-                                    }}
-                                  />
-                                )}
-                              </Box>
-                            </TableCell>
-                            <TableCell>
-                              <Typography
-                                variant="body2"
-                                sx={{ fontWeight: 500, whiteSpace: "nowrap" }}
-                              >
-                                {item.hostname}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Box sx={{ display: "flex", flexDirection: "column", gap: 0.4 }}>
-                                <Chip
-                                  label={item.status === "0" ? "Enabled" : "Disabled"}
-                                  size="small"
-                                  color={item.status === "0" ? "success" : "default"}
-                                  variant="outlined"
-                                  sx={{ height: 18, fontSize: "0.65rem" }}
-                                />
-                                {item.state === "1" && (
-                                  <Chip
-                                    label="Not Supported"
-                                    size="small"
-                                    color="error"
-                                    variant="filled"
-                                    sx={{ height: 16, fontSize: "0.6rem" }}
-                                  />
-                                )}
-                                {item.state !== "1" && isItemStale(item) && (
-                                  <Tooltip
-                                    title={
-                                      item.lastclock
-                                        ? `Last data ${timeAgo(item.lastclock)} — host may be unreachable`
-                                        : "Never collected — host may be unreachable"
-                                    }
-                                    placement="top"
-                                  >
-                                    <Chip
-                                      label="No data"
-                                      size="small"
-                                      variant="filled"
-                                      sx={{
-                                        height: 16,
-                                        fontSize: "0.6rem",
-                                        bgcolor: "#EF4444",
-                                        color: "#fff",
-                                      }}
-                                    />
-                                  </Tooltip>
-                                )}
-                              </Box>
-                            </TableCell>
-                            <TableCell>
-                              <Tooltip
-                                title={
-                                  item.lastclock
-                                    ? `Last collected ${timeAgo(item.lastclock)}`
-                                    : "No data collected yet"
-                                }
-                                placement="top"
-                              >
-                                <Typography
-                                  variant="body2"
-                                  sx={{
-                                    fontFamily: "monospace",
-                                    fontSize: "0.75rem",
-                                    color:
-                                      item.lastvalue && !isItemStale(item)
-                                        ? "text.primary"
-                                        : "text.disabled",
-                                    whiteSpace: "nowrap",
-                                  }}
-                                >
-                                  {isItemStale(item) ? "—" : item.lastvalue || "—"}
-                                </Typography>
-                              </Tooltip>
-                            </TableCell>
-                            <TableCell sx={{ maxWidth: 220 }}>
-                              <Tooltip title={item.key_} placement="top">
-                                <Typography
-                                  variant="body2"
-                                  sx={{
-                                    fontFamily: "monospace",
-                                    fontSize: "0.75rem",
-                                    color: "text.secondary",
-                                    whiteSpace: "nowrap",
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                  }}
-                                >
-                                  {item.key_}
-                                </Typography>
-                              </Tooltip>
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="body2" sx={{ whiteSpace: "nowrap" }}>
-                                {item.delay}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.4 }}>
-                                {(item.tags ?? []).map((t: { tag: string; value: string }) => (
-                                  <Chip
-                                    key={`${t.tag}:${t.value}`}
-                                    label={t.value ? `${t.tag}: ${t.value}` : t.tag}
-                                    size="small"
-                                    variant="outlined"
-                                    sx={{ height: 16, fontSize: "0.6rem" }}
-                                  />
-                                ))}
-                              </Box>
-                            </TableCell>
-                            <TableCell>
-                              <Stack direction="row" spacing={0.5}>
-                                <Tooltip title="Edit item">
-                                  <IconButton
-                                    size="small"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setEditItem(item);
-                                      setEditForm({
-                                        name: item.name,
-                                        delay: item.delay,
-                                        status: item.status,
-                                        key_: item.key_,
-                                      });
-                                    }}
-                                  >
-                                    <EditOutlinedIcon fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                                <Tooltip title="Delete item">
-                                  <IconButton
-                                    size="small"
-                                    color="error"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setConfirmDeleteItemId(item.itemid);
-                                    }}
-                                  >
-                                    <DeleteOutlineIcon fontSize="small" />
-                                  </IconButton>
-                                </Tooltip>
-                              </Stack>
-                            </TableCell>
-                          </TableRow>
-                          <TableRow key={`${item.itemid}-detail`}>
-                            <TableCell
-                              colSpan={10}
-                              sx={{ py: 0, border: isExpanded ? undefined : "none" }}
-                            >
-                              <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                                <Box
-                                  sx={{
-                                    px: 3,
-                                    py: 1.5,
-                                    bgcolor: "action.hover",
-                                    borderRadius: 1,
-                                    my: 0.5,
-                                  }}
-                                >
-                                  <Typography
-                                    variant="caption"
-                                    sx={{
-                                      fontWeight: 700,
-                                      color: "text.secondary",
-                                      textTransform: "uppercase",
-                                      letterSpacing: "0.07em",
-                                      fontSize: "0.6rem",
-                                    }}
-                                  >
-                                    Item details
-                                  </Typography>
-                                  <Box sx={{ display: "flex", gap: 4, mt: 0.75, flexWrap: "wrap" }}>
-                                    <Box>
-                                      <Typography variant="caption" color="text.disabled">
-                                        Type
-                                      </Typography>
-                                      <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
-                                        {valueTypes.find(
-                                          (vt) => vt.value === Number(item.value_type),
-                                        )?.label ?? `Type ${item.value_type}`}
-                                      </Typography>
-                                    </Box>
-                                    <Box>
-                                      <Typography variant="caption" color="text.disabled">
-                                        Interval
-                                      </Typography>
-                                      <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
-                                        {item.delay || "—"}
-                                      </Typography>
-                                    </Box>
-                                    <Box>
-                                      <Typography variant="caption" color="text.disabled">
-                                        Source
-                                      </Typography>
-                                      <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
-                                        {item.templateid === "0" ? "Custom item" : "From template"}
-                                      </Typography>
-                                    </Box>
-                                    <Box>
-                                      <Typography variant="caption" color="text.disabled">
-                                        Last collected
-                                      </Typography>
-                                      <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
-                                        {item.lastclock
-                                          ? new Date(item.lastclock * 1000).toLocaleString()
-                                          : "Never"}
-                                      </Typography>
-                                    </Box>
-                                  </Box>
-                                  <Box
-                                    sx={{
-                                      mt: 1,
-                                      px: 1.5,
-                                      py: 0.75,
-                                      bgcolor: "background.paper",
-                                      borderRadius: 1,
-                                      borderLeft: "3px solid",
-                                      borderColor: "divider",
-                                    }}
-                                  >
-                                    <Typography variant="caption" color="text.disabled">
-                                      Key
-                                    </Typography>
-                                    <Typography
-                                      variant="body2"
-                                      sx={{
-                                        fontFamily: "monospace",
-                                        fontSize: "0.78rem",
-                                        wordBreak: "break-all",
-                                        mt: 0.25,
-                                      }}
-                                    >
-                                      {item.key_}
-                                    </Typography>
-                                  </Box>
-                                </Box>
-                              </Collapse>
-                            </TableCell>
-                          </TableRow>
-                        </>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
+                                <DeleteOutlineIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </Box>
+              )}
+            </Stack>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Add item to template dialog ── */}
+      <Dialog
+        open={addTplItemOpen}
+        onClose={() => setAddTplItemOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 700 }}>Add Item to Template</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <TextField
+              label="Item name"
+              size="small"
+              fullWidth
+              value={addTplItemForm.name}
+              onChange={(e) => setAddTplItemForm((f) => ({ ...f, name: e.target.value }))}
+            />
+            <TextField
+              label="Item key"
+              size="small"
+              fullWidth
+              placeholder="e.g. agent.version"
+              value={addTplItemForm.key_}
+              onChange={(e) => setAddTplItemForm((f) => ({ ...f, key_: e.target.value }))}
+            />
+            <FormControl size="small" fullWidth>
+              <InputLabel>Item type</InputLabel>
+              <Select
+                label="Item type"
+                value={addTplItemForm.type_}
+                onChange={(e) => setAddTplItemForm((f) => ({ ...f, type_: e.target.value }))}
+              >
+                {Object.entries(ITEM_TYPE_NAMES).map(([k, v]) => (
+                  <MenuItem key={k} value={k}>
+                    {v}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" fullWidth>
+              <InputLabel>Value type</InputLabel>
+              <Select
+                label="Value type"
+                value={addTplItemForm.value_type}
+                onChange={(e) => setAddTplItemForm((f) => ({ ...f, value_type: e.target.value }))}
+              >
+                {Object.entries(VALUE_TYPE_NAMES).map(([k, v]) => (
+                  <MenuItem key={k} value={k}>
+                    {v}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <Stack direction="row" spacing={1}>
+              <TextField
+                label="Interval"
+                size="small"
+                value={addTplItemForm.delay}
+                onChange={(e) => setAddTplItemForm((f) => ({ ...f, delay: e.target.value }))}
+                sx={{ width: 120 }}
+              />
+              <TextField
+                label="History"
+                size="small"
+                value={addTplItemForm.history}
+                onChange={(e) => setAddTplItemForm((f) => ({ ...f, history: e.target.value }))}
+                sx={{ width: 120 }}
+              />
+              <TextField
+                label="Trends"
+                size="small"
+                value={addTplItemForm.trends}
+                onChange={(e) => setAddTplItemForm((f) => ({ ...f, trends: e.target.value }))}
+                sx={{ width: 120 }}
+              />
+            </Stack>
+            <TextField
+              label="Units (optional)"
+              size="small"
+              fullWidth
+              value={addTplItemForm.units}
+              onChange={(e) => setAddTplItemForm((f) => ({ ...f, units: e.target.value }))}
+            />
+            <TextField
+              label="Description (optional)"
+              size="small"
+              fullWidth
+              multiline
+              rows={2}
+              value={addTplItemForm.description}
+              onChange={(e) => setAddTplItemForm((f) => ({ ...f, description: e.target.value }))}
+            />
           </Stack>
-        </CardContent>
-      </Card>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddTplItemOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            disabled={addTplItemSaving || !addTplItemForm.name || !addTplItemForm.key_}
+            onClick={async () => {
+              setAddTplItemSaving(true);
+              try {
+                await hostsApi.addTemplateItem(selectedTemplateId, {
+                  name: addTplItemForm.name,
+                  key_: addTplItemForm.key_,
+                  type_: Number.parseInt(addTplItemForm.type_, 10),
+                  value_type: Number.parseInt(addTplItemForm.value_type, 10),
+                  delay: addTplItemForm.delay,
+                  history: addTplItemForm.history,
+                  trends: addTplItemForm.trends,
+                  units: addTplItemForm.units || undefined,
+                  description: addTplItemForm.description || undefined,
+                });
+                showToast("Item added to template.", "success");
+                setAddTplItemOpen(false);
+                setAddTplItemForm({
+                  name: "",
+                  key_: "",
+                  type_: "0",
+                  value_type: "3",
+                  delay: "1m",
+                  history: "31d",
+                  trends: "365d",
+                  units: "",
+                  description: "",
+                });
+                loadTemplateItems(selectedTemplateId);
+              } catch (e) {
+                showToast(e instanceof Error ? e.message : String(e), "error");
+              } finally {
+                setAddTplItemSaving(false);
+              }
+            }}
+          >
+            {addTplItemSaving ? <CircularProgress size={14} /> : "Add"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Edit template item dialog ── */}
+      <Dialog open={!!editTplItem} onClose={() => setEditTplItem(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Edit Template Item</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ pt: 1 }}>
+            <TextField
+              label="Item name"
+              size="small"
+              fullWidth
+              value={editTplForm.name}
+              onChange={(e) => setEditTplForm((f) => ({ ...f, name: e.target.value }))}
+            />
+            <TextField
+              label="Item key"
+              size="small"
+              fullWidth
+              value={editTplForm.key_}
+              onChange={(e) => setEditTplForm((f) => ({ ...f, key_: e.target.value }))}
+            />
+            <TextField
+              label="Interval"
+              size="small"
+              value={editTplForm.delay}
+              onChange={(e) => setEditTplForm((f) => ({ ...f, delay: e.target.value }))}
+              sx={{ width: 140 }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditTplItem(null)}>Cancel</Button>
+          <Button
+            variant="contained"
+            disabled={editTplSaving || !editTplForm.name}
+            onClick={async () => {
+              if (!editTplItem) return;
+              setEditTplSaving(true);
+              try {
+                const keyChanged = editTplForm.key_ !== editTplItem.key_;
+                await hostsApi.updateTemplateItem(selectedTemplateId, editTplItem.itemid, {
+                  name: editTplForm.name,
+                  delay: editTplForm.delay || undefined,
+                  key_: keyChanged ? editTplForm.key_ : undefined,
+                });
+                showToast("Template item updated.", "success");
+                setEditTplItem(null);
+                loadTemplateItems(selectedTemplateId);
+              } catch (e) {
+                showToast(e instanceof Error ? e.message : String(e), "error");
+              } finally {
+                setEditTplSaving(false);
+              }
+            }}
+          >
+            {editTplSaving ? <CircularProgress size={14} /> : "Save"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <ConfirmDelete
+        open={confirmDeleteTplItem !== null}
+        name={confirmDeleteTplItem?.name ?? ""}
+        onConfirm={async () => {
+          if (!confirmDeleteTplItem) return;
+          try {
+            await hostsApi.deleteTemplateItem(selectedTemplateId, confirmDeleteTplItem.itemid);
+            showToast("Template item deleted.", "success");
+            setTemplateItems((prev) =>
+              prev.filter((i) => i.itemid !== confirmDeleteTplItem.itemid),
+            );
+          } catch (e) {
+            showToast(e instanceof Error ? e.message : String(e), "error");
+          } finally {
+            setConfirmDeleteTplItem(null);
+          }
+        }}
+        onClose={() => setConfirmDeleteTplItem(null)}
+      />
 
       {/* ── Add item dialog ── */}
       <Dialog open={addItemOpen} onClose={() => setAddItemOpen(false)} maxWidth="md" fullWidth>
@@ -1074,34 +1138,16 @@ export const Items = () => {
         </DialogActions>
       </Dialog>
 
-      {/* ── Confirm delete ── */}
-      <Dialog
-        open={confirmDeleteItemId !== null}
-        onClose={() => setConfirmDeleteItemId(null)}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle sx={{ fontWeight: 700 }}>Delete item?</DialogTitle>
-        <DialogContent>
-          <Typography>
-            This will permanently remove the item from Zabbix. This cannot be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmDeleteItemId(null)}>Cancel</Button>
-          <Button
-            color="error"
-            variant="contained"
-            onClick={async () => {
-              if (!confirmDeleteItemId) return;
-              await onDeleteItem(confirmDeleteItemId);
-              setConfirmDeleteItemId(null);
-            }}
-          >
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDelete
+        open={confirmDeleteItem !== null}
+        name={confirmDeleteItem?.name ?? ""}
+        onConfirm={async () => {
+          if (!confirmDeleteItem) return;
+          await onDeleteItem(confirmDeleteItem.itemid);
+          setConfirmDeleteItem(null);
+        }}
+        onClose={() => setConfirmDeleteItem(null)}
+      />
 
       <Snackbar
         open={toast.open}

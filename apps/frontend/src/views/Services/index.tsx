@@ -1,6 +1,5 @@
 "use client";
-import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
-import { Alert, Box, Card, Snackbar, Stack, Typography } from "@mui/material";
+import { Alert, Box, Card, Snackbar, Stack } from "@mui/material";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { ServicesTab } from "./ServicesTab";
@@ -24,17 +23,6 @@ const ServicesInner = () => {
 
   return (
     <Stack spacing={3}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-        <AccountTreeOutlinedIcon sx={{ fontSize: 28, color: "primary.main" }} />
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>
-            Services
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Service health tree and SLA definitions.
-          </Typography>
-        </Box>
-      </Box>
       <Card>
         <Box sx={{ p: 2 }}>
           {tab === 0 && <ServicesTab showToast={showToast} />}

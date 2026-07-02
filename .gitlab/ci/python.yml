@@ -1,3 +1,4 @@
+---
 # =============================================================================
 # Backend (Python / FastAPI) pipeline.
 # =============================================================================
@@ -8,6 +9,8 @@
   needs:
     - job: detect
       artifacts: true
+    - job: validate:variables
+      artifacts: false
 
 # ── Lint (ruff) ───────────────────────────────────────────────────────────────
 backend:lint:
@@ -52,6 +55,8 @@ backend:docker:build:
   needs:
     - job: detect
       artifacts: true
+    - job: validate:variables
+      artifacts: false
     - job: backend:lint
       optional: true
     - job: backend:typecheck

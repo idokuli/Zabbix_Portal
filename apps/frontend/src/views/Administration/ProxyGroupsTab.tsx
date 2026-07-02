@@ -26,6 +26,8 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../app/api";
+import { TabHeader } from "../../app/components/TabHeader";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 import { ConfirmDelete, type ProxyGroup } from "./shared";
 
 export const ProxyGroupsTab = ({
@@ -42,21 +44,30 @@ export const ProxyGroupsTab = ({
     min_online: 1,
     description: "",
   });
+  const tick = useRefreshTick();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const r = await api.listProxyGroups();
-      setItems(r.proxy_groups);
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : String(e), "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [showToast]);
+  const load = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+      try {
+        const r = await api.listProxyGroups();
+        setItems(r.proxy_groups);
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : String(e), "error");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [showToast],
+  );
   useEffect(() => {
     void load();
   }, [load]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) void load(true);
+  }, [tick]);
 
   const onAdd = async () => {
     setSaving(true);
@@ -87,6 +98,10 @@ export const ProxyGroupsTab = ({
 
   return (
     <>
+      <TabHeader
+        title="Proxy Groups"
+        description="Group proxies for high-availability and load distribution."
+      />
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
@@ -100,7 +115,7 @@ export const ProxyGroupsTab = ({
         </Box>
         <Stack direction="row" spacing={1}>
           <Tooltip title="Refresh">
-            <IconButton size="small" onClick={load} disabled={loading}>
+            <IconButton size="small" onClick={() => void load()} disabled={loading}>
               <RefreshIcon sx={{ fontSize: 16 }} />
             </IconButton>
           </Tooltip>

@@ -91,7 +91,10 @@ export const BulkImportAccordion = ({
             hidden
             type="file"
             accept=".csv,.xlsx"
-            onChange={(e) => pickUploadFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => {
+              pickUploadFile(e.target.files?.[0] ?? null);
+              e.target.value = "";
+            }}
           />
         </Box>
         <Stack direction="row" spacing={2} alignItems="center">

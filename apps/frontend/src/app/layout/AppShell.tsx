@@ -53,11 +53,13 @@ import {
 } from "@mui/material";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import type { PropsWithChildren, ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { type StoredNotif, api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { useThemeMode } from "../context/ThemeContext";
+
 import { NotifCard, NotificationCenter } from "./NotificationCenter";
 import { SOUND_PRESETS } from "./alertSounds";
 import { useAlertPolling } from "./useAlertPolling";
@@ -65,248 +67,251 @@ import { useSoundSettings } from "./useSoundSettings";
 
 const drawerWidth = 240;
 
-type NavItem = { href: string; label: string; icon: ReactNode; adminOnly?: boolean };
+type NavItem = { href: string; labelKey: string; icon: ReactNode; adminOnly?: boolean };
 type NavGroup = {
   id: string;
-  label: string;
+  labelKey: string;
   icon: ReactNode;
   items: NavItem[];
   adminOnly?: boolean;
   href?: string;
-  sectionLabel?: string;
+  sectionLabelKey?: string;
 };
 
 const navGroups: NavGroup[] = [
-  // ── Overview ──────────────────────────────────────────────────────────
   {
     id: "overview",
-    label: "Overview",
+    labelKey: "nav.overview",
     icon: <DashboardOutlinedIcon sx={{ fontSize: 18 }} />,
     href: "/",
     items: [],
   },
-  // ── Hosts ─────────────────────────────────────────────────────────────
   {
     id: "hosts",
-    label: "Hosts",
+    labelKey: "nav.hosts",
     icon: <ComputerOutlinedIcon sx={{ fontSize: 18 }} />,
     href: "/hosts",
     items: [],
   },
-  // ── Monitoring ────────────────────────────────────────────────────────
   {
     id: "monitoring",
-    label: "Monitoring",
+    labelKey: "nav.monitoring",
     icon: <ShowChartOutlinedIcon sx={{ fontSize: 18 }} />,
     items: [
       {
         href: "/metrics?tab=problems",
-        label: "Problems",
+        labelKey: "nav.problems",
         icon: <WarningAmberOutlinedIcon sx={{ fontSize: 18 }} />,
       },
       {
         href: "/metrics?tab=latest-data",
-        label: "Latest Data",
+        labelKey: "nav.latestData",
         icon: <StorageOutlinedIcon sx={{ fontSize: 18 }} />,
       },
-      { href: "/items", label: "Items", icon: <UploadFileOutlinedIcon sx={{ fontSize: 18 }} /> },
+      {
+        href: "/items",
+        labelKey: "nav.items",
+        icon: <UploadFileOutlinedIcon sx={{ fontSize: 18 }} />,
+      },
       {
         href: "/triggers",
-        label: "Triggers",
+        labelKey: "nav.triggers",
         icon: <NotificationsActiveOutlinedIcon sx={{ fontSize: 18 }} />,
       },
     ],
   },
-  // ── Dashboard ─────────────────────────────────────────────────────────
   {
     id: "dashboard",
-    label: "Dashboard",
+    labelKey: "nav.dashboard",
     icon: <SpaceDashboardOutlinedIcon sx={{ fontSize: 18 }} />,
     items: [
       {
         href: "/dashboard?tab=graphs",
-        label: "Graphs",
+        labelKey: "nav.graphs",
         icon: <ShowChartOutlinedIcon sx={{ fontSize: 18 }} />,
       },
       {
         href: "/dashboard?tab=host-metrics",
-        label: "Host Metrics",
+        labelKey: "nav.hostMetrics",
         icon: <ComputerOutlinedIcon sx={{ fontSize: 18 }} />,
       },
       {
         href: "/dashboard?tab=recent-items",
-        label: "Recent Items",
+        labelKey: "nav.recentItems",
         icon: <StorageOutlinedIcon sx={{ fontSize: 18 }} />,
       },
     ],
   },
-  // ── Services ──────────────────────────────────────────────────────────
   {
     id: "services",
-    label: "Services",
+    labelKey: "nav.services",
     icon: <TaskAltOutlinedIcon sx={{ fontSize: 18 }} />,
     items: [
       {
         href: "/services",
-        label: "Business Services",
+        labelKey: "nav.businessServices",
         icon: <TaskAltOutlinedIcon sx={{ fontSize: 18 }} />,
       },
     ],
   },
-  // ── Alerts ────────────────────────────────────────────────────────────
   {
     id: "alerts",
-    label: "Alerts",
+    labelKey: "nav.alerts",
     icon: <NotificationsActiveOutlinedIcon sx={{ fontSize: 18 }} />,
     items: [
       {
-        href: "/alerts-management",
-        label: "Alert Rules",
+        href: "/metrics?tab=alert-rules",
+        labelKey: "nav.alertRules",
         icon: <NotificationsActiveOutlinedIcon sx={{ fontSize: 18 }} />,
+      },
+      {
+        href: "/alerts-management",
+        labelKey: "nav.zabbixActions",
+        icon: <PlayArrowOutlinedIcon sx={{ fontSize: 18 }} />,
       },
     ],
   },
-  // ── Data Collection ───────────────────────────────────────────────────
   {
     id: "datacollection",
-    label: "Data Collection",
+    labelKey: "nav.dataCollection",
     icon: <AccountTreeOutlinedIcon sx={{ fontSize: 18 }} />,
     items: [
       {
         href: "/data-collection?tab=template-groups",
-        label: "Template Groups",
+        labelKey: "nav.templateGroups",
         icon: <AccountTreeOutlinedIcon sx={{ fontSize: 18 }} />,
       },
       {
         href: "/data-collection?tab=host-groups",
-        label: "Host Groups",
+        labelKey: "nav.hostGroups",
         icon: <GroupsOutlinedIcon sx={{ fontSize: 18 }} />,
       },
       {
         href: "/data-collection?tab=templates",
-        label: "Templates",
+        labelKey: "nav.templates",
         icon: <StorageOutlinedIcon sx={{ fontSize: 18 }} />,
       },
       {
         href: "/data-collection?tab=maintenance",
-        label: "Maintenance",
+        labelKey: "nav.maintenance",
         icon: <SettingsOutlinedIcon sx={{ fontSize: 18 }} />,
       },
       {
         href: "/data-collection?tab=event-correlation",
-        label: "Event Correlation",
+        labelKey: "nav.eventCorrelation",
         icon: <ShowChartOutlinedIcon sx={{ fontSize: 18 }} />,
       },
       {
         href: "/data-collection?tab=discovery",
-        label: "Discovery",
+        labelKey: "nav.discovery",
         icon: <ComputerOutlinedIcon sx={{ fontSize: 18 }} />,
       },
     ],
   },
-  // ── Reports ───────────────────────────────────────────────────────────
   {
     id: "reports",
-    label: "Reports",
+    labelKey: "nav.reports",
     icon: <AssessmentOutlinedIcon sx={{ fontSize: 18 }} />,
     items: [
       {
         href: "/reports?tab=availability",
-        label: "Availability",
+        labelKey: "nav.availability",
         icon: <AssessmentOutlinedIcon sx={{ fontSize: 18 }} />,
       },
       {
         href: "/reports?tab=top-triggers",
-        label: "Top Triggers",
+        labelKey: "nav.topTriggers",
         icon: <WarningAmberOutlinedIcon sx={{ fontSize: 18 }} />,
       },
       {
         href: "/reports?tab=audit-log",
-        label: "Audit Log",
+        labelKey: "nav.auditLog",
         icon: <StorageOutlinedIcon sx={{ fontSize: 18 }} />,
       },
       {
         href: "/reports?tab=action-log",
-        label: "Action Log",
+        labelKey: "nav.actionLog",
         icon: <PlayArrowOutlinedIcon sx={{ fontSize: 18 }} />,
       },
       {
         href: "/reports?tab=notifications",
-        label: "Alert History",
+        labelKey: "nav.alertHistory",
         icon: <NotificationsNoneOutlinedIcon sx={{ fontSize: 18 }} />,
       },
     ],
   },
-  // ── Management section ────────────────────────────────────────────────
   {
     id: "users",
-    label: "Users",
+    labelKey: "nav.usersGroup",
     icon: <PeopleOutlinedIcon sx={{ fontSize: 18 }} />,
-    sectionLabel: "Management",
+    sectionLabelKey: "nav.sectionManagement",
     items: [
-      { href: "/users", label: "Portal Users", icon: <PeopleOutlinedIcon sx={{ fontSize: 18 }} /> },
-      { href: "/teams", label: "Teams", icon: <GroupsOutlinedIcon sx={{ fontSize: 18 }} /> },
+      {
+        href: "/users",
+        labelKey: "nav.portalUsers",
+        icon: <PeopleOutlinedIcon sx={{ fontSize: 18 }} />,
+      },
+      { href: "/teams", labelKey: "nav.teams", icon: <GroupsOutlinedIcon sx={{ fontSize: 18 }} /> },
     ],
   },
-  // ── Administration section ────────────────────────────────────────────
   {
     id: "useradmin",
-    label: "User Admin",
+    labelKey: "nav.userAdmin",
     icon: <AdminPanelSettingsOutlinedIcon sx={{ fontSize: 18 }} />,
-    sectionLabel: "Administration",
+    sectionLabelKey: "nav.sectionAdministration",
     adminOnly: true,
     items: [
       {
         href: "/users-management?tab=user-groups",
-        label: "User Groups",
+        labelKey: "nav.userGroups",
         icon: <GroupsOutlinedIcon sx={{ fontSize: 18 }} />,
       },
       {
         href: "/users-management?tab=roles",
-        label: "User Roles",
+        labelKey: "nav.userRoles",
         icon: <AdminPanelSettingsOutlinedIcon sx={{ fontSize: 18 }} />,
       },
       {
         href: "/users-management?tab=api-tokens",
-        label: "API Tokens",
+        labelKey: "nav.apiTokens",
         icon: <KeyOutlinedIcon sx={{ fontSize: 18 }} />,
       },
       {
         href: "/users-management?tab=authentication",
-        label: "Portal Login",
+        labelKey: "nav.portalLogin",
         icon: <LockOutlinedIcon sx={{ fontSize: 18 }} />,
       },
     ],
   },
   {
     id: "administration",
-    label: "Zabbix Server",
+    labelKey: "nav.zabbixServer",
     icon: <SettingsOutlinedIcon sx={{ fontSize: 18 }} />,
     adminOnly: true,
     items: [
       {
         href: "/administration?tab=proxies",
-        label: "Proxies",
+        labelKey: "nav.proxies",
         icon: <RouterOutlinedIcon sx={{ fontSize: 18 }} />,
       },
       {
         href: "/administration?tab=proxy-groups",
-        label: "Proxy Groups",
+        labelKey: "nav.proxyGroups",
         icon: <AccountTreeOutlinedIcon sx={{ fontSize: 18 }} />,
       },
       {
         href: "/administration?tab=macros",
-        label: "Global Macros",
+        labelKey: "nav.globalMacros",
         icon: <CodeOutlinedIcon sx={{ fontSize: 18 }} />,
       },
       {
         href: "/administration?tab=housekeeping",
-        label: "Housekeeping",
+        labelKey: "nav.housekeeping",
         icon: <SettingsOutlinedIcon sx={{ fontSize: 18 }} />,
       },
       {
         href: "/administration?tab=authentication",
-        label: "Zabbix Auth",
+        labelKey: "nav.zabbixAuth",
         icon: <SecurityOutlinedIcon sx={{ fontSize: 18 }} />,
       },
     ],
@@ -320,7 +325,7 @@ const StatusDot = ({ ok, label }: { ok: boolean | null; label: string }) => (
         width: 7,
         height: 7,
         borderRadius: "50%",
-        backgroundColor: ok === null ? "#64748B" : ok ? "#22C55E" : "#EF4444",
+        backgroundColor: ok === null ? "#575E6E" : ok ? "#5A9E70" : "#C96060",
         boxShadow: ok ? "0 0 6px rgba(34,197,94,0.7)" : "none",
         flexShrink: 0,
       }}
@@ -331,17 +336,8 @@ const StatusDot = ({ ok, label }: { ok: boolean | null; label: string }) => (
   </Box>
 );
 
-// ── AppShell ──────────────────────────────────────────────────────────────────
-
-const loadStoredHistory = (): StoredNotif[] => {
-  try {
-    return JSON.parse(localStorage.getItem("notifHistory") ?? "[]");
-  } catch {
-    return [];
-  }
-};
-
 const AppShellInner = ({ children }: PropsWithChildren) => {
+  const { t } = useTranslation();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { user, logout } = useAuth();
@@ -356,9 +352,8 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
     [pathname, searchParams],
   );
 
-  const { mode, toggle: toggleMode, direction, toggleDirection } = useThemeMode();
+  const { mode, toggle: toggleMode } = useThemeMode();
   const isDark = mode === "dark";
-  const isRtl = direction === "rtl";
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
     const state: Record<string, boolean> = {};
@@ -367,9 +362,8 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
   });
   const toggleGroup = (id: string) => setOpenGroups((prev) => ({ ...prev, [id]: !prev[id] }));
 
-  // ── Notification center state ─────────────────────────────────────────────
   const [notifCenterOpen, setNotifCenterOpen] = useState(false);
-  const [storedHistory, setStoredHistory] = useState<StoredNotif[]>(() => loadStoredHistory());
+  const [storedHistory, setStoredHistory] = useState<StoredNotif[]>([]);
   const [centerLoading, setCenterLoading] = useState(false);
   const [lastReadClock, setLastReadClock] = useState(() => {
     if (typeof window === "undefined") return 0;
@@ -380,21 +374,30 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
     return Number.parseInt(localStorage.getItem("notifClearedBefore") ?? "0");
   });
 
+  // Load history from DB on mount
+  useEffect(() => {
+    api
+      .getNotifHistory()
+      .then((r) => setStoredHistory(r.history))
+      .catch(() => {});
+  }, []);
+
   const unreadCenterCount = storedHistory.filter(
     (n) => n.clock > lastReadClock && n.clock > clearedBefore,
   ).length;
 
   const saveToHistory = useCallback((entries: StoredNotif[]) => {
-    const current = loadStoredHistory();
-    const existingIds = new Set(current.map((n) => n.id));
-    const fresh = entries.filter((e) => !existingIds.has(e.id));
-    if (fresh.length === 0) return;
-    const merged = [...fresh, ...current].slice(0, 200);
-    localStorage.setItem("notifHistory", JSON.stringify(merged));
-    setStoredHistory(merged);
+    setStoredHistory((current) => {
+      const existingIds = new Set(current.map((n) => n.id));
+      const fresh = entries.filter((e) => !existingIds.has(e.id));
+      if (fresh.length === 0) return current;
+      const merged = [...fresh, ...current].slice(0, 2000);
+      // Persist to DB (fire-and-forget — UI already updated above)
+      void api.saveNotifHistory(fresh);
+      return merged;
+    });
   }, []);
 
-  // ── Sound settings ────────────────────────────────────────────────────────
   const {
     soundEnabled,
     soundPreset,
@@ -415,7 +418,6 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
     soundPresetRef,
   } = useSoundSettings();
 
-  // ── Alert polling ─────────────────────────────────────────────────────────
   const {
     health,
     activeProblems,
@@ -458,10 +460,11 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
 
   const refreshCenter = () => {
     setCenterLoading(true);
-    setStoredHistory(loadStoredHistory());
-    api
-      .getProblems()
-      .then((prRes) => setActiveProblems(prRes.problems))
+    Promise.all([api.getNotifHistory(), api.getProblems()])
+      .then(([hr, prRes]) => {
+        setStoredHistory(hr.history);
+        setActiveProblems(prRes.problems);
+      })
       .catch(() => {})
       .finally(() => setCenterLoading(false));
   };
@@ -469,21 +472,22 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
   const acknowledgeInHistory = (id: string) => {
     setStoredHistory((prev) => {
       const updated = prev.map((n) => (n.id === id ? { ...n, acknowledged: true } : n));
-      localStorage.setItem("notifHistory", JSON.stringify(updated));
+      const entry = updated.find((n) => n.id === id);
+      if (entry) void api.saveNotifHistory([entry]);
       return updated;
     });
   };
 
   const pageTitle = useMemo(() => {
     for (const g of navGroups) {
-      if (g.href && pathname === g.href) return g.label;
+      if (g.href && pathname === g.href) return t(g.labelKey);
       const found = g.items.find((n) => isNavItemActive(n.href));
-      if (found) return found.label;
+      if (found) return t(found.labelKey);
     }
     return "Overwatch";
-  }, [pathname, isNavItemActive]);
+  }, [pathname, isNavItemActive, t]);
 
-  const initials = user?.username.slice(0, 2).toUpperCase() ?? "??";
+  const initials = (user?.display_name || user?.username)?.slice(0, 2).toUpperCase() ?? "??";
   const problemCount = activeProblems.filter((p) => !p.acknowledged).length;
 
   const drawer = (
@@ -501,20 +505,20 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
             <Typography
               sx={{ fontWeight: 700, fontSize: "0.875rem", lineHeight: 1.2, letterSpacing: 0.1 }}
             >
-              Overwatch
+              {t("app.name")}
             </Typography>
             <Typography sx={{ fontSize: "0.65rem", color: "text.secondary", lineHeight: 1.3 }}>
-              Control Plane
+              {t("app.subtitle")}
             </Typography>
           </Box>
-          <Tooltip title={isDark ? "Switch to light mode" : "Switch to dark mode"}>
+          <Tooltip title={t("theme.toggle")}>
             <IconButton
               size="small"
               onClick={toggleMode}
               sx={{
                 color: "text.secondary",
                 flexShrink: 0,
-                "&:hover": { color: "primary.main", backgroundColor: "rgba(59,130,246,0.1)" },
+                "&:hover": { color: "primary.main", backgroundColor: "rgba(122,162,212,0.1)" },
                 transition: "all 0.2s ease",
               }}
             >
@@ -523,27 +527,6 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
               ) : (
                 <DarkModeOutlinedIcon sx={{ fontSize: 17 }} />
               )}
-            </IconButton>
-          </Tooltip>
-          <Tooltip
-            title={isRtl ? "Switch to LTR layout" : "Switch to RTL layout (Hebrew / Arabic)"}
-          >
-            <IconButton
-              size="small"
-              aria-label={isRtl ? "Switch to LTR layout" : "Switch to RTL layout"}
-              onClick={toggleDirection}
-              sx={{
-                color: isRtl ? "primary.main" : "text.secondary",
-                flexShrink: 0,
-                fontSize: "0.6rem",
-                fontWeight: 700,
-                "&:hover": { color: "primary.main", backgroundColor: "rgba(59,130,246,0.1)" },
-                transition: "all 0.2s ease",
-              }}
-            >
-              <Typography sx={{ fontSize: "0.6rem", fontWeight: 700, lineHeight: 1 }}>
-                {isRtl ? "LTR" : "RTL"}
-              </Typography>
             </IconButton>
           </Tooltip>
         </Box>
@@ -564,7 +547,7 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
               const isActive = pathname === group.href;
               return (
                 <Box key={group.id} sx={{ mb: 0.25 }}>
-                  {group.sectionLabel && (
+                  {group.sectionLabelKey && (
                     <>
                       <Divider sx={{ my: 1 }} />
                       <Typography
@@ -579,7 +562,7 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
                           letterSpacing: "0.1em",
                         }}
                       >
-                        {group.sectionLabel}
+                        {t(group.sectionLabelKey)}
                       </Typography>
                     </>
                   )}
@@ -591,9 +574,9 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
                       px: 1,
                       py: 0.5,
                       minHeight: 30,
-                      backgroundColor: isActive ? "rgba(59,130,246,0.1)" : "transparent",
+                      backgroundColor: isActive ? "rgba(140,114,232,0.1)" : "transparent",
                       "&:hover": {
-                        bgcolor: isActive ? "rgba(59,130,246,0.13)" : "rgba(255,255,255,0.04)",
+                        bgcolor: isActive ? "rgba(140,114,232,0.14)" : "rgba(212,207,235,0.04)",
                       },
                     }}
                   >
@@ -603,7 +586,7 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
                       {group.icon}
                     </ListItemIcon>
                     <ListItemText
-                      primary={group.label}
+                      primary={t(group.labelKey)}
                       primaryTypographyProps={{
                         fontSize: "0.68rem",
                         fontWeight: isActive ? 700 : 600,
@@ -621,7 +604,7 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
             const hasActive = group.items.some((item) => isNavItemActive(item.href));
             return (
               <Box key={group.id} sx={{ mb: 0.25 }}>
-                {group.sectionLabel && (
+                {group.sectionLabelKey && (
                   <>
                     <Divider sx={{ my: 1 }} />
                     <Typography
@@ -636,7 +619,7 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
                         letterSpacing: "0.1em",
                       }}
                     >
-                      {group.sectionLabel}
+                      {t(group.sectionLabelKey)}
                     </Typography>
                   </>
                 )}
@@ -647,7 +630,7 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
                     px: 1,
                     py: 0.5,
                     minHeight: 30,
-                    "&:hover": { bgcolor: "rgba(255,255,255,0.04)" },
+                    "&:hover": { bgcolor: "rgba(212,207,235,0.04)" },
                   }}
                 >
                   <ListItemIcon
@@ -656,7 +639,7 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
                     {group.icon}
                   </ListItemIcon>
                   <ListItemText
-                    primary={group.label}
+                    primary={t(group.labelKey)}
                     primaryTypographyProps={{
                       fontSize: "0.68rem",
                       fontWeight: hasActive ? 700 : 600,
@@ -688,12 +671,12 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
                             pl: 1.5,
                             pr: 1,
                             py: 0.65,
-                            borderLeft: `2px solid ${selected ? "#3B82F6" : "transparent"}`,
-                            backgroundColor: selected ? "rgba(59,130,246,0.1)" : "transparent",
+                            borderLeft: `2px solid ${selected ? "#8C72E8" : "transparent"}`,
+                            backgroundColor: selected ? "rgba(140,114,232,0.1)" : "transparent",
                             "&:hover": {
                               backgroundColor: selected
-                                ? "rgba(59,130,246,0.13)"
-                                : "rgba(255,255,255,0.04)",
+                                ? "rgba(140,114,232,0.14)"
+                                : "rgba(212,207,235,0.04)",
                             },
                             transition: "all 0.15s ease",
                           }}
@@ -725,7 +708,7 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
                             )}
                           </ListItemIcon>
                           <ListItemText
-                            primary={item.label}
+                            primary={t(item.labelKey)}
                             primaryTypographyProps={{
                               fontSize: "0.8rem",
                               fontWeight: selected ? 600 : 400,
@@ -753,7 +736,7 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
             pr: 1,
             py: 0.65,
             borderLeft: "2px solid transparent",
-            "&:hover": { backgroundColor: "rgba(255,255,255,0.04)" },
+            "&:hover": { backgroundColor: "rgba(212,207,235,0.04)" },
             transition: "all 0.15s ease",
           }}
         >
@@ -771,7 +754,7 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
             </Badge>
           </ListItemIcon>
           <ListItemText
-            primary="Notification Center"
+            primary={t("nav.notificationCenter")}
             primaryTypographyProps={{
               fontSize: "0.8rem",
               fontWeight: unreadCenterCount > 0 ? 600 : 400,
@@ -798,16 +781,16 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
             pl: 1.5,
             pr: 1,
             py: 0.65,
-            borderLeft: `2px solid ${problemCount > 0 ? "rgba(239,68,68,0.6)" : "transparent"}`,
-            backgroundColor: problemCount > 0 ? "rgba(239,68,68,0.06)" : "transparent",
+            borderLeft: `2px solid ${problemCount > 0 ? "rgba(201,96,96,0.6)" : "transparent"}`,
+            backgroundColor: problemCount > 0 ? "rgba(201,96,96,0.06)" : "transparent",
             "&:hover": {
-              backgroundColor: problemCount > 0 ? "rgba(239,68,68,0.1)" : "rgba(255,255,255,0.04)",
+              backgroundColor: problemCount > 0 ? "rgba(201,96,96,0.1)" : "rgba(212,207,235,0.04)",
             },
             transition: "all 0.15s ease",
           }}
         >
           <ListItemIcon
-            sx={{ minWidth: 30, color: problemCount > 0 ? "#EF4444" : "text.disabled" }}
+            sx={{ minWidth: 30, color: problemCount > 0 ? "#C96060" : "text.disabled" }}
           >
             <Badge
               badgeContent={problemCount || null}
@@ -827,12 +810,12 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
             primary={
               problemCount > 0
                 ? `${problemCount} active problem${problemCount !== 1 ? "s" : ""}`
-                : "No active problems"
+                : t("metrics.noProblems")
             }
             primaryTypographyProps={{
               fontSize: "0.8rem",
               fontWeight: problemCount > 0 ? 600 : 400,
-              color: problemCount > 0 ? "#EF4444" : "text.disabled",
+              color: problemCount > 0 ? "#C96060" : "text.disabled",
             }}
           />
           <Tooltip title="Notification sound">
@@ -998,8 +981,8 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
 
       {/* Health status */}
       <Box sx={{ px: 2.5, py: 1.5, display: "flex", flexDirection: "column", gap: 0.75 }}>
-        <StatusDot ok={health?.ok ?? null} label="Backend API" />
-        <StatusDot ok={health?.zabbix ?? null} label="Zabbix" />
+        <StatusDot ok={health?.ok ?? null} label={t("health.backend")} />
+        <StatusDot ok={health?.zabbix ?? null} label={t("health.zabbix")} />
       </Box>
 
       <Divider />
@@ -1012,7 +995,7 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
               width: 32,
               height: 32,
               borderRadius: "50%",
-              background: "linear-gradient(135deg, #3B82F6, #8B5CF6)",
+              background: "linear-gradient(135deg, #8C72E8, #C478A8)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -1027,13 +1010,15 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography sx={{ fontSize: "0.8rem", fontWeight: 600, lineHeight: 1.2 }} noWrap>
-              {user.username}
+              {user.display_name || user.username}
             </Typography>
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mt: 0.25 }}>
               {(user.roles ?? []).map((r) => (
                 <Chip
                   key={r}
-                  label={r === "team_lead" ? "Team Lead" : r.charAt(0).toUpperCase() + r.slice(1)}
+                  label={t(`teams.roles.${r}`, {
+                    defaultValue: r.charAt(0).toUpperCase() + r.slice(1),
+                  })}
                   size="small"
                   color={
                     r === "root"
@@ -1051,7 +1036,7 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
               ))}
             </Box>
           </Box>
-          <Tooltip title="Sign out">
+          <Tooltip title={t("auth.logout")}>
             <IconButton
               size="small"
               onClick={logout}
@@ -1070,10 +1055,10 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
   );
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100%", flexDirection: isRtl ? "row-reverse" : "row" }}>
+    <Box sx={{ display: "flex", minHeight: "100%" }}>
       <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>
         <Drawer
-          anchor={isRtl ? "right" : "left"}
+          anchor="left"
           variant="temporary"
           open={mobileOpen}
           onClose={() => setMobileOpen(false)}
@@ -1090,7 +1075,7 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
           {drawer}
         </Drawer>
         <Drawer
-          anchor={isRtl ? "right" : "left"}
+          anchor="left"
           variant="permanent"
           sx={{
             display: { xs: "none", md: "block" },
@@ -1098,18 +1083,10 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
               width: drawerWidth,
               boxSizing: "border-box",
               overflowY: "hidden",
-              ...(isRtl
-                ? {
-                    borderLeft: isDark
-                      ? "1px solid rgba(255,255,255,0.06)"
-                      : "1px solid rgba(15,23,42,0.08)",
-                  }
-                : {
-                    borderRight: isDark
-                      ? "1px solid rgba(255,255,255,0.06)"
-                      : "1px solid rgba(15,23,42,0.08)",
-                  }),
-              backgroundColor: isDark ? "rgba(9,18,34,0.94)" : "rgba(255,255,255,0.97)",
+              borderRight: isDark
+                ? "1px solid rgba(212,207,235,0.07)"
+                : "1px solid rgba(28,24,40,0.08)",
+              backgroundColor: isDark ? "rgba(8,7,12,0.96)" : "rgba(253,250,246,0.97)",
               backdropFilter: "blur(20px)",
             },
           }}
@@ -1153,7 +1130,7 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
         {children}
       </Box>
 
-      {/* ── Notification stack (bottom-right) ── */}
+      {/* Notification stack */}
       {notifications.length > 0 && (
         <Box
           sx={{
@@ -1193,7 +1170,7 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
         </Box>
       )}
 
-      {/* ── Notification center drawer ── */}
+      {/* Notification center drawer */}
       <NotificationCenter
         open={notifCenterOpen}
         onClose={() => setNotifCenterOpen(false)}

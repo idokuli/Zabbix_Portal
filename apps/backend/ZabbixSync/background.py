@@ -19,7 +19,7 @@ class SyncBackgroundMixin:
         zapi: "ZabbixAPI | None"
         full_sync: Callable[[], None]
 
-    def start_realtime_sync(self) -> None:
+    def start_realtime_sync(self) -> threading.Thread:
         """Listen for pg_notify events from Zabbix tables and sync immediately on change.
 
         Requires notify triggers to be installed via install_notify_triggers() in Database.py.
@@ -55,20 +55,21 @@ class SyncBackgroundMixin:
                 if conn is not None:
                     try:
                         conn.close()
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("Failed to close pg notify connection: %s", exc)
 
         t = threading.Thread(target=_listen, daemon=True, name="zabbix-notify-listener")
         t.start()
+        return t
 
-    def start_background_sync(self) -> None:
+    def start_background_sync(self) -> threading.Thread | None:
         """Start a daemon thread that runs full_sync every ZABBIX_SYNC_INTERVAL seconds.
 
         Kept as a safety net alongside start_realtime_sync() to catch any notifications
         that might be missed (e.g. listener restart, network blip).
         """
         if not self.zapi:
-            return
+            return None
 
         def _loop():
             while True:
@@ -83,3 +84,4 @@ class SyncBackgroundMixin:
         logger.info(
             "ZabbixSync: background full-sync started (interval=%ds).", SYNC_INTERVAL
         )
+        return t

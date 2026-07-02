@@ -32,6 +32,8 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../app/api";
+import { TabHeader } from "../../app/components/TabHeader";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 import { ConfirmDelete, StatusChip } from "./shared";
 
 // ── Media Types ───────────────────────────────────────────────────────
@@ -48,6 +50,7 @@ type MediaType = {
 export const MediaTypesTab = ({
   showToast,
 }: { showToast: (m: string, s: "success" | "error") => void }) => {
+  const tick = useRefreshTick();
   const [items, setItems] = useState<MediaType[]>([]);
   const [loading, setLoading] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -74,20 +77,28 @@ export const MediaTypesTab = ({
     webhook_script: "",
   });
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const r = await api.listMediaTypes();
-      setItems(r.media_types);
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : String(e), "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [showToast]);
+  const load = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+      try {
+        const r = await api.listMediaTypes();
+        setItems(r.media_types);
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : String(e), "error");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [showToast],
+  );
   useEffect(() => {
     void load();
   }, [load]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) void load(true);
+  }, [tick]);
 
   const onSave = async () => {
     setSaving(true);
@@ -170,6 +181,10 @@ export const MediaTypesTab = ({
 
   return (
     <>
+      <TabHeader
+        title="Media Types"
+        description="Notification channels — email, SMS, webhooks — used to deliver action alerts."
+      />
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
@@ -183,7 +198,7 @@ export const MediaTypesTab = ({
         </Box>
         <Stack direction="row" spacing={1}>
           <Tooltip title="Refresh">
-            <IconButton size="small" onClick={load} disabled={loading}>
+            <IconButton size="small" onClick={() => void load()} disabled={loading}>
               <RefreshIcon sx={{ fontSize: 16 }} />
             </IconButton>
           </Tooltip>

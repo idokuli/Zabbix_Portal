@@ -82,6 +82,12 @@ def create_user(
                 (username, email, roles, team_id, password_hash, source, display_name),
             )
             row = dict(cur.fetchone())
+            if team_id is not None:
+                cur.execute(
+                    """INSERT INTO user_team_memberships (user_id, team_id)
+                       VALUES (%s, %s) ON CONFLICT DO NOTHING""",
+                    (row["id"], team_id),
+                )
         conn.commit()
         return row
     except Exception as exc:
@@ -206,6 +212,46 @@ def unassign_host_all(hostname: str) -> bool:
         conn.close()
 
 
+def add_team_membership(user_id: int, team_id: int) -> bool:
+    """Add a user to a team. A user may belong to multiple teams simultaneously."""
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO user_team_memberships (user_id, team_id)
+                   VALUES (%s, %s) ON CONFLICT DO NOTHING""",
+                (user_id, team_id),
+            )
+        conn.commit()
+        return True
+    except Exception as exc:
+        conn.rollback()
+        logger.error("add_team_membership failed: %r", exc)
+        return False
+    finally:
+        conn.close()
+
+
+def remove_team_membership(user_id: int, team_id: int) -> bool:
+    """Remove a user from a single team, leaving other memberships intact."""
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM user_team_memberships WHERE user_id = %s AND team_id = %s",
+                (user_id, team_id),
+            )
+            deleted = cur.rowcount > 0
+        conn.commit()
+        return deleted
+    except Exception as exc:
+        conn.rollback()
+        logger.error("remove_team_membership failed: %r", exc)
+        return False
+    finally:
+        conn.close()
+
+
 def get_host_teams(hostname: str) -> list[dict]:
     """Return [{team_id, team_name}] for every team this host is assigned to."""
     conn = get_conn()
@@ -239,14 +285,16 @@ def get_overview(team_id: int | None = None) -> list[dict]:
                 cur.execute(
                     """
                     WITH user_agg AS (
-                        SELECT team_id,
+                        SELECT utm.team_id,
                                json_agg(json_build_object(
-                                   'id', id, 'username', username,
-                                   'email', email, 'roles', roles
+                                   'id', u.id, 'username', u.username,
+                                   'email', u.email, 'roles', u.roles,
+                                   'source', u.source, 'display_name', u.display_name
                                )) AS users
-                        FROM team_users
-                        WHERE team_id = %s
-                        GROUP BY team_id
+                        FROM user_team_memberships utm
+                        JOIN team_users u ON u.id = utm.user_id
+                        WHERE utm.team_id = %s
+                        GROUP BY utm.team_id
                     ),
                     host_agg AS (
                         SELECT team_id, json_agg(hostname) AS hosts
@@ -269,14 +317,15 @@ def get_overview(team_id: int | None = None) -> list[dict]:
                 cur.execute(
                     """
                     WITH user_agg AS (
-                        SELECT team_id,
+                        SELECT utm.team_id,
                                json_agg(json_build_object(
-                                   'id', id, 'username', username,
-                                   'email', email, 'roles', roles
+                                   'id', u.id, 'username', u.username,
+                                   'email', u.email, 'roles', u.roles,
+                                   'source', u.source, 'display_name', u.display_name
                                )) AS users
-                        FROM team_users
-                        WHERE team_id IS NOT NULL
-                        GROUP BY team_id
+                        FROM user_team_memberships utm
+                        JOIN team_users u ON u.id = utm.user_id
+                        GROUP BY utm.team_id
                     ),
                     host_agg AS (
                         SELECT team_id, json_agg(hostname) AS hosts
@@ -325,7 +374,7 @@ def list_users(team_id: int | None = None) -> list[dict]:
         with conn.cursor() as cur:
             if team_id is not None:
                 cur.execute(
-                    """SELECT u.id, u.username, u.email, u.roles, u.team_id, u.source, t.name AS team_name
+                    """SELECT u.id, u.username, u.email, u.roles, u.team_id, u.source, u.display_name, t.name AS team_name
                        FROM team_users u
                        LEFT JOIN teams t ON u.team_id = t.id
                        WHERE u.team_id = %s
@@ -334,7 +383,7 @@ def list_users(team_id: int | None = None) -> list[dict]:
                 )
             else:
                 cur.execute(
-                    """SELECT u.id, u.username, u.email, u.roles, u.team_id, u.source, t.name AS team_name
+                    """SELECT u.id, u.username, u.email, u.roles, u.team_id, u.source, u.display_name, t.name AS team_name
                        FROM team_users u
                        LEFT JOIN teams t ON u.team_id = t.id
                        ORDER BY u.username"""
@@ -362,6 +411,59 @@ def update_user_profile(user_id: int, roles: list[str], team_id: int | None) -> 
         conn.rollback()
         logger.error("update_user_profile failed: %r", exc)
         return False
+    finally:
+        conn.close()
+
+
+def get_team_roles(team_id: int) -> list[str]:
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT roles FROM teams WHERE id = %s", (team_id,))
+            row = cur.fetchone()
+            return list(row["roles"] or []) if row else []
+    except Exception as exc:
+        logger.debug("get_team_roles failed: %s", exc)
+        return []
+    finally:
+        conn.close()
+
+
+def set_team_roles(team_id: int, roles: list[str]) -> bool:
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE teams SET roles = %s WHERE id = %s", (roles, team_id))
+            updated = cur.rowcount > 0
+        conn.commit()
+        return updated
+    except Exception as exc:
+        conn.rollback()
+        logger.error("set_team_roles failed: %r", exc)
+        return False
+    finally:
+        conn.close()
+
+
+def get_effective_roles(user_id: int, personal_roles: list[str]) -> list[str]:
+    """Return union of a user's personal roles and all roles granted by their teams."""
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT unnest(t.roles) AS role
+                FROM user_team_memberships utm
+                JOIN teams t ON t.id = utm.team_id
+                WHERE utm.user_id = %s AND array_length(t.roles, 1) > 0
+                """,
+                (user_id,),
+            )
+            team_roles = [r["role"] for r in cur.fetchall()]
+        return list(set(personal_roles + team_roles))
+    except Exception as exc:
+        logger.debug("get_effective_roles failed: %s", exc)
+        return personal_roles
     finally:
         conn.close()
 
@@ -401,19 +503,24 @@ def get_team_name(team_id: int) -> str | None:
 def seed_root():
     from Auth import hash_password
 
-    username = os.getenv("ADMIN_USERNAME", "Admin")
-    password = os.getenv("ADMIN_PASSWORD")
+    username = os.getenv("ADMIN_USERNAME") or os.getenv("ZABBIX_USER", "Admin")
+    password = os.getenv("ADMIN_PASSWORD") or os.getenv("ZABBIX_PASS")
+    password_from_env = bool(password)
     if not password:
-        password = "admin"
+        import secrets as _secrets
+
+        password = _secrets.token_urlsafe(16)
         logger.warning(
-            "ADMIN_PASSWORD env var is not set — root account seeded with a default password. "
-            "Change it immediately after first login."
+            "ADMIN_PASSWORD/ZABBIX_PASS env var is not set — root account seeded with a generated password: %s "
+            "Change it immediately after first login.",
+            password,
         )
     conn = get_conn()
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) AS cnt FROM team_users")
-            if cur.fetchone()["cnt"] == 0:
+            is_empty = cur.fetchone()["cnt"] == 0
+            if is_empty:
                 cur.execute(
                     """INSERT INTO team_users (id, username, email, roles, team_id, password_hash)
                        OVERRIDING SYSTEM VALUE
@@ -421,12 +528,18 @@ def seed_root():
                        ON CONFLICT DO NOTHING""",
                     (username, ["root"], hash_password(password)),
                 )
-                # Advance the sequence so the next user gets ID 2
                 cur.execute("SELECT setval('team_users_id_seq', 1, true)")
                 logger.info(
                     "Seeded default root user: %r (id=1) — change the password after first login.",
                     username,
                 )
+            elif password_from_env:
+                # ADMIN_PASSWORD is explicitly set — keep the root account in sync with the env var
+                cur.execute(
+                    "UPDATE team_users SET password_hash = %s WHERE id = 1",
+                    (hash_password(password),),
+                )
+                logger.info("Root user password synced from ADMIN_PASSWORD env var.")
         conn.commit()
     except Exception as exc:
         conn.rollback()
@@ -573,5 +686,67 @@ def delete_dashboard_page(
         conn.rollback()
         logger.error("delete_dashboard_page failed: %r", exc)
         return False
+    finally:
+        conn.close()
+
+
+# ── Notification history ──────────────────────────────────────────────────────
+
+NOTIF_RETENTION_DAYS = 90
+
+
+def save_notification_history(user_id: int, entries: list[dict]) -> None:
+    if not entries:
+        return
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            for e in entries:
+                cur.execute(
+                    """INSERT INTO notification_history
+                           (id, user_id, source, hostname, severity, name, clock, acknowledged)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                       ON CONFLICT (id, user_id) DO UPDATE
+                           SET acknowledged = EXCLUDED.acknowledged""",
+                    (
+                        e["id"],
+                        user_id,
+                        e.get("source", "zabbix"),
+                        e.get("hostname", ""),
+                        e.get("severity", 0),
+                        e.get("name", ""),
+                        e.get("clock", 0),
+                        e.get("acknowledged", False),
+                    ),
+                )
+        conn.commit()
+    except Exception as exc:
+        conn.rollback()
+        logger.error("save_notification_history failed: %r", exc)
+    finally:
+        conn.close()
+
+
+def get_notification_history(
+    user_id: int, days: int = NOTIF_RETENTION_DAYS
+) -> list[dict]:
+    import time
+
+    conn = get_conn()
+    try:
+        cutoff = int(time.time()) - days * 86400
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT id, source, hostname, severity, name, clock, acknowledged
+                   FROM notification_history
+                   WHERE user_id = %s AND clock >= %s
+                   ORDER BY clock DESC
+                   LIMIT 2000""",
+                (user_id, cutoff),
+            )
+            return [dict(r) for r in cur.fetchall()]
+    except Exception as exc:
+        logger.error("get_notification_history failed: %r", exc)
+        return []
     finally:
         conn.close()

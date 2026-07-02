@@ -1,8 +1,8 @@
 "use client";
 
 import AddIcon from "@mui/icons-material/Add";
-import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
 import PersonAddOutlinedIcon from "@mui/icons-material/PersonAddOutlined";
+import SearchIcon from "@mui/icons-material/Search";
 import {
   Alert,
   Box,
@@ -18,19 +18,25 @@ import {
   Divider,
   FormControl,
   Grid,
+  InputAdornment,
   InputLabel,
   MenuItem,
   Select,
   type SelectChangeEvent,
   Snackbar,
+  Stack,
+  Tab,
+  Tabs,
   TextField,
   Typography,
 } from "@mui/material";
+import type React from "react";
 import { useCallback, useEffect, useState } from "react";
-import { type Host, type Team, type TeamUser, api } from "../../app/api";
+import { type Host, type Team, type TeamUser, type UserRow, api } from "../../app/api";
+import { ConfirmDelete } from "../../app/components/ConfirmDelete";
 import { useAuth } from "../../app/context/AuthContext";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 import { useSync } from "../../app/context/SyncContext";
-import { SearchableSelect } from "../../components/SearchableSelect";
 import { TeamCard } from "./TeamCard";
 
 type Snack = { msg: string; sev: "success" | "error" };
@@ -98,9 +104,11 @@ const grantableRoles = (callerRoles: string[]): Set<string> => {
 };
 
 export const Teams = () => {
+  const tick = useRefreshTick();
   const { lastSync } = useSync();
   const [teams, setTeams] = useState<Team[]>([]);
   const [allHosts, setAllHosts] = useState<Host[]>([]);
+  const [allUsers, setAllUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [snack, setSnack] = useState<Snack | null>(null);
 
@@ -108,7 +116,11 @@ export const Teams = () => {
   const [teamDialogOpen, setTeamDialogOpen] = useState(false);
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [assignDialogTeamId, setAssignDialogTeamId] = useState<number | null>(null);
-  const [confirmDeleteUserId, setConfirmDeleteUserId] = useState<number | null>(null);
+  const [addMemberDialogTeamId, setAddMemberDialogTeamId] = useState<number | null>(null);
+  const [confirmRemoveMember, setConfirmRemoveMember] = useState<{
+    userId: number;
+    teamId: number;
+  } | null>(null);
   const [confirmDeleteTeamId, setConfirmDeleteTeamId] = useState<number | null>(null);
 
   // ── Form state ───────────────────────────────────────────────────────
@@ -123,16 +135,27 @@ export const Teams = () => {
   const [userEmail, setUserEmail] = useState("");
   const [userRoles, setUserRoles] = useState<string[]>(["member"]);
   const [userTeamId, setUserTeamId] = useState<number | "">("");
-  const [selectedHost, setSelectedHost] = useState("");
+  const [selectedHosts, setSelectedHosts] = useState<string[]>([]);
+  const [hostSearch, setHostSearch] = useState("");
+  const [assignMode, setAssignMode] = useState<"hosts" | "groups">("hosts");
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  const [groupSearch, setGroupSearch] = useState("");
+  const [memberSearch, setMemberSearch] = useState("");
+  const [selectedMembers, setSelectedMembers] = useState<number[]>([]);
   const [changePwUser, setChangePwUser] = useState<TeamUser | null>(null);
   const [newPw, setNewPw] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
-      const [overview, hostsRes] = await Promise.all([api.getTeamsOverview(), api.listHosts()]);
+      const [overview, hostsRes, usersRes] = await Promise.all([
+        api.getTeamsOverview(),
+        api.listHosts(),
+        api.listUsers(),
+      ]);
       setTeams(overview.teams);
       setAllHosts(hostsRes.hosts);
+      setAllUsers(usersRes.users);
     } catch {
       setSnack({ msg: "Failed to load teams.", sev: "error" });
     } finally {
@@ -145,17 +168,38 @@ export const Teams = () => {
     void load();
   }, [load, lastSync]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) void load(true);
+  }, [tick]);
+
   // ── Derived: hosts not assigned to any team ──────────────────────────
   const assignedHostnames = new Set(teams.flatMap((t) => t.hosts));
   const unassignedHosts = allHosts.filter((h) => !assignedHostnames.has(h.host));
 
   // ── Derived: hosts not yet on the team currently being edited ───────────
-  // A host may belong to multiple teams, so this only excludes hosts already
-  // on *this* team — hosts assigned elsewhere are still offered here.
   const assignDialogTeamHostnames = new Set(
     teams.find((t) => t.id === assignDialogTeamId)?.hosts ?? [],
   );
   const assignableHosts = allHosts.filter((h) => !assignDialogTeamHostnames.has(h.host));
+
+  // ── Derived: host groups available for bulk-assign ────────────────────
+  type GroupEntry = { name: string; hosts: string[] };
+  const groupHostMap: Record<string, GroupEntry> = {};
+  for (const h of allHosts) {
+    for (const g of h.groups ?? []) {
+      if (!groupHostMap[g.groupid]) groupHostMap[g.groupid] = { name: g.name, hosts: [] };
+      if (!assignDialogTeamHostnames.has(h.host)) groupHostMap[g.groupid].hosts.push(h.host);
+    }
+  }
+  const assignableGroups: Array<[string, GroupEntry]> = Object.entries(groupHostMap)
+    .filter(([, g]) => g.hosts.length > 0)
+    .sort((a, b) => a[1].name.localeCompare(b[1].name));
+
+  // ── Derived: users not yet in the team being edited ──────────────────
+  const addMemberTeam = teams.find((t) => t.id === addMemberDialogTeamId);
+  const existingMemberIds = new Set(addMemberTeam?.users.map((u) => u.id) ?? []);
+  const addableUsers = allUsers.filter((u) => !existingMemberIds.has(u.id));
 
   // ── Team actions ─────────────────────────────────────────────────────
   const handleCreateTeam = async () => {
@@ -206,10 +250,29 @@ export const Teams = () => {
     }
   };
 
-  const handleDeleteUser = async (userId: number) => {
+  const handleRemoveFromTeam = async (userId: number, teamId: number) => {
     try {
-      await api.deleteUser(userId);
-      setSnack({ msg: "User removed.", sev: "success" });
+      await api.removeTeamMember(teamId, userId);
+      setSnack({ msg: "User removed from team.", sev: "success" });
+      void load();
+    } catch (e) {
+      setSnack({ msg: (e as Error).message, sev: "error" });
+    }
+  };
+
+  const handleAddMembers = async () => {
+    if (selectedMembers.length === 0 || addMemberDialogTeamId === null) return;
+    try {
+      await Promise.all(
+        selectedMembers.map((uid) => api.addTeamMember(addMemberDialogTeamId, uid)),
+      );
+      setSnack({
+        msg: `${selectedMembers.length} member${selectedMembers.length > 1 ? "s" : ""} added.`,
+        sev: "success",
+      });
+      setAddMemberDialogTeamId(null);
+      setSelectedMembers([]);
+      setMemberSearch("");
       void load();
     } catch (e) {
       setSnack({ msg: (e as Error).message, sev: "error" });
@@ -217,13 +280,27 @@ export const Teams = () => {
   };
 
   // ── Host assignment actions ───────────────────────────────────────────
+  const closeAssignDialog = () => {
+    setAssignDialogTeamId(null);
+    setSelectedHosts([]);
+    setSelectedGroups([]);
+    setHostSearch("");
+    setGroupSearch("");
+    setAssignMode("hosts");
+  };
+
   const handleAssignHost = async () => {
-    if (!selectedHost || assignDialogTeamId === null) return;
+    if (assignDialogTeamId === null) return;
+    const hostsFromGroups = selectedGroups.flatMap((gid: string) => groupHostMap[gid]?.hosts ?? []);
+    const toAssign = [...new Set([...selectedHosts, ...hostsFromGroups])];
+    if (toAssign.length === 0) return;
     try {
-      await api.assignHost(assignDialogTeamId, selectedHost);
-      setSnack({ msg: "Host assigned.", sev: "success" });
-      setAssignDialogTeamId(null);
-      setSelectedHost("");
+      await Promise.all(toAssign.map((h) => api.assignHost(assignDialogTeamId, h)));
+      setSnack({
+        msg: `${toAssign.length} server${toAssign.length > 1 ? "s" : ""} assigned.`,
+        sev: "success",
+      });
+      closeAssignDialog();
       void load();
     } catch (e) {
       setSnack({ msg: (e as Error).message, sev: "error" });
@@ -261,11 +338,15 @@ export const Teams = () => {
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 3 }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-          <GroupsOutlinedIcon sx={{ fontSize: 28, color: "primary.main" }} />
+      <Box
+        sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", mb: 3 }}
+      >
+        <Box>
           <Typography variant="h5" sx={{ fontWeight: 700 }}>
             Teams
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+            Manage teams, assign users, and control host access.
           </Typography>
         </Box>
         <Box sx={{ display: "flex", gap: 1 }}>
@@ -299,7 +380,7 @@ export const Teams = () => {
       <Box sx={{ display: "flex", gap: 2, mb: 3 }}>
         {[
           { label: "Teams", value: teams.length },
-          { label: "Users", value: teams.reduce((s, t) => s + t.users.length, 0) },
+          { label: "Users", value: allUsers.length },
           { label: "Assigned servers", value: assignedHostnames.size },
           { label: "Unassigned servers", value: unassignedHosts.length },
         ].map((s) => (
@@ -330,7 +411,7 @@ export const Teams = () => {
                 canManage={isSuperadmin || (isAdmin && currentUser?.team_id === team.id)}
                 canDeleteTeam={isSuperadmin}
                 onDeleteTeam={(id) => setConfirmDeleteTeamId(id)}
-                onDeleteUser={(id) => setConfirmDeleteUserId(id)}
+                onRemoveFromTeam={(userId, teamId) => setConfirmRemoveMember({ userId, teamId })}
                 onChangePassword={(u) => {
                   setChangePwUser(u);
                   setNewPw("");
@@ -338,7 +419,12 @@ export const Teams = () => {
                 onUnassignHost={handleUnassignHost}
                 onAssignHost={() => {
                   setAssignDialogTeamId(team.id);
-                  setSelectedHost("");
+                  setSelectedHosts([]);
+                  setHostSearch("");
+                }}
+                onAddMember={() => {
+                  setAddMemberDialogTeamId(team.id);
+                  setMemberSearch("");
                 }}
                 hostStatusColor={hostStatusColor}
                 hostOtherTeams={(hostname) =>
@@ -346,6 +432,8 @@ export const Teams = () => {
                     .filter((t) => t.id !== team.id && t.hosts.includes(hostname))
                     .map((t) => t.name)
                 }
+                onRolesUpdated={() => void load(true)}
+                showToast={(msg, sev) => setSnack({ msg, sev })}
               />
             </Grid>
           ))}
@@ -545,45 +633,384 @@ export const Teams = () => {
         </DialogActions>
       </Dialog>
 
-      {/* ── Assign host dialog ── */}
+      {/* ── Add member to team dialog ── */}
       <Dialog
-        open={assignDialogTeamId !== null}
-        onClose={() => setAssignDialogTeamId(null)}
+        open={addMemberDialogTeamId !== null}
+        onClose={() => {
+          setAddMemberDialogTeamId(null);
+          setSelectedMembers([]);
+          setMemberSearch("");
+        }}
         fullWidth
         maxWidth="xs"
       >
-        <DialogTitle>Assign Server</DialogTitle>
-        <DialogContent sx={{ pt: "16px !important" }}>
-          <FormControl fullWidth>
-            <InputLabel>Server</InputLabel>
-            <SearchableSelect
-              value={selectedHost}
-              label="Server"
-              onChange={(e: SelectChangeEvent) => setSelectedHost(e.target.value)}
-            >
-              {assignableHosts.length === 0 ? (
-                <MenuItem disabled value="">
-                  All servers are already on this team
-                </MenuItem>
-              ) : (
-                assignableHosts.map((h: Host) => {
-                  const otherTeams = teams
-                    .filter((t) => t.id !== assignDialogTeamId && t.hosts.includes(h.host))
-                    .map((t) => t.name);
-                  return (
-                    <MenuItem key={h.hostid} value={h.host}>
-                      {h.host}
-                      {otherTeams.length > 0 ? ` (also on ${otherTeams.join(", ")})` : ""}
-                    </MenuItem>
-                  );
-                })
-              )}
-            </SearchableSelect>
-          </FormControl>
+        <DialogTitle>
+          Add Member{selectedMembers.length > 0 ? ` (${selectedMembers.length} selected)` : ""} —{" "}
+          {addMemberTeam?.name}
+        </DialogTitle>
+        <DialogContent sx={{ pt: "12px !important", pb: 0 }}>
+          {addableUsers.length === 0 ? (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+              All users are already members of this team.
+            </Typography>
+          ) : (
+            <>
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                <TextField
+                  size="small"
+                  placeholder="Search users…"
+                  value={memberSearch}
+                  onChange={(e) => setMemberSearch(e.target.value)}
+                  sx={{ flex: 1 }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon sx={{ fontSize: 16, color: "text.disabled" }} />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+                <Button
+                  size="small"
+                  onClick={() => setSelectedMembers(addableUsers.map((u) => u.id))}
+                >
+                  All
+                </Button>
+                <Button
+                  size="small"
+                  onClick={() => setSelectedMembers([])}
+                  disabled={selectedMembers.length === 0}
+                >
+                  Clear
+                </Button>
+              </Stack>
+              <Box
+                sx={{
+                  maxHeight: 320,
+                  overflowY: "auto",
+                  border: "1px solid",
+                  borderColor: "divider",
+                  borderRadius: 1,
+                }}
+              >
+                {addableUsers
+                  .filter((u) => {
+                    const q = memberSearch.toLowerCase();
+                    return (
+                      u.username.toLowerCase().includes(q) ||
+                      (u.display_name ?? "").toLowerCase().includes(q) ||
+                      (u.team_name ?? "").toLowerCase().includes(q)
+                    );
+                  })
+                  .map((u) => {
+                    const checked = selectedMembers.includes(u.id);
+                    const label = u.display_name?.trim() || u.username;
+                    const showUsername = label !== u.username;
+                    return (
+                      <Box
+                        key={u.id}
+                        onClick={() =>
+                          setSelectedMembers((prev) =>
+                            checked ? prev.filter((id) => id !== u.id) : [...prev, u.id],
+                          )
+                        }
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          px: 1,
+                          py: 0.75,
+                          cursor: "pointer",
+                          bgcolor: checked ? "action.selected" : "transparent",
+                          "&:hover": { bgcolor: checked ? "action.selected" : "action.hover" },
+                          "&:not(:last-child)": {
+                            borderBottom: "1px solid",
+                            borderColor: "divider",
+                          },
+                        }}
+                      >
+                        <Checkbox checked={checked} size="small" disableRipple sx={{ p: 0.5 }} />
+                        <Box sx={{ flex: 1, ml: 0.5 }}>
+                          <Typography variant="body2" sx={{ fontSize: "0.83rem", fontWeight: 500 }}>
+                            {label}
+                          </Typography>
+                          {(showUsername || u.team_name) && (
+                            <Typography variant="caption" color="text.secondary">
+                              {showUsername ? u.username : ""}
+                              {showUsername && u.team_name ? " · " : ""}
+                              {u.team_name ?? ""}
+                            </Typography>
+                          )}
+                        </Box>
+                        <Box sx={{ display: "flex", gap: 0.5 }}>
+                          {(u.roles ?? []).map((r) => (
+                            <Chip
+                              key={r}
+                              label={r}
+                              size="small"
+                              variant="outlined"
+                              sx={{ height: 18, fontSize: "0.6rem" }}
+                            />
+                          ))}
+                        </Box>
+                      </Box>
+                    );
+                  })}
+              </Box>
+            </>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAssignDialogTeamId(null)}>Cancel</Button>
-          <Button variant="contained" onClick={handleAssignHost} disabled={!selectedHost}>
+          <Button
+            onClick={() => {
+              setAddMemberDialogTeamId(null);
+              setSelectedMembers([]);
+              setMemberSearch("");
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleAddMembers}
+            disabled={selectedMembers.length === 0}
+          >
+            Add {selectedMembers.length > 0 ? `(${selectedMembers.length})` : ""}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Assign hosts dialog ── */}
+      <Dialog
+        open={assignDialogTeamId !== null}
+        onClose={closeAssignDialog}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>
+          Assign Servers
+          {selectedHosts.length + selectedGroups.length > 0 && (
+            <Typography component="span" variant="body2" color="primary.main" sx={{ ml: 1 }}>
+              (
+              {selectedHosts.length +
+                selectedGroups.reduce(
+                  (s: number, gid: string) => s + (groupHostMap[gid]?.hosts.length ?? 0),
+                  0,
+                )}{" "}
+              hosts)
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent sx={{ pt: "4px !important", pb: 0 }}>
+          <Tabs
+            value={assignMode}
+            onChange={(_e, v: "hosts" | "groups") => setAssignMode(v)}
+            sx={{ mb: 1.5, borderBottom: 1, borderColor: "divider" }}
+          >
+            <Tab
+              label="Individual Hosts"
+              value="hosts"
+              sx={{ fontSize: "0.8rem", minHeight: 40 }}
+            />
+            <Tab label="Host Groups" value="groups" sx={{ fontSize: "0.8rem", minHeight: 40 }} />
+          </Tabs>
+
+          {assignMode === "hosts" ? (
+            assignableHosts.length === 0 ? (
+              <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+                All servers are already on this team.
+              </Typography>
+            ) : (
+              <>
+                <TextField
+                  size="small"
+                  fullWidth
+                  placeholder="Search servers…"
+                  value={hostSearch}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                    setHostSearch(e.target.value)
+                  }
+                  sx={{ mb: 1 }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon sx={{ fontSize: 16, color: "text.disabled" }} />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+                <Box
+                  sx={{
+                    maxHeight: 280,
+                    overflowY: "auto",
+                    border: "1px solid",
+                    borderColor: "divider",
+                    borderRadius: 1,
+                  }}
+                >
+                  {assignableHosts
+                    .filter((h) => h.host.toLowerCase().includes(hostSearch.toLowerCase()))
+                    .map((h) => {
+                      const otherTeams = teams
+                        .filter((t) => t.id !== assignDialogTeamId && t.hosts.includes(h.host))
+                        .map((t) => t.name);
+                      const checked = selectedHosts.includes(h.host);
+                      return (
+                        <Box
+                          key={h.hostid}
+                          onClick={() =>
+                            setSelectedHosts((prev: string[]) =>
+                              checked
+                                ? prev.filter((x: string) => x !== h.host)
+                                : [...prev, h.host],
+                            )
+                          }
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            px: 1,
+                            py: 0.5,
+                            cursor: "pointer",
+                            bgcolor: checked ? "action.selected" : "transparent",
+                            "&:hover": { bgcolor: "action.hover" },
+                            "&:not(:last-child)": {
+                              borderBottom: "1px solid",
+                              borderColor: "divider",
+                            },
+                          }}
+                        >
+                          <Checkbox checked={checked} size="small" disableRipple sx={{ p: 0.5 }} />
+                          <Box sx={{ ml: 0.5 }}>
+                            <Typography
+                              variant="body2"
+                              sx={{ fontSize: "0.83rem", fontWeight: 500 }}
+                            >
+                              {h.host}
+                            </Typography>
+                            {otherTeams.length > 0 && (
+                              <Typography variant="caption" color="text.secondary">
+                                also on {otherTeams.join(", ")}
+                              </Typography>
+                            )}
+                          </Box>
+                        </Box>
+                      );
+                    })}
+                </Box>
+                <Box sx={{ display: "flex", justifyContent: "space-between", mt: 1, mb: 0.5 }}>
+                  <Button
+                    size="small"
+                    onClick={() => setSelectedHosts(assignableHosts.map((h) => h.host))}
+                    disabled={selectedHosts.length === assignableHosts.length}
+                  >
+                    Select all
+                  </Button>
+                  <Button
+                    size="small"
+                    onClick={() => setSelectedHosts([])}
+                    disabled={selectedHosts.length === 0}
+                  >
+                    Clear
+                  </Button>
+                </Box>
+              </>
+            )
+          ) : assignableGroups.length === 0 ? (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+              No host groups with unassigned servers.
+            </Typography>
+          ) : (
+            <>
+              <TextField
+                size="small"
+                fullWidth
+                placeholder="Search groups…"
+                value={groupSearch}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setGroupSearch(e.target.value)
+                }
+                sx={{ mb: 1 }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon sx={{ fontSize: 16, color: "text.disabled" }} />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+              <Box
+                sx={{
+                  maxHeight: 280,
+                  overflowY: "auto",
+                  border: "1px solid",
+                  borderColor: "divider",
+                  borderRadius: 1,
+                }}
+              >
+                {assignableGroups
+                  .filter(([, g]) => g.name.toLowerCase().includes(groupSearch.toLowerCase()))
+                  .map(([gid, g]) => {
+                    const checked = selectedGroups.includes(gid);
+                    return (
+                      <Box
+                        key={gid}
+                        onClick={() =>
+                          setSelectedGroups((prev: string[]) =>
+                            checked ? prev.filter((x: string) => x !== gid) : [...prev, gid],
+                          )
+                        }
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          px: 1,
+                          py: 0.5,
+                          cursor: "pointer",
+                          bgcolor: checked ? "action.selected" : "transparent",
+                          "&:hover": { bgcolor: "action.hover" },
+                          "&:not(:last-child)": {
+                            borderBottom: "1px solid",
+                            borderColor: "divider",
+                          },
+                        }}
+                      >
+                        <Checkbox checked={checked} size="small" disableRipple sx={{ p: 0.5 }} />
+                        <Box sx={{ ml: 0.5, flex: 1 }}>
+                          <Typography variant="body2" sx={{ fontSize: "0.83rem", fontWeight: 500 }}>
+                            {g.name}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {g.hosts.length} server{g.hosts.length !== 1 ? "s" : ""}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    );
+                  })}
+              </Box>
+              <Box sx={{ display: "flex", justifyContent: "space-between", mt: 1, mb: 0.5 }}>
+                <Button
+                  size="small"
+                  onClick={() => setSelectedGroups(assignableGroups.map(([gid]) => gid))}
+                  disabled={selectedGroups.length === assignableGroups.length}
+                >
+                  Select all
+                </Button>
+                <Button
+                  size="small"
+                  onClick={() => setSelectedGroups([])}
+                  disabled={selectedGroups.length === 0}
+                >
+                  Clear
+                </Button>
+              </Box>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeAssignDialog}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleAssignHost}
+            disabled={selectedHosts.length === 0 && selectedGroups.length === 0}
+          >
             Assign
           </Button>
         </DialogActions>
@@ -615,59 +1042,29 @@ export const Teams = () => {
         </DialogActions>
       </Dialog>
 
-      {/* ── Confirm delete team ── */}
-      <Dialog
+      <ConfirmDelete
         open={confirmDeleteTeamId !== null}
+        name={teams.find((t) => t.id === confirmDeleteTeamId)?.name ?? ""}
+        description="This will permanently delete the team and remove all its host assignments. Users will not be deleted. This cannot be undone."
+        onConfirm={async () => {
+          if (confirmDeleteTeamId === null) return;
+          await handleDeleteTeam(confirmDeleteTeamId);
+          setConfirmDeleteTeamId(null);
+        }}
         onClose={() => setConfirmDeleteTeamId(null)}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle sx={{ fontWeight: 700 }}>Delete team?</DialogTitle>
-        <DialogContent>
-          <Typography>
-            This will permanently delete the team and remove all its host assignments. Users will
-            not be deleted. This cannot be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmDeleteTeamId(null)}>Cancel</Button>
-          <Button
-            color="error"
-            variant="contained"
-            onClick={async () => {
-              if (confirmDeleteTeamId === null) return;
-              await handleDeleteTeam(confirmDeleteTeamId);
-              setConfirmDeleteTeamId(null);
-            }}
-          >
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
+      />
 
-      {/* ── Confirm remove user ── */}
-      <Dialog open={confirmDeleteUserId !== null} onClose={() => setConfirmDeleteUserId(null)}>
-        <DialogTitle>Remove user?</DialogTitle>
-        <DialogContent>
-          <Typography>
-            This will remove the user from the portal. This action cannot be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmDeleteUserId(null)}>Cancel</Button>
-          <Button
-            color="error"
-            variant="contained"
-            onClick={async () => {
-              if (confirmDeleteUserId === null) return;
-              await handleDeleteUser(confirmDeleteUserId);
-              setConfirmDeleteUserId(null);
-            }}
-          >
-            Remove
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDelete
+        open={confirmRemoveMember !== null}
+        name=""
+        description="This will remove the user from this team. The user account will not be deleted — they can be added back at any time."
+        onConfirm={async () => {
+          if (confirmRemoveMember === null) return;
+          await handleRemoveFromTeam(confirmRemoveMember.userId, confirmRemoveMember.teamId);
+          setConfirmRemoveMember(null);
+        }}
+        onClose={() => setConfirmRemoveMember(null)}
+      />
 
       {/* ── Snackbar ── */}
       <Snackbar

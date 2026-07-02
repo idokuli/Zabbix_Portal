@@ -5,7 +5,7 @@ A full-stack DevOps UI for managing Zabbix hosts, items, triggers, teams, and us
 - **Backend** — Python 3.12 / FastAPI (`apps/backend/`)
 - **Frontend** — React 18 / Next.js 15 App Router / TypeScript / MUI (`apps/frontend/`)
 - **Database** — PostgreSQL (shared / external — not deployed by this repo)
-- **Deployment** — Helm charts, deployed via GitLab CI (`helm upgrade --install`). ArgoCD manifests in `argocd/` are a planned future path, not yet wired in.
+- **Deployment** — GitOps: CI pushes image tags to the `zabbix-portal-gitops` repo; ArgoCD syncs each cluster from there (Helm charts live in the GitOps repo).
 
 > See [`CLAUDE.md`](./CLAUDE.md) for an architectural reference, [`WORKFLOW.md`](./WORKFLOW.md) for the CI/CD flow, [`RELEASING.md`](./RELEASING.md) for the release process, and [`PRIVATE_NETWORK.md`](./PRIVATE_NETWORK.md) for the air-gapped configuration checklist.
 
@@ -16,7 +16,8 @@ A full-stack DevOps UI for managing Zabbix hosts, items, triggers, teams, and us
 - JWT-based login with role-based access control
 - **Portal LDAP authentication** — users sign in with LDAP/AD credentials; accounts are created automatically on first login (JIT provisioning) with the `operator` role
 - Multi-role users — a user can hold multiple roles simultaneously
-- Teams — group users and host assignments together
+- Teams — group users and host assignments together; a user can belong to multiple teams simultaneously and sees the union of all their teams' hosts
+- Expandable user rows in TeamCard — click any member to see their login name, display name (LDAP full name), email, and source (Local / LDAP / Zabbix)
 - Role cascade (Windows-style) — selecting a higher role auto-selects lower ones
 - Users page — root sees all users platform-wide; team leads see their team
 - List, create, and delete Zabbix hosts; tag hosts to teams
@@ -31,7 +32,7 @@ A full-stack DevOps UI for managing Zabbix hosts, items, triggers, teams, and us
 - **Administration** — Zabbix user groups & roles, API tokens, proxies & proxy groups (Zabbix 7.x), global macros, the item processing queue, authentication and housekeeping settings
 - Desktop notifications + audible alerts in the sidebar when new problems fire
 - Real-time updates via Server-Sent Events — the UI refreshes when the backend syncs with Zabbix
-- Health check for API / Zabbix connectivity with live status dots in the sidebar
+- Health check for API / Zabbix connectivity with live status dots in the sidebar; LDAP users see their display name (full AD name) at the bottom-left of the sidebar
 - Toast-style notifications for all user actions
 
 ---
@@ -42,17 +43,13 @@ A full-stack DevOps UI for managing Zabbix hosts, items, triggers, teams, and us
 apps/
   backend/    FastAPI app (Python 3.12) — Zabbix API wrapper + PostgreSQL user DB
   frontend/   Next.js 15 App Router (TypeScript / MUI)
-helm/
-  charts/
-    backend/        standalone Helm chart
-    frontend/       standalone Helm chart
-    zabbix-portal/  umbrella chart (depends on backend + frontend)
-argocd/             AppProject, ApplicationSet, per-env values (planned — not yet active)
 .gitlab/ci/         modular GitLab CI pipeline
 biome.json          Biome (linter + formatter)
 .npmrc              Exact-version / private-registry config
 docker-compose.yml  local orchestration (backend + frontend)
 ```
+
+> Helm charts and ArgoCD manifests live in the **`zabbix-portal-gitops`** repo. The CI pipeline here only builds images and pushes updated tags to that repo.
 
 > PostgreSQL is a **shared/external** database. It is not in `apps/` and not deployed by Helm — the backend connects to it via `DATABASE_URL`.
 
@@ -130,7 +127,7 @@ On first startup the backend creates the schema and seeds a root user (`ADMIN_US
 
 ### `apps/frontend/.env`
 
-Only one variable is needed. This file is **baked into the Docker image** at build time, so update it before building the image when the backend address changes.
+This file is **baked into the Docker image** at build time. Update it before building the image when the backend address changes. `REFRESH_INTERVAL` is the exception — it is read at runtime via `/api/config` and can be changed without rebuilding.
 
 ```env
 # Where the Next.js route handler forwards /api/* requests.
@@ -138,9 +135,13 @@ Only one variable is needed. This file is **baked into the Docker image** at bui
 # Docker shared net:    http://backend:6769
 # Mac/Windows Desktop:  http://host.docker.internal:6769
 BACKEND_URL=http://host.docker.internal:6769
+
+# Page auto-refresh interval in seconds. Read at runtime — no rebuild needed.
+# Override via Kubernetes Secret (key: REFRESH_INTERVAL) or docker run -e.
+REFRESH_INTERVAL=10
 ```
 
-In local development (`npm run dev`) Next.js loads this file automatically. In the Docker image it is loaded once at server startup via `src/instrumentation.ts`. When running with `docker compose`, the `BACKEND_URL` environment variable is injected at runtime (overriding the baked-in value) via the `environment:` block in `docker-compose.yml`. In-cluster the Route handles `/api/*`, so this value is unused there.
+In local development (`npm run dev`) Next.js loads this file automatically. In the Docker image it is loaded once at server startup via `src/instrumentation.ts`. When running with `docker compose`, `BACKEND_URL` is injected at runtime via the `environment:` block in `docker-compose.yml`. In-cluster the Route handles `/api/*`, so `BACKEND_URL` is unused there; `REFRESH_INTERVAL` however is always read at runtime via the `/api/config` endpoint and can be set in the OpenShift Secret.
 
 ---
 
@@ -464,26 +465,11 @@ CSV or XLSX with columns:
 
 ## Production deployment
 
-### Helm (current method)
+### GitOps via ArgoCD
 
-Deployments run from GitLab CI via `helm upgrade --install` against each cluster's API. To deploy manually:
-
-```bash
-helm dependency build helm/charts/zabbix-portal/
-helm upgrade --install zabbix-portal helm/charts/zabbix-portal/ \
-  --namespace zabbix-portal \
-  -f helm/charts/zabbix-portal/values.yaml \
-  -f helm/charts/zabbix-portal/values-staging.yaml \
-  --set backend.image.tag=vX.Y.Z \
-  --set frontend.image.tag=vX.Y.Z \
-  --wait --timeout 5m
-```
+Deployments are managed by ArgoCD using Helm charts from the `zabbix-portal-gitops` repo. The CI pipeline here builds images and updates image tags in that repo; ArgoCD syncs each environment automatically (staging) or on manual approval (production, DR).
 
 Sensitive credentials (`ZABBIX_PASS`, `SECRET_KEY`, the DB connection string) belong in a Kubernetes Secret referenced via `existingSecret` in Helm values — never baked into images or stored in plain ConfigMaps. See [`RELEASING.md`](./RELEASING.md) for the full release runbook.
-
-### ArgoCD (planned, not yet active)
-
-The `argocd/` directory contains an AppProject, ApplicationSet, and per-environment values for a future GitOps migration. These are **not applied by the current pipeline** — they are scaffolding for when the project switches from direct Helm to ArgoCD-reconciled deploys.
 
 ---
 

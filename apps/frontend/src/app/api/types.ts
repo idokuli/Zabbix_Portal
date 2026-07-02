@@ -135,15 +135,17 @@ export type RecentItem = {
 
 export type AlertRule = {
   id: number;
+  rule_type: "item" | "service";
   item_id: string;
   item_name: string;
   hostname: string;
-  operator: ">" | "<" | ">=" | "<=";
+  operator: ">" | "<" | ">=" | "<=" | "contains" | "!contains";
   threshold: number;
   severity: number;
   enabled: boolean;
   is_firing: boolean;
   created_at: string;
+  expected_contains: string;
 };
 
 export type AlertEvent = {
@@ -224,6 +226,8 @@ export type TeamUser = {
   username: string;
   email: string;
   roles: string[];
+  source?: "local" | "ldap" | "zabbix";
+  display_name?: string;
 };
 
 export type UserRow = {
@@ -233,6 +237,23 @@ export type UserRow = {
   roles: string[];
   team_id: number | null;
   team_name: string | null;
+  display_name?: string;
+  source?: "local" | "ldap" | "zabbix";
+};
+
+export type TemplateItem = {
+  itemid: string;
+  name: string;
+  key_: string;
+  type: string;
+  value_type: string;
+  delay: string;
+  history: string;
+  trends: string;
+  status: string;
+  units: string;
+  description: string;
+  templateid: string;
 };
 
 export type Team = {
@@ -241,4 +262,5 @@ export type Team = {
   description: string;
   users: TeamUser[];
   hosts: string[];
+  roles: string[];
 };

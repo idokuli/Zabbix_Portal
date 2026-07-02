@@ -1,6 +1,8 @@
+import { generateId } from "../app/utils";
+
 export type CustomSound = { id: string; name: string };
 
-const DB_NAME = "zabbix-portal-sounds";
+const DB_NAME = "overwatch-sounds";
 const STORE = "sounds";
 
 const openDB = (): Promise<IDBDatabase> =>
@@ -28,7 +30,7 @@ export const listSounds = async (): Promise<CustomSound[]> => {
 
 export const addSound = async (name: string, file: File): Promise<string> => {
   const db = await openDB();
-  const id = crypto.randomUUID();
+  const id = generateId();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
     tx.objectStore(STORE).add({ id, name, blob: file });

@@ -1,5 +1,5 @@
 import { apiFetch } from "./fetch";
-import type { AlertEvent, AlertRule, ItemHistory, Problem } from "./types";
+import type { AlertEvent, AlertRule, ItemHistory, Problem, StoredNotif } from "./types";
 
 export const metricsApi = {
   getProblems: () => apiFetch<{ problems: Problem[] }>("/metrics/problems"),
@@ -7,22 +7,25 @@ export const metricsApi = {
     apiFetch<ItemHistory>(`/metrics/history/${encodeURIComponent(itemid)}?minutes=${minutes}`),
   listAlertRules: () => apiFetch<{ rules: AlertRule[] }>("/alerts/rules"),
   createAlertRule: (data: {
+    rule_type?: "item" | "service";
     item_id: string;
     item_name: string;
     hostname: string;
-    operator: string;
-    threshold: number;
+    operator?: string;
+    threshold?: number;
     severity: number;
+    expected_contains?: string;
   }) => apiFetch<{ id: number }>("/alerts/rules", { method: "POST", body: JSON.stringify(data) }),
   updateAlertRule: (
     id: number,
     data: {
-      operator: string;
-      threshold: number;
       severity: number;
+      operator?: string;
+      threshold?: number;
       item_id?: string;
       item_name?: string;
       hostname?: string;
+      expected_contains?: string;
     },
   ) =>
     apiFetch<{ message: string }>(`/alerts/rules/${id}`, {
@@ -35,6 +38,12 @@ export const metricsApi = {
     apiFetch<{ enabled: boolean }>(`/alerts/rules/${id}/toggle`, { method: "PATCH" }),
   getAlertEvents: (limit = 200) =>
     apiFetch<{ events: AlertEvent[] }>(`/alerts/events?limit=${limit}`),
+  getNotifHistory: () => apiFetch<{ history: StoredNotif[] }>("/alerts/notification-history"),
+  saveNotifHistory: (entries: StoredNotif[]) =>
+    apiFetch<void>("/alerts/notification-history", {
+      method: "POST",
+      body: JSON.stringify(entries),
+    }),
   acknowledgeProblem: (
     eventid: string,
     meta: { problem_name: string; hostname: string; severity: number; note: string },

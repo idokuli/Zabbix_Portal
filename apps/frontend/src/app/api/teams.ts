@@ -21,4 +21,21 @@ export const teamsApi = {
     apiFetch<{ message: string }>(`/teams/${teamId}/hosts/${encodeURIComponent(hostname)}`, {
       method: "DELETE",
     }),
+  addTeamMember: (teamId: number, userId: number) =>
+    apiFetch<{ message: string }>(`/teams/${teamId}/members`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: userId }),
+    }),
+  removeTeamMember: (teamId: number, userId: number) =>
+    apiFetch<{ message: string }>(`/teams/${teamId}/members/${userId}`, {
+      method: "DELETE",
+    }),
+  getTeamRoles: (teamId: number) => apiFetch<{ roles: string[] }>(`/teams/${teamId}/roles`),
+  setTeamRoles: (teamId: number, roles: string[]) =>
+    apiFetch<{ ok: boolean }>(`/teams/${teamId}/roles`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roles }),
+    }),
 };

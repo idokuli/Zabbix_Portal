@@ -22,8 +22,11 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { type AlertEvent, api } from "../../app/api";
+import { TabHeader } from "../../app/components/TabHeader";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 import { SEVERITY_CONFIG, SeverityChip, formatAge } from "./shared";
 
 // ── Notifications tab ─────────────────────────────────────────────────
@@ -41,6 +44,8 @@ type ZabbixNotification = {
 };
 
 export const NotificationsTab = () => {
+  const tick = useRefreshTick();
+  const router = useRouter();
   const [notifs, setNotifs] = useState<ZabbixNotification[]>([]);
   const [portalEvents, setPortalEvents] = useState<AlertEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,23 +53,29 @@ export const NotificationsTab = () => {
   const [hours, setHours] = useState(24);
   const [statusFilter, setStatusFilter] = useState<number | "">("");
 
-  const loadAll = useCallback(() => {
-    setLoading(true);
-    setFetchError("");
-    Promise.all([api.getNotificationHistory({ hours, limit: 500 }), api.getAlertEvents(500)])
-      .then(([nr, ar]) => {
-        setNotifs(nr.notifications);
-        setPortalEvents(ar.events);
-      })
-      .catch((e) => setFetchError(e instanceof Error ? e.message : String(e)))
-      .finally(() => setLoading(false));
-  }, [hours]);
+  const loadAll = useCallback(
+    (silent = false) => {
+      if (!silent) setLoading(true);
+      setFetchError("");
+      Promise.all([api.getNotificationHistory({ hours, limit: 500 }), api.getAlertEvents(500)])
+        .then(([nr, ar]) => {
+          setNotifs(nr.notifications);
+          setPortalEvents(ar.events);
+        })
+        .catch((e) => setFetchError(e instanceof Error ? e.message : String(e)))
+        .finally(() => setLoading(false));
+    },
+    [hours],
+  );
 
   useEffect(() => {
-    loadAll();
-    const t = setInterval(loadAll, 10_000);
-    return () => clearInterval(t);
+    void loadAll();
   }, [loadAll]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) void loadAll(true);
+  }, [tick]);
 
   const filtered = statusFilter === "" ? notifs : notifs.filter((n) => n.status === statusFilter);
 
@@ -76,6 +87,10 @@ export const NotificationsTab = () => {
 
   return (
     <Box>
+      <TabHeader
+        title="Notifications"
+        description="View a history of alert notifications sent via configured media types."
+      />
       {fetchError && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setFetchError("")}>
           {fetchError}
@@ -149,7 +164,7 @@ export const NotificationsTab = () => {
           </Select>
         </FormControl>
         <Tooltip title="Refresh">
-          <IconButton size="small" onClick={loadAll} disabled={loading}>
+          <IconButton size="small" onClick={() => void loadAll()} disabled={loading}>
             <RefreshIcon sx={{ fontSize: 18 }} />
           </IconButton>
         </Tooltip>
@@ -195,19 +210,31 @@ export const NotificationsTab = () => {
               </TableRow>
             ) : (
               filtered.map((n) => (
-                <TableRow key={n.alertid} hover>
+                <TableRow
+                  key={n.alertid}
+                  hover
+                  sx={{ cursor: "pointer" }}
+                  onClick={() => router.push("/metrics?tab=problems")}
+                >
                   <TableCell>
                     <Tooltip title={new Date(n.clock * 1000).toLocaleString()}>
                       <Typography
                         variant="body2"
-                        sx={{ fontSize: "0.75rem", color: "text.secondary", cursor: "default" }}
+                        sx={{ fontSize: "0.75rem", color: "text.secondary", cursor: "pointer" }}
                       >
                         {formatAge(Math.floor(Date.now() / 1000) - n.clock)} ago
                       </Typography>
                     </Tooltip>
                   </TableCell>
                   <TableCell>
-                    <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontSize: "0.8rem",
+                        color: "primary.main",
+                        "&:hover": { textDecoration: "underline" },
+                      }}
+                    >
                       {n.subject || "—"}
                     </Typography>
                     {n.error && (
@@ -309,12 +336,27 @@ export const NotificationsTab = () => {
                 const sev =
                   SEVERITY_CONFIG.find((s) => s.severity === e.severity) ?? SEVERITY_CONFIG[5];
                 return (
-                  <TableRow key={e.id} sx={{ "&:hover": { backgroundColor: "action.hover" } }}>
+                  <TableRow
+                    key={e.id}
+                    hover
+                    sx={{ cursor: "pointer" }}
+                    onClick={() =>
+                      router.push(`/metrics?tab=problems&host=${encodeURIComponent(e.hostname)}`)
+                    }
+                  >
                     <TableCell>
                       <SeverityChip severity={e.severity} />
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2" sx={{ fontSize: "0.8rem", fontWeight: 500 }}>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          fontSize: "0.8rem",
+                          fontWeight: 500,
+                          color: "primary.main",
+                          "&:hover": { textDecoration: "underline" },
+                        }}
+                      >
                         {e.hostname}
                       </Typography>
                     </TableCell>

@@ -17,6 +17,7 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
@@ -37,12 +38,15 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { type Team, type UserRow, api } from "../../app/api";
+import { ConfirmDelete } from "../../app/components/ConfirmDelete";
 import { useAuth } from "../../app/context/AuthContext";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 import { useSync } from "../../app/context/SyncContext";
 import { RolePicker } from "./RolePicker";
 import { ROLE_OPTIONS, avatarColor, roleColor, roleLabel, userInitials } from "./shared";
 
 export const Users = () => {
+  const tick = useRefreshTick();
   const { lastSync } = useSync();
   const { user: currentUser } = useAuth();
   const isRoot = currentUser?.roles?.includes("root") ?? false;
@@ -71,13 +75,14 @@ export const Users = () => {
   const [newRoles, setNewRoles] = useState<string[]>([]);
   const [newTeamId, setNewTeamId] = useState<number | "">("");
 
+  const [expandedUserId, setExpandedUserId] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<UserRow | null>(null);
   const [showNewPw, setShowNewPw] = useState(false);
   const [showCreatePw, setShowCreatePw] = useState(false);
   const [snack, setSnack] = useState<{ msg: string; sev: "success" | "error" } | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [usersRes, teamsRes] = await Promise.all([api.listUsers(), api.getTeamsOverview()]);
       setUsers(usersRes.users);
@@ -93,6 +98,11 @@ export const Users = () => {
   useEffect(() => {
     void load();
   }, [load, lastSync]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) void load(true);
+  }, [tick]);
 
   const openEdit = (u: UserRow) => {
     setEditUser(u);
@@ -174,20 +184,17 @@ export const Users = () => {
   return (
     <Stack spacing={3}>
       {/* Header */}
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-          <PeopleOutlinedIcon sx={{ fontSize: 28, color: "primary.main" }} />
-          <Box>
-            <Typography variant="h5" sx={{ fontWeight: 700 }}>
-              Users
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {isRoot ? "All users across every team" : "Users in your team"}
-            </Typography>
-          </Box>
+      <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>
+            Users
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+            {isRoot ? "All users across every team" : "Users in your team"}
+          </Typography>
         </Box>
         <Box sx={{ display: "flex", gap: 1 }}>
-          <IconButton size="small" onClick={load} disabled={loading}>
+          <IconButton size="small" onClick={() => void load()} disabled={loading}>
             {loading ? <CircularProgress size={16} /> : <RefreshIcon fontSize="small" />}
           </IconButton>
           <Button
@@ -272,130 +279,212 @@ export const Users = () => {
               </Typography>
             </Box>
           ) : (
-            filtered.map((u, idx) => (
-              <Box key={u.id}>
-                {idx > 0 && <Divider />}
-                <Box
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 2,
-                    px: 2.5,
-                    py: 1.75,
-                    "&:hover": { backgroundColor: "action.hover" },
-                    transition: "background 0.15s ease",
-                  }}
-                >
-                  {/* Avatar */}
-                  <Avatar
-                    sx={{
-                      width: 36,
-                      height: 36,
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      background: `linear-gradient(135deg, ${avatarColor(u.username)}, ${avatarColor(u.username)}99)`,
-                      flexShrink: 0,
-                    }}
-                  >
-                    {userInitials(u.username)}
-                  </Avatar>
-
-                  {/* Identity */}
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
-                      {u.username}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" noWrap>
-                      {u.email || "—"}
-                    </Typography>
-                  </Box>
-
-                  {/* Roles */}
+            filtered.map((u, idx) => {
+              const isExpanded = expandedUserId === u.id;
+              const displayLabel = u.display_name?.trim() || u.username;
+              const sourceLabel =
+                u.source === "ldap" ? "LDAP" : u.source === "zabbix" ? "Zabbix" : "Local";
+              const sourceColor =
+                u.source === "ldap"
+                  ? "info"
+                  : u.source === "zabbix"
+                    ? "warning"
+                    : ("default" as const);
+              return (
+                <Box key={u.id}>
+                  {idx > 0 && <Divider />}
+                  {/* Clickable summary row */}
                   <Box
+                    onClick={() => setExpandedUserId(isExpanded ? null : u.id)}
                     sx={{
                       display: "flex",
-                      flexWrap: "wrap",
-                      gap: 0.5,
-                      flex: 1,
-                      justifyContent: "flex-start",
+                      alignItems: "center",
+                      gap: 2,
+                      px: 2.5,
+                      py: 1.75,
+                      cursor: "pointer",
+                      "&:hover": { backgroundColor: "action.hover" },
+                      transition: "background 0.15s ease",
                     }}
                   >
-                    {(u.roles ?? []).map((r) => (
-                      <Chip
-                        key={r}
-                        label={roleLabel(r)}
-                        size="small"
-                        color={roleColor(r)}
-                        variant="outlined"
-                        sx={{ height: 20, fontSize: "0.68rem" }}
-                      />
-                    ))}
-                  </Box>
+                    {/* Avatar */}
+                    <Avatar
+                      sx={{
+                        width: 36,
+                        height: 36,
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        background: `linear-gradient(135deg, ${avatarColor(u.username)}, ${avatarColor(u.username)}99)`,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {userInitials(u.display_name?.trim() || u.username)}
+                    </Avatar>
 
-                  {/* Team */}
-                  <Box sx={{ minWidth: 120, display: { xs: "none", md: "block" } }}>
-                    {u.team_name ? (
-                      <Chip
-                        label={u.team_name}
-                        size="small"
-                        variant="outlined"
-                        sx={{
-                          height: 20,
-                          fontSize: "0.68rem",
-                          borderColor: "rgba(148,163,184,0.3)",
-                        }}
-                      />
-                    ) : (
-                      <Typography variant="caption" color="text.disabled">
-                        No team
+                    {/* Identity */}
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                        {displayLabel}
                       </Typography>
-                    )}
+                      <Typography variant="caption" color="text.secondary" noWrap>
+                        {u.email || "—"}
+                      </Typography>
+                    </Box>
+
+                    {/* Roles */}
+                    <Box
+                      sx={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 0.5,
+                        flex: 1,
+                        justifyContent: "flex-start",
+                      }}
+                    >
+                      {(u.roles ?? []).map((r) => (
+                        <Chip
+                          key={r}
+                          label={roleLabel(r)}
+                          size="small"
+                          color={roleColor(r)}
+                          variant="outlined"
+                          sx={{ height: 20, fontSize: "0.68rem" }}
+                        />
+                      ))}
+                    </Box>
+
+                    {/* Team */}
+                    <Box sx={{ minWidth: 120, display: { xs: "none", md: "block" } }}>
+                      {u.team_name ? (
+                        <Chip
+                          label={u.team_name}
+                          size="small"
+                          variant="outlined"
+                          sx={{
+                            height: 20,
+                            fontSize: "0.68rem",
+                            borderColor: "rgba(148,163,184,0.3)",
+                          }}
+                        />
+                      ) : (
+                        <Typography variant="caption" color="text.disabled">
+                          No team
+                        </Typography>
+                      )}
+                    </Box>
                   </Box>
 
-                  {/* Actions */}
-                  <Box sx={{ display: "flex", gap: 0.25, flexShrink: 0 }}>
-                    <Tooltip title="Edit roles & team">
-                      <IconButton
-                        size="small"
-                        onClick={() => openEdit(u)}
-                        sx={{ color: "primary.main" }}
-                      >
-                        <EditOutlinedIcon sx={{ fontSize: 17 }} />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Reset password">
-                      <IconButton
-                        size="small"
-                        onClick={() => {
-                          setPwUser(u);
-                          setNewPw("");
-                        }}
-                        sx={{ color: "warning.main" }}
-                      >
-                        <LockResetOutlinedIcon sx={{ fontSize: 17 }} />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Delete user">
-                      <IconButton
-                        size="small"
-                        aria-label="Delete user"
-                        onClick={() => setConfirmDelete(u)}
-                        sx={{ color: "error.main" }}
-                      >
-                        <DeleteOutlineIcon sx={{ fontSize: 17 }} />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
+                  {/* Expanded detail */}
+                  <Collapse in={isExpanded} unmountOnExit>
+                    <Box
+                      sx={{
+                        px: 3,
+                        pb: 1.5,
+                        pt: 0,
+                        bgcolor: "action.hover",
+                        borderTop: "1px solid",
+                        borderColor: "divider",
+                      }}
+                    >
+                      <Stack spacing={0.5} sx={{ pt: 1.25, pb: 1 }}>
+                        <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                          <Typography variant="caption" color="text.disabled" sx={{ minWidth: 90 }}>
+                            Login
+                          </Typography>
+                          <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                            {u.username}
+                          </Typography>
+                        </Box>
+                        {u.display_name?.trim() && u.display_name !== u.username && (
+                          <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                            <Typography
+                              variant="caption"
+                              color="text.disabled"
+                              sx={{ minWidth: 90 }}
+                            >
+                              Display name
+                            </Typography>
+                            <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                              {u.display_name}
+                            </Typography>
+                          </Box>
+                        )}
+                        <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                          <Typography variant="caption" color="text.disabled" sx={{ minWidth: 90 }}>
+                            Email
+                          </Typography>
+                          <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                            {u.email || "—"}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                          <Typography variant="caption" color="text.disabled" sx={{ minWidth: 90 }}>
+                            Source
+                          </Typography>
+                          <Chip
+                            label={sourceLabel}
+                            size="small"
+                            color={sourceColor}
+                            variant="outlined"
+                            sx={{ height: 16, fontSize: "0.6rem" }}
+                          />
+                        </Box>
+                      </Stack>
+                      {/* Actions */}
+                      <Box sx={{ display: "flex", gap: 0.5, pt: 0.5 }}>
+                        <Tooltip title="Edit roles & team">
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openEdit(u);
+                            }}
+                            sx={{ color: "primary.main" }}
+                          >
+                            <EditOutlinedIcon sx={{ fontSize: 17 }} />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Reset password">
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPwUser(u);
+                              setNewPw("");
+                            }}
+                            sx={{ color: "warning.main" }}
+                          >
+                            <LockResetOutlinedIcon sx={{ fontSize: 17 }} />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Delete user">
+                          <IconButton
+                            size="small"
+                            aria-label="Delete user"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmDelete(u);
+                            }}
+                            sx={{ color: "error.main" }}
+                          >
+                            <DeleteOutlineIcon sx={{ fontSize: 17 }} />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    </Box>
+                  </Collapse>
                 </Box>
-              </Box>
-            ))
+              );
+            })
           )}
         </CardContent>
       </Card>
 
       {/* ── Edit dialog ── */}
       <Dialog open={!!editUser} onClose={() => setEditUser(null)} fullWidth maxWidth="sm">
-        <DialogTitle sx={{ fontWeight: 700 }}>Edit User — {editUser?.username}</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          Edit User — {editUser?.display_name?.trim() || editUser?.username}
+        </DialogTitle>
         <DialogContent sx={{ pt: "16px !important" }}>
           <Stack spacing={2.5}>
             <Box>
@@ -438,7 +527,9 @@ export const Users = () => {
 
       {/* ── Reset password dialog ── */}
       <Dialog open={!!pwUser} onClose={() => setPwUser(null)} fullWidth maxWidth="xs">
-        <DialogTitle sx={{ fontWeight: 700 }}>Reset Password — {pwUser?.username}</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          Reset Password — {pwUser?.display_name?.trim() || pwUser?.username}
+        </DialogTitle>
         <DialogContent sx={{ pt: "16px !important" }}>
           <TextField
             label="New password"
@@ -556,25 +647,12 @@ export const Users = () => {
         </DialogActions>
       </Dialog>
 
-      {/* ── Delete confirmation dialog ── */}
-      <Dialog open={!!confirmDelete} onClose={() => setConfirmDelete(null)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700 }}>Delete user?</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">
-            Permanently delete <strong>{confirmDelete?.username}</strong>? This cannot be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmDelete(null)}>Cancel</Button>
-          <Button
-            variant="contained"
-            color="error"
-            onClick={() => confirmDelete && void handleDelete(confirmDelete)}
-          >
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDelete
+        open={!!confirmDelete}
+        name={confirmDelete?.display_name?.trim() || confirmDelete?.username || ""}
+        onConfirm={() => confirmDelete && void handleDelete(confirmDelete)}
+        onClose={() => setConfirmDelete(null)}
+      />
 
       {/* Toast */}
       <Snackbar

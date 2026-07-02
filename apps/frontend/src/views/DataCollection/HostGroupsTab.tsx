@@ -25,6 +25,8 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../app/api";
+import { TabHeader } from "../../app/components/TabHeader";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 import { ConfirmDelete, type HostGroup, MembersDialog, SectionHeader } from "./shared";
 
 type HostOption = { hostid: string; host: string; name: string };
@@ -50,24 +52,33 @@ export const HostGroupsTab = ({
   const [allHosts, setAllHosts] = useState<HostOption[]>([]);
   const [hostsLoading, setHostsLoading] = useState(false);
   const [selectedHosts, setSelectedHosts] = useState<HostOption[]>([]);
+  const tick = useRefreshTick();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const r = await api.listHostGroups();
-      setGroups(r.groups);
-      setLoadError(false);
-    } catch (e) {
-      setLoadError(true);
-      showToast(e instanceof Error ? e.message : String(e), "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [showToast]);
+  const load = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+      try {
+        const r = await api.listHostGroups();
+        setGroups(r.groups);
+        setLoadError(false);
+      } catch (e) {
+        setLoadError(true);
+        showToast(e instanceof Error ? e.message : String(e), "error");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [showToast],
+  );
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) void load(true);
+  }, [tick]);
 
   const openDialog = async (target: HostGroup | null) => {
     setEditTarget(target);
@@ -154,6 +165,10 @@ export const HostGroupsTab = ({
 
   return (
     <>
+      <TabHeader
+        title="Host Groups"
+        description="Organize hosts into groups for easier management and permission assignment."
+      />
       <SectionHeader
         title="Host Groups"
         count={groups.length}

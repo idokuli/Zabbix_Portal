@@ -10,3 +10,7 @@ class TeamRequest(BaseModel):
 
 class HostAssignRequest(BaseModel):
     hostname: str
+
+
+class MemberRequest(BaseModel):
+    user_id: int

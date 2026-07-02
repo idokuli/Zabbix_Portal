@@ -1,6 +1,7 @@
-"""Database monitoring items: ODBC (type 4) and Agent2 DB plugin items."""
+"""Database monitoring items: ODBC (type 11) and Agent2 DB plugin items."""
 
 import logging
+from Zabbix_Base import zabbix_err
 from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
@@ -143,7 +144,7 @@ class DatabaseItemsMixin:
         status: int = 0,
         timeout: str = "",
     ) -> tuple[str | None, str | None]:
-        """Add a Zabbix ODBC database monitor item (type 4) using db.odbc.select."""
+        """Add a Zabbix ODBC database monitor item (type 11) using db.odbc.select."""
         if not self.zapi:
             return None, "Zabbix API not connected."
         if not dsn or not sql_query or not description:
@@ -165,7 +166,7 @@ class DatabaseItemsMixin:
                 name=item_name,
                 key_=item_key,
                 hostid=host_id,
-                type=4,
+                type=11,  # DB monitor (ODBC); type 4 was legacy SNMPv2c
                 value_type=value_type,
                 params=sql_query,
                 delay=delay or "1m",
@@ -191,7 +192,7 @@ class DatabaseItemsMixin:
             return item_id, None
         except Exception as e:
             logger.error("add_db_odbc_item(%r) failed: %r", hostname, e)
-            return None, str(e)
+            return None, zabbix_err(e)
 
     def add_db_agent2_item(
         self,

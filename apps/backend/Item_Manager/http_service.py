@@ -16,6 +16,18 @@ class HttpServiceItemsMixin:
     if TYPE_CHECKING:
         zapi: "ZabbixAPI | None"
 
+        def add_trigger(
+            self,
+            hostname: object,
+            item_key: object,
+            trigger_name: object,
+            threshold: object,
+            operator: str = ">",
+            priority: int = 3,
+            event_name: str = "",
+            comments: str = "",
+        ) -> tuple[str | None, str | None]: ...
+
     # Maps service_type slug → (item_key_template, default_name, value_type)
     _SERVICE_MAP: dict[str, tuple[str, str, int]] = {
         "icmp_ping": ("icmpping[]", "ICMP ping", 3),
@@ -246,3 +258,179 @@ class HttpServiceItemsMixin:
                 "add_service_item(%r, %r) failed: %r", hostname, service_type, e
             )
             return None, msg
+
+    def add_process_item(
+        self,
+        hostname: str,
+        process_name: str,
+        run_as_user: str = "",
+        cmdline_regex: str = "",
+        state: str = "all",
+        item_name: str = "",
+        team_name: str = "",
+        create_trigger: bool = True,
+        trigger_priority: int = 3,
+        delay: str = "1m",
+        history: str = "31d",
+        trends: str = "365d",
+        description: str = "",
+    ) -> tuple[str | None, str | None]:
+        """Add a Zabbix agent item using proc.num[] to check if a process is running.
+
+        proc.num[<name>,<user>,<state>,<cmdline>] returns the count of matching processes.
+        A trigger fires when the count drops to 0.
+        """
+        if not self.zapi:
+            return None, "Zabbix API not connected."
+        try:
+            host_data = self.zapi.host.get(
+                filter={"host": [hostname]}, output=["hostid"]
+            )
+            if not host_data:
+                return None, f"Host '{hostname}' not found in Zabbix."
+            host_id = host_data[0]["hostid"]
+
+            interfaces = self.zapi.hostinterface.get(hostids=host_id)
+            if not interfaces:
+                return None, f"No interfaces found for host '{hostname}'."
+            interface_id = interfaces[0]["interfaceid"]
+
+            # Build proc.num key — trailing empty params are omitted
+            parts = [process_name, run_as_user, state, cmdline_regex]
+            # Strip trailing empty parts
+            while parts and not parts[-1]:
+                parts.pop()
+            item_key = f"proc.num[{','.join(parts)}]"
+
+            if not item_name:
+                user_str = f" (user: {run_as_user})" if run_as_user else ""
+                item_name = f"Process {process_name}{user_str} on {hostname}"
+
+            kwargs: dict = dict(
+                name=item_name,
+                key_=item_key,
+                hostid=host_id,
+                interfaceid=interface_id,
+                type=0,  # Zabbix agent
+                value_type=3,  # Numeric unsigned
+                delay=delay or "1m",
+                history=history or "31d",
+                trends=trends or "365d",
+            )
+            if description:
+                kwargs["description"] = description
+            if team_name:
+                kwargs["tags"] = [{"tag": "team", "value": team_name}]
+
+            result = self.zapi.item.create(**kwargs)
+            item_id = result["itemids"][0]
+            logger.info(
+                "Process item %r added to %r (ID: %s).", item_name, hostname, item_id
+            )
+
+            if create_trigger:
+                trigger_name = f"{process_name} is not running on {hostname}"
+                if run_as_user:
+                    trigger_name = f"{process_name} (user: {run_as_user}) is not running on {hostname}"
+                _, te = self.add_trigger(
+                    hostname,
+                    item_key,
+                    trigger_name,
+                    threshold=0,
+                    operator="=",
+                    priority=trigger_priority,
+                )
+                if te:
+                    logger.warning("add_process_item: trigger creation failed: %s", te)
+
+            return item_id, None
+        except Exception as e:
+            logger.error(
+                "add_process_item(%r, %r) failed: %r", hostname, process_name, e
+            )
+            return None, str(e)
+
+    def add_windows_service_item(
+        self,
+        hostname: str,
+        service_name: str,
+        item_name: str = "",
+        team_name: str = "",
+        create_trigger: bool = True,
+        trigger_priority: int = 3,
+        delay: str = "1m",
+        history: str = "31d",
+        trends: str = "365d",
+        description: str = "",
+    ) -> tuple[str | None, str | None]:
+        """Add a Zabbix agent item using service.info[name,state] to monitor a Windows service.
+
+        Returns 0 when running. Trigger fires on any non-zero state (stopped/paused/pending).
+        Requires Zabbix agent on the Windows host.
+        """
+        if not self.zapi:
+            return None, "Zabbix API not connected."
+        try:
+            host_data = self.zapi.host.get(
+                filter={"host": [hostname]}, output=["hostid"]
+            )
+            if not host_data:
+                return None, f"Host '{hostname}' not found in Zabbix."
+            host_id = host_data[0]["hostid"]
+
+            interfaces = self.zapi.hostinterface.get(hostids=host_id)
+            if not interfaces:
+                return None, f"No interfaces found for host '{hostname}'."
+            interface_id = interfaces[0]["interfaceid"]
+
+            item_key = f"service.info[{service_name},state]"
+            if not item_name:
+                item_name = f"Windows service {service_name} state on {hostname}"
+
+            kwargs: dict = dict(
+                name=item_name,
+                key_=item_key,
+                hostid=host_id,
+                interfaceid=interface_id,
+                type=0,  # Zabbix agent
+                value_type=3,  # Numeric unsigned (0=running, 1-7=other states, 255=not found)
+                delay=delay or "1m",
+                history=history or "31d",
+                trends=trends or "365d",
+            )
+            if description:
+                kwargs["description"] = description
+            if team_name:
+                kwargs["tags"] = [{"tag": "team", "value": team_name}]
+
+            result = self.zapi.item.create(**kwargs)
+            item_id = result["itemids"][0]
+            logger.info(
+                "Windows service item %r added to %r (ID: %s).",
+                item_name,
+                hostname,
+                item_id,
+            )
+
+            if create_trigger:
+                trigger_name = f"Service {service_name} is not running on {hostname}"
+                # state != 0 means not running (stopped=6, paused=1, pending states 2-5, unknown=7)
+                _, te = self.add_trigger(
+                    hostname,
+                    item_key,
+                    trigger_name,
+                    threshold=0,
+                    operator="<>",
+                    priority=trigger_priority,
+                )
+                if te:
+                    logger.warning(
+                        "add_windows_service_item: trigger creation failed: %s", te
+                    )
+
+            return item_id, None
+        except Exception as e:
+            logger.error(
+                "add_windows_service_item(%r, %r) failed: %r", hostname, service_name, e
+            )
+            return None, str(e)

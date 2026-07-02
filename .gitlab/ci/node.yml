@@ -1,3 +1,4 @@
+---
 # =============================================================================
 # Frontend (Node.js / npm / Biome) pipeline.
 # =============================================================================
@@ -8,6 +9,8 @@
   needs:
     - job: detect
       artifacts: true
+    - job: validate:variables
+      artifacts: false
   before_script:
     - cd apps/frontend
     - npm ci
@@ -53,6 +56,8 @@ frontend:docker:build:
   needs:
     - job: detect
       artifacts: true
+    - job: validate:variables
+      artifacts: false
     - job: frontend:lint
       optional: true
     - job: frontend:typecheck

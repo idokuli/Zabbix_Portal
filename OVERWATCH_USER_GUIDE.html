@@ -134,7 +134,7 @@
   <tr><td><strong>Active problems count</strong></td><td>Shows unacknowledged Zabbix problems; turns red when problems exist</td></tr>
   <tr><td><strong>Sound controls</strong></td><td>Mute/unmute button and music-note icon for choosing the alert sound</td></tr>
   <tr><td><strong>Backend API / Zabbix dots</strong></td><td>Green = connected, Red = unreachable — at the bottom of the sidebar</td></tr>
-  <tr><td><strong>Your username and role</strong></td><td>At the very bottom, with a logout button</td></tr>
+  <tr><td><strong>Your name and role</strong></td><td>At the very bottom, with a logout button. LDAP users see their full display name (from Active Directory); local users see their login username.</td></tr>
 </table>
 
 <h2>Status Dots</h2>
@@ -150,7 +150,7 @@
 </div>
 
 <h2>Data Refresh</h2>
-<p>Most pages refresh automatically every <strong>15 seconds</strong>. You do not need to manually refresh your browser.</p>
+<p>Most pages refresh automatically on a configurable interval (10 seconds by default). You do not need to manually refresh your browser. The interval can be adjusted by an administrator via the <code>REFRESH_INTERVAL</code> environment variable — no rebuild required.</p>
 
 <hr>
 
@@ -249,7 +249,7 @@
 <p>The Monitoring section has six tabs:</p>
 
 <h3>Latest Data</h3>
-<p>Shows the last collected value for every monitored item on a selected host. Choose a host from the dropdown, then use the search box to filter by item name or key.</p>
+<p>Shows the last collected value for every monitored item on a selected host. Use the search box to filter by item name or key, the <strong>Host</strong> dropdown to pick a specific host, and the <strong>Status</strong> dropdown to show only enabled or disabled items.</p>
 <table>
   <tr><th>Status chip</th><th>Meaning</th></tr>
   <tr><td><strong>Enabled</strong> (green)</td><td>Item is active and collecting</td></tr>
@@ -271,6 +271,8 @@
   <tr><td>Yellow</td><td>Low</td></tr>
   <tr><td>Blue</td><td>Info</td></tr>
 </table>
+
+<p><strong>Filtering and searching:</strong> use the search box to filter by problem name or hostname. Use the <strong>Filter by group</strong> and <strong>Filter by host</strong> dropdowns to narrow by host group or specific host. Click the severity chips at the top to filter by severity level. Use <strong>Clear filters</strong> to reset all filters at once.</p>
 
 <p><strong>Click any row</strong> to expand it and see: full host detail, duration, who acknowledged it, when, and the acknowledgement note.</p>
 
@@ -369,13 +371,27 @@
 </div>
 
 <h3>Teams</h3>
-<p>Teams group users with a shared set of assigned hosts.</p>
+<p>Teams group users with a shared set of assigned hosts. A user can belong to multiple teams simultaneously — they will see the union of all their teams' hosts.</p>
+
+<h4>Creating a team</h4>
 <ol>
-  <li>Click <strong>Create Team</strong>.</li>
-  <li>Enter a team name.</li>
-  <li>Add members and assign their roles within the team.</li>
-  <li>Assign hosts to the team from the host list.</li>
+  <li>Click <strong>Create Team</strong> and enter a name.</li>
+  <li>Use <strong>Add Member</strong> to add existing portal users — a searchable multi-select dialog lets you pick several users at once and confirm in one action.</li>
+  <li>Use <strong>Assign Server</strong> to assign hosts to the team.</li>
 </ol>
+
+<h4>User rows</h4>
+<p>Each member row is expandable — click it to reveal:</p>
+<ul>
+  <li><strong>Login</strong> — the portal username they sign in with</li>
+  <li><strong>Display name</strong> — full name from LDAP/AD (shown only when it differs from the login)</li>
+  <li><strong>Email</strong> — if set</li>
+  <li><strong>Source badge</strong> — Local, LDAP, or Zabbix (how the account was created)</li>
+</ul>
+<p>The collapsed row shows the display name as the primary label (falls back to the login name for local accounts).</p>
+
+<h4>Removing a user from a team</h4>
+<p>Click the trash icon on a member row to remove that user from <em>this team only</em>. Their portal account is not deleted and they can be re-added at any time. To delete a user account entirely, use the Users page.</p>
 
 <h3>User Groups</h3>
 <p>Zabbix-side permission groups (separate from portal teams). Manage which Zabbix user groups exist and add/remove members.</p>
@@ -495,12 +511,12 @@
   <tr><th>Stage</th><th>What happens</th><th>Automatic or manual?</th></tr>
   <tr>
     <td><strong>Detect</strong></td>
-    <td>Compares the new tag against the previous tag to determine which apps actually changed (backend and/or frontend). If nothing in an app changed, its build and deploy jobs are skipped entirely. Also validates that all required CI variables (cluster tokens, registry address, etc.) are set — fails immediately if any are missing.</td>
+    <td>Compares the new tag against the previous tag to determine which apps actually changed (backend and/or frontend). If nothing in an app changed, its build and promote jobs are skipped entirely. Also validates that all required CI variables are set — fails immediately if any are missing.</td>
     <td>Automatic</td>
   </tr>
   <tr>
     <td><strong>Lint</strong></td>
-    <td>Static checks run for changed apps only: Python lint (ruff), Python type-check (mypy), JavaScript lint (Biome), TypeScript type-check (tsc), and Helm chart validation.</td>
+    <td>Static checks: YAML lint (yamllint) runs on all pipeline files; Python lint (ruff), Python type-check (mypy), JavaScript lint (Biome), and TypeScript type-check (tsc) run for changed apps only.</td>
     <td>Automatic</td>
   </tr>
   <tr>
@@ -509,34 +525,24 @@
     <td>Automatic</td>
   </tr>
   <tr>
-    <td><strong>Plan: Staging</strong></td>
-    <td>Resolves which image tag each app will use (new tag for changed apps; the currently deployed tag for unchanged apps) and prints a preview of what Helm will apply. Safe to re-run.</td>
+    <td><strong>Promote</strong></td>
+    <td>Updates the image tags in the GitOps repository (<code>environments/{staging,production,dr}/values.yaml</code>) for each changed app, then commits and pushes. ArgoCD detects the change and syncs each environment according to its policy.</td>
     <td>Automatic</td>
   </tr>
   <tr>
-    <td><strong>Deploy: Staging</strong></td>
-    <td>Runs <code>helm upgrade --install</code> against the staging cluster. The deployment waits up to 5 minutes for all pods to pass their health checks before marking the job as successful. If pods don't come up in time, the job fails and staging stays on the previous version.</td>
-    <td>Automatic</td>
+    <td><strong>ArgoCD: Staging sync</strong></td>
+    <td>ArgoCD detects the new image tag and automatically applies the updated Helm chart to the staging cluster. Pods roll with the new image; ArgoCD monitors health and marks the sync complete when all pods are ready.</td>
+    <td>Automatic (ArgoCD — outside the GitLab pipeline)</td>
   </tr>
   <tr>
-    <td><strong>Plan: Production</strong></td>
-    <td>Resolves production's image tags from its own deployment history (falls back to staging's resolved tags if production has never been deployed to before). Prints a preview.</td>
-    <td>Automatic (runs after staging deploys)</td>
+    <td><strong>ArgoCD: Production sync</strong></td>
+    <td>ArgoCD shows the production Application as OutOfSync. An operator opens the ArgoCD UI and clicks <strong>Sync</strong> — production is <strong>never deployed automatically</strong>.</td>
+    <td><strong>Manual (ArgoCD UI)</strong></td>
   </tr>
   <tr>
-    <td><strong>Deploy: Production</strong></td>
-    <td>Runs <code>helm upgrade --install</code> against the production cluster. Requires a human to click ▶ in the GitLab pipeline UI — production is <strong>never deployed automatically</strong>.</td>
-    <td><strong>Manual gate (▶)</strong></td>
-  </tr>
-  <tr>
-    <td><strong>Plan: DR</strong></td>
-    <td>Resolves DR's image tags (from its own history; falls back to production). DR is a completely separate cluster from production — it has its own token and API endpoint.</td>
-    <td>Automatic (runs after production deploys)</td>
-  </tr>
-  <tr>
-    <td><strong>Deploy: DR</strong></td>
-    <td>Deploys to the Disaster Recovery cluster. Also a manual gate — click ▶ when production is verified healthy.</td>
-    <td><strong>Manual gate (▶)</strong></td>
+    <td><strong>ArgoCD: DR sync</strong></td>
+    <td>Same as production — DR shows OutOfSync in ArgoCD. Click Sync when production is confirmed healthy. DR is a completely separate cluster from production.</td>
+    <td><strong>Manual (ArgoCD UI)</strong></td>
   </tr>
 </table>
 
@@ -547,17 +553,17 @@
   <li>If only <code>apps/frontend/</code> changed — only the frontend is rebuilt and re-deployed. The backend keeps its current image tag.</li>
   <li>If only <code>apps/backend/</code> changed — only the backend is rebuilt. The frontend is untouched.</li>
   <li>If both changed — both are rebuilt.</li>
-  <li>If only <code>helm/</code> changed — neither app is rebuilt, but the Helm chart update is still deployed (using each app's currently-deployed image tag).</li>
+  <li>If only the Helm chart changed (in the GitOps repo) — neither app is rebuilt here; ArgoCD picks up the chart change directly from the GitOps repo and syncs.</li>
 </ul>
 
 <p>This means a frontend change never forces an unnecessary backend restart, and vice versa.</p>
 
 <h2>How to know what version is running</h2>
 
-<p>In GitLab, open the project's <strong>Deployments → Environments</strong> page. Each environment (staging, production, DR) shows its most recently deployed tag. The Git tag name is the image version — e.g. the <code>v1.4.0</code> tag built images tagged <code>:v1.4.0</code>.</p>
+<p>In the <strong>ArgoCD UI</strong>, open the relevant Application (e.g. <code>zabbix-portal-production</code>). The <strong>Summary</strong> tab shows the current Git revision synced and the image tags in use. The Git tag name is the image version — e.g. the <code>v1.4.0</code> tag built images tagged <code>:v1.4.0</code>.</p>
 
 <p>From the cluster directly:</p>
-<pre><code>helm history zabbix-portal -n &lt;namespace&gt;</code></pre>
+<pre><code>kubectl get deployment -n &lt;namespace&gt; -o jsonpath='{.items[*].spec.template.spec.containers[*].image}'</code></pre>
 
 <h2>Environments</h2>
 
@@ -566,30 +572,29 @@
   <tr>
     <td><strong>Staging</strong></td>
     <td>Test every tag before it reaches users. The UI and API are fully functional; data is isolated from production.</td>
-    <td>Automatic on every tag</td>
+    <td>Automatic — ArgoCD auto-syncs when the GitOps repo is updated</td>
   </tr>
   <tr>
     <td><strong>Production</strong></td>
     <td>The live environment users access.</td>
-    <td>Manual gate — click ▶ after validating staging</td>
+    <td>Manual — click <strong>Sync</strong> in the ArgoCD UI after validating staging</td>
   </tr>
   <tr>
     <td><strong>DR (Disaster Recovery)</strong></td>
     <td>A standby deployment on a separate cluster. Used to fail over if the production cluster is unavailable.</td>
-    <td>Manual gate — typically clicked after production is confirmed healthy</td>
+    <td>Manual — click <strong>Sync</strong> in ArgoCD after production is confirmed healthy</td>
   </tr>
 </table>
 
 <h2>Rollback</h2>
 
-<p>If a deployment causes a problem, administrators can roll back to the previous version without touching the code:</p>
-<pre><code>helm rollback zabbix-portal &lt;previous-revision-number&gt; -n &lt;namespace&gt;</code></pre>
+<p>If a deployment causes a problem, administrators can roll back to the previous version without touching the code. In the ArgoCD UI, open the Application → <strong>History and Rollback</strong> → select the last known-good revision → click <strong>Rollback</strong>. ArgoCD re-applies the chart and image tags from that Git revision immediately.</p>
 
-<p>This restores both the Helm chart and the image tags to the previous state. A follow-up tag is created to revert the bad code in the source repository — but users are unaffected immediately after the rollback command completes.</p>
+<p>Alternatively, edit the image tag directly in the GitOps repo's <code>environments/&lt;env&gt;/values.yaml</code> and push — ArgoCD picks up the change (staging auto-syncs; production/DR require a manual Sync click).</p>
 
 <div class="tip">
-  <div class="panel-title">How to check what revision to roll back to</div>
-  <code>helm history zabbix-portal -n &lt;namespace&gt;</code> lists every revision with its status, timestamp, and chart version. Pick the last <code>deployed</code> revision before the problem started.
+  <div class="panel-title">How to check what was previously deployed</div>
+  In the ArgoCD UI, the <strong>History and Rollback</strong> tab for each Application lists every sync with its Git revision, timestamp, and status. Pick the last <strong>Succeeded</strong> entry before the problem started.
 </div>
 
 <hr>
@@ -635,8 +640,8 @@
   </tr>
   <tr>
     <td><strong>Acknowledged problem — badge did not update</strong></td>
-    <td>The badge refreshes every 15 seconds.</td>
-    <td>Wait up to 15 seconds. If it still does not update, refresh the page.</td>
+    <td>The badge refreshes on the auto-refresh interval (10 seconds by default).</td>
+    <td>Wait a few seconds. If it still does not update, refresh the page.</td>
   </tr>
   <tr>
     <td><strong>Export downloads empty or corrupted file</strong></td>
@@ -665,8 +670,8 @@
   </tr>
   <tr>
     <td><strong>Staging was deployed but production still shows the old version</strong></td>
-    <td>Production requires a manual gate — it is never deployed automatically.</td>
-    <td>Open the GitLab pipeline for the relevant tag and click ▶ on <strong>deploy:production</strong>.</td>
+    <td>Production requires a manual sync — it is never deployed automatically.</td>
+    <td>Open the ArgoCD UI, find the <strong>zabbix-portal-production</strong> Application (it will show OutOfSync), and click <strong>Sync</strong>.</td>
   </tr>
 </table>
 

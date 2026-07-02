@@ -38,9 +38,22 @@ export const serviceTypes = [
   { value: "smtp", label: "SMTP", port: 25, description: "TCP check on port 25" },
   { value: "ftp", label: "FTP", port: 21, description: "TCP check on port 21" },
   { value: "tcp_port", label: "TCP Port", port: null, description: "Custom TCP port check" },
+  {
+    value: "linux_process",
+    label: "Linux Process",
+    port: null,
+    description: "Agent: proc.num[] — checks if a process is running",
+  },
+  {
+    value: "windows_service",
+    label: "Windows Service",
+    port: null,
+    description: "Agent: service.info[] — checks if a Windows service is running",
+  },
 ];
 
 export const icmpTypes = new Set(["icmp_ping", "icmp_loss", "icmp_time"]);
+export const agentServiceTypes = new Set(["linux_process", "windows_service"]);
 
 export const severities = [
   { value: 0, label: "None" },

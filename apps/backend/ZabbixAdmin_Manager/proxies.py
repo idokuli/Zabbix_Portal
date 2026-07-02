@@ -130,15 +130,7 @@ class ProxiesMixin:
             return []
         try:
             groups = self.zapi.proxygroup.get(
-                output=[
-                    "proxygroupid",
-                    "name",
-                    "failover",
-                    "delay",
-                    "min_online",
-                    "description",
-                    "state",
-                ],
+                output="extend",
                 selectProxies=["proxyid", "name"],
                 sortfield="name",
             )
@@ -146,7 +138,7 @@ class ProxiesMixin:
                 {
                     "proxygroupid": g["proxygroupid"],
                     "name": g["name"],
-                    "failover_delay": g.get("delay", "1m"),
+                    "failover_delay": g.get("failover_delay", "1m"),
                     "min_online": int(g.get("min_online", 1)),
                     "description": g.get("description", ""),
                     "state": g.get("state", 0),

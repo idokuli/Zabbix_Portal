@@ -16,10 +16,6 @@ import {
   CardContent,
   Chip,
   Collapse,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Divider,
   FormControl,
   IconButton,
@@ -42,6 +38,7 @@ import {
 } from "@mui/material";
 import React, { useEffect, useState } from "react";
 import { type Host, api } from "../../app/api";
+import { ConfirmDelete } from "../../app/components/ConfirmDelete";
 import { AddTriggerDialog } from "./AddTriggerDialog";
 import { BulkTriggerDialog } from "./BulkTriggerDialog";
 import { EditTriggerDialog } from "./EditTriggerDialog";
@@ -57,7 +54,7 @@ export const Triggers = () => {
   const [selectedHost, setSelectedHost] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmDeleteTrigger, setConfirmDeleteTrigger] = useState<TriggerRow | null>(null);
   const [expandedTriggerId, setExpandedTriggerId] = useState<string | null>(null);
 
   // ── Add trigger form state ───────────────────────────────────────────
@@ -221,7 +218,7 @@ export const Triggers = () => {
     } catch (e) {
       showToast(e instanceof Error ? e.message : String(e), "error");
     } finally {
-      setConfirmDeleteId(null);
+      setConfirmDeleteTrigger(null);
     }
   };
 
@@ -265,44 +262,32 @@ export const Triggers = () => {
   });
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h5" fontWeight={700} mb={3}>
-        Triggers
-      </Typography>
+    <Stack spacing={3}>
+      <Box>
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>
+          Triggers
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+          Manage and monitor Zabbix triggers across all hosts.
+        </Typography>
+      </Box>
 
       <Card>
         <CardContent>
           <Stack spacing={2}>
             {/* Toolbar */}
-            <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
-              <FormControl size="small" sx={{ minWidth: 220 }}>
-                <InputLabel>Host</InputLabel>
-                <Select
-                  value={selectedHost}
-                  label="Host"
-                  onChange={(e) => handleHostChange(e.target.value)}
-                >
-                  <MenuItem value="">
-                    <em>Select a host…</em>
-                  </MenuItem>
-                  {hosts.map((h) => (
-                    <MenuItem key={h.hostid} value={h.host}>
-                      {h.host}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems="center">
               <TextField
                 size="small"
                 placeholder="Search by name or expression…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 disabled={!selectedHost}
-                sx={{ minWidth: 260 }}
+                sx={{ flex: 1 }}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
-                      <SearchOutlinedIcon sx={{ fontSize: 18 }} />
+                      <SearchOutlinedIcon sx={{ fontSize: 18, color: "text.disabled" }} />
                     </InputAdornment>
                   ),
                   endAdornment: search ? (
@@ -314,7 +299,23 @@ export const Triggers = () => {
                   ) : null,
                 }}
               />
-              <Box sx={{ flex: 1 }} />
+              <FormControl size="small" sx={{ minWidth: 200 }}>
+                <InputLabel>Filter by host</InputLabel>
+                <Select
+                  value={selectedHost}
+                  label="Filter by host"
+                  onChange={(e) => handleHostChange(e.target.value)}
+                >
+                  <MenuItem value="">
+                    <em>All hosts</em>
+                  </MenuItem>
+                  {hosts.map((h) => (
+                    <MenuItem key={h.hostid} value={h.host}>
+                      {h.host}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
               <Tooltip title="Refresh">
                 <span>
                   <IconButton
@@ -536,7 +537,7 @@ export const Triggers = () => {
                                         color="error"
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          setConfirmDeleteId(t.triggerid);
+                                          setConfirmDeleteTrigger(t);
                                         }}
                                       >
                                         <DeleteOutlineIcon fontSize="small" />
@@ -728,30 +729,12 @@ export const Triggers = () => {
         onSave={() => void handleEdit()}
       />
 
-      {/* ── Confirm delete Dialog ── */}
-      <Dialog
-        open={!!confirmDeleteId}
-        onClose={() => setConfirmDeleteId(null)}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle>Delete Trigger</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Are you sure you want to delete this trigger? This cannot be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmDeleteId(null)}>Cancel</Button>
-          <Button
-            variant="contained"
-            color="error"
-            onClick={() => confirmDeleteId && void handleDelete(confirmDeleteId)}
-          >
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDelete
+        open={!!confirmDeleteTrigger}
+        name={confirmDeleteTrigger?.description ?? ""}
+        onConfirm={() => confirmDeleteTrigger && void handleDelete(confirmDeleteTrigger.triggerid)}
+        onClose={() => setConfirmDeleteTrigger(null)}
+      />
 
       <Snackbar
         open={toast.open}
@@ -768,6 +751,6 @@ export const Triggers = () => {
           {toast.message}
         </Alert>
       </Snackbar>
-    </Box>
+    </Stack>
   );
 };

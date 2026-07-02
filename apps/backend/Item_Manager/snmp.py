@@ -1,6 +1,7 @@
 """SNMP agent items (type 20) and SNMP trap items (type 17)."""
 
 import logging
+from Zabbix_Base import zabbix_err
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -77,6 +78,7 @@ class SnmpItemsMixin:
                 history=history or "31d",
                 trends=trends or "365d",
                 status=status,
+                snmp_version=snmp_version,  # required by Zabbix 5.4+ unified SNMP type
             )
             if snmp_version in (1, 2):
                 kwargs["snmp_community"] = snmp_community or "public"
@@ -109,7 +111,7 @@ class SnmpItemsMixin:
             return item_id, None
         except Exception as e:
             logger.error("add_snmp_item(%r) failed: %r", hostname, e)
-            return None, str(e)
+            return None, zabbix_err(e)
 
     def add_snmp_trap_item(
         self,
@@ -162,4 +164,4 @@ class SnmpItemsMixin:
             return item_id, None
         except Exception as e:
             logger.error("add_snmp_trap_item(%r) failed: %r", hostname, e)
-            return None, str(e)
+            return None, zabbix_err(e)

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from Auth import get_current_user, require_operator
-from api.deps import team_hostname_filter
+from api.deps import team_hostname_filter, zabbix_err
 from api.managers import item_bot
 from api.schemas import BulkTriggerRequest, TriggerRequest, TriggerUpdateRequest
 
@@ -22,7 +22,7 @@ def list_all_triggers(
             search=search, hostname=hostname, limit=limit
         )
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Zabbix API error: {e}")
+        raise HTTPException(status_code=502, detail=zabbix_err(e))
     if allowed is not None:
         triggers = [t for t in triggers if t["hostname"] in allowed]
     return {"triggers": triggers, "total": len(triggers)}
@@ -85,7 +85,7 @@ def update_trigger(
             comments=data.comments,
         )
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=zabbix_err(e))
     return {"message": "Trigger updated."}
 
 

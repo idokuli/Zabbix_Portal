@@ -97,11 +97,16 @@ def login(request: Request, data: LoginRequest):
     # Use the freshest display_name: from this login's LDAP response, or whatever is stored in DB.
     display_name = ldap_display_name or user.get("display_name") or user["username"]
 
+    effective_roles = um.get_effective_roles(user["id"], user["roles"])
     logger.info(
-        "User %r logged in (roles=%s) from %s.", data.username, user["roles"], client_ip
+        "User %r logged in (roles=%s effective=%s) from %s.",
+        data.username,
+        user["roles"],
+        effective_roles,
+        client_ip,
     )
     token = create_token(
-        user["id"], user["username"], user["roles"], user["team_id"], display_name
+        user["id"], user["username"], effective_roles, user["team_id"], display_name
     )
     return {
         "access_token": token,
@@ -110,7 +115,7 @@ def login(request: Request, data: LoginRequest):
             "id": user["id"],
             "username": user["username"],
             "display_name": display_name,
-            "roles": user["roles"],
+            "roles": effective_roles,
             "team_id": user["team_id"],
         },
     }

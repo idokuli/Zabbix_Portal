@@ -1,6 +1,6 @@
 import logging
 
-from Zabbix_Base import Zabbix_Base
+from Zabbix_Base import Zabbix_Base, zabbix_err
 
 from Host_Manager.export import HostExportMixin
 
@@ -113,15 +113,18 @@ class Host_Manager(HostExportMixin, Zabbix_Base):
         group_id="2",
         template_name="Linux by Zabbix agent",
         proxyid: str | None = None,
-    ):
-        """Creates a host in Zabbix and links it to a template."""
+    ) -> tuple[str | None, str | None]:
+        """Creates a host in Zabbix and links it to a template.
+
+        Returns (hostid, None) on success or (None, error_message) on failure.
+        """
         if not self.zapi:
             logger.error("create_server: no Zabbix API connection.")
-            return None
+            return None, "Zabbix API not connected."
 
         tid = self.get_template_id(template_name)
         if not tid:
-            return None
+            return None, f"Template '{template_name}' not found."
 
         resolved_groups = (
             [{"groupid": gid} for gid in group_ids]
@@ -146,21 +149,20 @@ class Host_Manager(HostExportMixin, Zabbix_Base):
                 "templates": [{"templateid": tid}],
             }
             if proxyid:
-                # Zabbix ≥7.0 uses "proxyid"; older versions use "proxy_hostid".
-                proxy_key = (
-                    "proxyid" if self._zabbix_version >= (7, 0) else "proxy_hostid"
-                )
-                params[proxy_key] = proxyid
+                if self._zabbix_version >= (7, 0):
+                    params["proxyid"] = proxyid
+                    params["monitored_by"] = 1
+                else:
+                    params["proxy_hostid"] = proxyid
 
             result = self.zapi.host.create(**params)
             host_id = result["hostids"][0]
             logger.info("Created host %r (ID: %s).", hostname, host_id)
-            self._invalidate("all_hosts")
-            return host_id
+            return host_id, None
 
         except Exception as e:
             logger.error("Failed to create host %r: %r", hostname, e)
-            return None
+            return None, zabbix_err(e)
 
     def update_host(
         self,
@@ -193,10 +195,11 @@ class Host_Manager(HostExportMixin, Zabbix_Base):
             if status is not None:
                 params["status"] = status
             if proxyid is not None:
-                proxy_key = (
-                    "proxyid" if self._zabbix_version >= (7, 0) else "proxy_hostid"
-                )
-                params[proxy_key] = proxyid if proxyid else "0"
+                if self._zabbix_version >= (7, 0):
+                    params["proxyid"] = proxyid if proxyid else "0"
+                    params["monitored_by"] = 1 if proxyid and proxyid != "0" else 0
+                else:
+                    params["proxy_hostid"] = proxyid if proxyid else "0"
             if group_ids is not None:
                 params["groups"] = [{"groupid": gid} for gid in group_ids]
 
@@ -217,12 +220,11 @@ class Host_Manager(HostExportMixin, Zabbix_Base):
                         interfaceid=agent_iface["interfaceid"], ip=ip
                     )
 
-            self._invalidate("all_hosts")
             logger.info("Updated host %r.", hostname)
             return True, None
         except Exception as e:
             logger.error("update_host(%r) failed: %r", hostname, e)
-            return False, str(e)
+            return False, zabbix_err(e)
 
     def delete_server(self, hostname):
         """Finds a host by name and deletes it from Zabbix."""
@@ -242,7 +244,6 @@ class Host_Manager(HostExportMixin, Zabbix_Base):
             host_id = host_data[0]["hostid"]
             self.zapi.host.delete([host_id])
             logger.info("Deleted host %r (ID: %s).", hostname, host_id)
-            self._invalidate("all_hosts")
             return True
 
         except Exception as e:
@@ -250,10 +251,8 @@ class Host_Manager(HostExportMixin, Zabbix_Base):
             return False
 
     def get_hosts(self, team_name: str | None = None):
-        """Retrieves hosts from Zabbix (60 s TTL cache for the unfiltered list)."""
-        if team_name is not None:
-            return self._fetch_hosts(team_name)
-        return self._cached("all_hosts", 60.0, lambda: self._fetch_hosts(None))
+        """Retrieves hosts from Zabbix."""
+        return self._fetch_hosts(team_name)
 
     def _fetch_hosts(self, team_name: str | None = None):
         if not self.zapi:
@@ -273,29 +272,37 @@ class Host_Manager(HostExportMixin, Zabbix_Base):
                 "output": ["hostid", "host", "name", "status", proxy_field],
                 "selectInterfaces": ["ip", "port", "type", "available"],
                 "selectTags": "extend",
+                "selectParentTemplates": ["templateid", "name"],
                 groups_field: ["groupid", "name"],
             }
             if team_name:
                 kwargs["tags"] = [{"tag": "team", "value": team_name, "operator": 1}]
             hosts = self.zapi.host.get(**kwargs)
 
-            # Attach per-host active problem counts (triggers in problem state)
+            # Attach per-host active problem counts using problem.get so counts
+            # match the Problems page (open events only, not raw trigger state).
             if hosts:
                 hostids = [h["hostid"] for h in hosts]
                 try:
-                    # problem.get doesn't support selectHosts; use trigger.get (value=1
-                    # means trigger is in problem state) which does support selectHosts.
-                    problem_triggers = self.zapi.trigger.get(
+                    problems = self.zapi.problem.get(
                         hostids=hostids,
-                        value=1,
-                        output=["triggerid"],
-                        selectHosts=["hostid"],
+                        output=["eventid", "objectid"],
                     )
+                    trigger_ids = list({p["objectid"] for p in problems})
                     counts: dict = {}
-                    for t in problem_triggers:
-                        for h in t.get("hosts", []):
-                            hid = h["hostid"]
-                            counts[hid] = counts.get(hid, 0) + 1
+                    if trigger_ids:
+                        t_hosts = self.zapi.trigger.get(
+                            triggerids=trigger_ids,
+                            output=["triggerid"],
+                            selectHosts=["hostid"],
+                        )
+                        trigger_host_map = {
+                            t["triggerid"]: [h["hostid"] for h in t.get("hosts", [])]
+                            for t in t_hosts
+                        }
+                        for p in problems:
+                            for hid in trigger_host_map.get(p["objectid"], []):
+                                counts[hid] = counts.get(hid, 0) + 1
                     for h in hosts:
                         h["problem_count"] = counts.get(h["hostid"], 0)
                 except Exception as exc:
@@ -365,7 +372,7 @@ class Host_Manager(HostExportMixin, Zabbix_Base):
             return False
 
     def tag_host(self, hostname: str, team_name: str) -> bool:
-        """Add/replace the 'team' tag on a host, preserving all other tags."""
+        """Add a 'team' tag for team_name if not already present, preserving all other tags."""
         if not self.zapi:
             return False
         try:
@@ -377,13 +384,16 @@ class Host_Manager(HostExportMixin, Zabbix_Base):
             if not host_data:
                 return False
             host = host_data[0]
-            tags = [
+            existing = [
                 {"tag": t["tag"], "value": t.get("value", "")}
                 for t in host.get("tags", [])
-                if t.get("tag") != "team"
             ]
-            tags.append({"tag": "team", "value": team_name})
-            self.zapi.host.update(hostid=host["hostid"], tags=tags)
+            # Only append if this team tag is not already there
+            if not any(
+                t["tag"] == "team" and t["value"] == team_name for t in existing
+            ):
+                existing.append({"tag": "team", "value": team_name})
+                self.zapi.host.update(hostid=host["hostid"], tags=existing)
             return True
         except Exception as e:
             logger.error("tag_host(%r) failed: %r", hostname, e)
@@ -423,10 +433,12 @@ class Host_Manager(HostExportMixin, Zabbix_Base):
             return True, None
         except Exception as e:
             logger.error("update_host_tags(%r) failed: %r", hostname, e)
-            return False, str(e)
+            return False, zabbix_err(e)
 
-    def untag_host(self, hostname: str) -> bool:
-        """Remove the 'team' tag from a host, preserving all other tags."""
+    def untag_host(self, hostname: str, team_name: str | None = None) -> bool:
+        """Remove team tag(s) from a host.
+        If team_name given, removes only that team's tag. Otherwise removes all team tags.
+        """
         if not self.zapi:
             return False
         try:
@@ -441,13 +453,91 @@ class Host_Manager(HostExportMixin, Zabbix_Base):
             tags = [
                 {"tag": t["tag"], "value": t.get("value", "")}
                 for t in host.get("tags", [])
-                if t.get("tag") != "team"
+                if not (
+                    t.get("tag") == "team"
+                    and (team_name is None or t.get("value") == team_name)
+                )
             ]
             self.zapi.host.update(hostid=host["hostid"], tags=tags)
             return True
         except Exception as e:
             logger.error("untag_host(%r) failed: %r", hostname, e)
             return False
+
+    def get_host_templates(self, hostname: str) -> list[dict]:
+        """Return templates linked to the host as [{templateid, name}]."""
+        if not self.zapi:
+            return []
+        try:
+            hosts = self.zapi.host.get(
+                filter={"host": hostname},
+                output=["hostid"],
+                selectParentTemplates=["templateid", "name"],
+            )
+            if not hosts:
+                return []
+            return hosts[0].get("parentTemplates", [])
+        except Exception as e:
+            logger.error("get_host_templates(%r) failed: %r", hostname, e)
+            return []
+
+    def link_template(self, hostname: str, templateid: str) -> tuple[bool, str | None]:
+        """Add a template to a host without removing existing templates."""
+        if not self.zapi:
+            return False, "Zabbix API not connected."
+        try:
+            hosts = self.zapi.host.get(
+                filter={"host": hostname},
+                output=["hostid"],
+                selectParentTemplates=["templateid"],
+            )
+            if not hosts:
+                return False, f"Host '{hostname}' not found."
+            host = hosts[0]
+            existing = [
+                {"templateid": t["templateid"]} for t in host.get("parentTemplates", [])
+            ]
+            if any(t["templateid"] == templateid for t in existing):
+                return True, None  # already linked
+            self.zapi.host.update(
+                hostid=host["hostid"], templates=existing + [{"templateid": templateid}]
+            )
+            logger.info("Linked template %s to host %r.", templateid, hostname)
+            return True, None
+        except Exception as e:
+            logger.error("link_template(%r, %r) failed: %r", hostname, templateid, e)
+            return False, str(e)
+
+    def unlink_template(
+        self, hostname: str, templateid: str
+    ) -> tuple[bool, str | None]:
+        """Remove a template from a host and clear its inherited items."""
+        if not self.zapi:
+            return False, "Zabbix API not connected."
+        try:
+            hosts = self.zapi.host.get(
+                filter={"host": hostname},
+                output=["hostid"],
+                selectParentTemplates=["templateid"],
+            )
+            if not hosts:
+                return False, f"Host '{hostname}' not found."
+            host = hosts[0]
+            remaining = [
+                {"templateid": t["templateid"]}
+                for t in host.get("parentTemplates", [])
+                if t["templateid"] != templateid
+            ]
+            self.zapi.host.update(
+                hostid=host["hostid"],
+                templates=remaining,
+                templates_clear=[{"templateid": templateid}],
+            )
+            logger.info("Unlinked template %s from host %r.", templateid, hostname)
+            return True, None
+        except Exception as e:
+            logger.error("unlink_template(%r, %r) failed: %r", hostname, templateid, e)
+            return False, str(e)
 
     def get_host_team(self, hostname: str) -> str | None:
         """Returns the value of the 'team' tag on this host, or None if absent."""

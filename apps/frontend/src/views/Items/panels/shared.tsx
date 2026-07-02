@@ -1,4 +1,5 @@
 "use client";
+import { generateId } from "../../../app/utils";
 import ClearIcon from "@mui/icons-material/Clear";
 import {
   Autocomplete,
@@ -189,7 +190,7 @@ export const CustomIntervalsEditor = ({
         onClick={() =>
           onChange([
             ...intervals,
-            { _key: crypto.randomUUID(), type: "flexible", interval: "", period: "" },
+            { _key: generateId(), type: "flexible", interval: "", period: "" },
           ])
         }
       >

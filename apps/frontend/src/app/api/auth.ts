@@ -16,11 +16,13 @@ export const authApi = {
       { skipRedirect: true },
     ),
   me: (opts?: { skipRedirect?: boolean }) =>
-    apiFetch<{ sub: string; username: string; roles: string[]; team_id: number | null }>(
-      "/auth/me",
-      undefined,
-      opts,
-    ),
+    apiFetch<{
+      sub: string;
+      username: string;
+      display_name: string;
+      roles: string[];
+      team_id: number | null;
+    }>("/auth/me", undefined, opts),
   ldapStatus: () =>
     apiFetch<{ enabled: boolean }>("/auth/ldap-status", undefined, { skipRedirect: true }),
 };

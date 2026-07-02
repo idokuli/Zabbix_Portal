@@ -1,6 +1,5 @@
 "use client";
-import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
-import { Alert, Box, Card, Snackbar, Stack, Typography } from "@mui/material";
+import { Alert, Box, Card, Snackbar, Stack } from "@mui/material";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { AuthenticationTab } from "../UsersManagement/AuthenticationTab";
@@ -24,18 +23,6 @@ const AdministrationInner = () => {
 
   return (
     <Stack spacing={3}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-        <SettingsOutlinedIcon sx={{ fontSize: 28, color: "primary.main" }} />
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>
-            Administration
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Proxies, macros, queue, housekeeping, and authentication settings.
-          </Typography>
-        </Box>
-      </Box>
-
       <Card>
         <Box sx={{ p: 2 }}>
           {tab === 0 && <ProxiesTab showToast={showToast} />}

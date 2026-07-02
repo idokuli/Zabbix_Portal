@@ -126,8 +126,8 @@ class CoreItemsMixin:
             )
             if items and items[0].get("hosts"):
                 return items[0]["hosts"][0]["host"]
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("get_hostname_for_item failed: %s", exc)
         return ""
 
     def delete_item(self, itemid: str) -> bool:
@@ -310,3 +310,75 @@ class CoreItemsMixin:
         except Exception as e:
             logger.error("get_all_item_keys failed: %r", e)
             return []
+
+    def list_template_items(self, templateid: str) -> list[dict]:
+        """List items defined directly on a template (not inherited from another template)."""
+        if not self.zapi:
+            return []
+        try:
+            items = self.zapi.item.get(
+                templateids=[templateid],
+                output="extend",
+                inherited=False,
+            )
+            return [
+                {
+                    "itemid": i["itemid"],
+                    "name": i["name"],
+                    "key_": i["key_"],
+                    "type": i.get("type", "0"),
+                    "value_type": i.get("value_type", "3"),
+                    "delay": i.get("delay", "1m"),
+                    "history": i.get("history", "31d"),
+                    "trends": i.get("trends", "365d"),
+                    "status": i.get("status", "0"),
+                    "units": i.get("units", ""),
+                    "description": i.get("description", ""),
+                    "templateid": i.get("templateid", "0"),
+                }
+                for i in items
+            ]
+        except Exception as e:
+            logger.error("list_template_items(%r) failed: %r", templateid, e)
+            return []
+
+    def add_item_to_template(
+        self,
+        templateid: str,
+        name: str,
+        key_: str,
+        type_: int = 0,
+        value_type: int = 3,
+        delay: str = "1m",
+        history: str = "31d",
+        trends: str = "365d",
+        units: str = "",
+        description: str = "",
+    ) -> tuple[str | None, str | None]:
+        """Add a generic item directly to a template. Templates have no interfaces."""
+        if not self.zapi:
+            return None, "Zabbix API not connected."
+        try:
+            kwargs: dict = dict(
+                name=name,
+                key_=key_,
+                hostid=templateid,
+                type=type_,
+                value_type=value_type,
+                delay=delay or "1m",
+                history=history or "31d",
+                trends=trends or "365d",
+            )
+            if units:
+                kwargs["units"] = units
+            if description:
+                kwargs["description"] = description
+            result = self.zapi.item.create(**kwargs)
+            item_id = result["itemids"][0]
+            logger.info(
+                "Added item %r to template ID %s (ID: %s).", name, templateid, item_id
+            )
+            return item_id, None
+        except Exception as e:
+            logger.error("add_item_to_template(%r, %r) failed: %r", templateid, name, e)
+            return None, str(e)

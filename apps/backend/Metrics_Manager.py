@@ -220,8 +220,8 @@ class Metrics_Manager(Zabbix_Base):
                     userid_to_username = {
                         u["userid"]: u["username"] for u in zabbix_users
                     }
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Failed to enrich ack user list: %s", exc)
 
             now = int(time.time())
             result = []

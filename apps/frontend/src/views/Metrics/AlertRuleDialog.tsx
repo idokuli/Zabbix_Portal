@@ -39,7 +39,9 @@ export const SEV_LABELS: Record<number, { label: string; color: string }> = {
   0: { label: "None", color: "#9E9E9E" },
 };
 
-type ItemDef2 = { itemid: string; name: string; key_: string };
+type ItemDef2 = { itemid: string; name: string; key_: string; value_type: string };
+
+const isTextType = (vt: string) => vt === "1" || vt === "2" || vt === "4";
 
 type OscType = "sine" | "square" | "triangle" | "sawtooth";
 const _tone = (
@@ -264,6 +266,15 @@ const ConditionRow = ({
   </Box>
 );
 
+type HealthMonitor = {
+  itemid: string;
+  name: string;
+  host: string;
+  hostid: string;
+  expected: string;
+  working: boolean;
+};
+
 export const AddRuleDialog = ({
   open,
   onClose,
@@ -275,6 +286,9 @@ export const AddRuleDialog = ({
   onCreated: () => void;
   showToast: (msg: string, sev: "success" | "error") => void;
 }) => {
+  const [ruleType, setRuleType] = useState<"item" | "service">("item");
+
+  // item rule state
   const [hosts, setHosts] = useState<Host[]>([]);
   const [selectedHost, setSelectedHost] = useState("");
   const [items, setItems] = useState<ItemDef2[]>([]);
@@ -283,6 +297,14 @@ export const AddRuleDialog = ({
   const [itemSearch, setItemSearch] = useState("");
   const [operator, setOperator] = useState(">");
   const [threshold, setThreshold] = useState("");
+
+  // service rule state
+  const [monitors, setMonitors] = useState<HealthMonitor[]>([]);
+  const [monitorsLoading, setMonitorsLoading] = useState(false);
+  const [selectedMonitor, setSelectedMonitor] = useState<HealthMonitor | null>(null);
+  const [expectedContains, setExpectedContains] = useState("ok");
+  const [monitorSearch, setMonitorSearch] = useState("");
+
   const [severity, setSeverity] = useState(2);
   const [addSound, setAddSound] = useState("default");
   const [creating, setCreating] = useState(false);
@@ -299,12 +321,16 @@ export const AddRuleDialog = ({
     listSounds()
       .then(setCustomSounds)
       .catch(() => {});
+    setRuleType("item");
     setSelectedHost("");
     setItems([]);
     setSelectedItemIds(new Set());
     setItemSearch("");
     setOperator(">");
     setThreshold("");
+    setSelectedMonitor(null);
+    setMonitorSearch("");
+    setExpectedContains("ok");
     setSeverity(2);
     setAddSound("default");
     api
@@ -312,6 +338,16 @@ export const AddRuleDialog = ({
       .then((r) => setHosts(r.hosts))
       .catch(() => {});
   }, [open]);
+
+  useEffect(() => {
+    if (ruleType !== "service") return;
+    setMonitorsLoading(true);
+    api
+      .listHealthMonitors()
+      .then((r) => setMonitors(r.monitors as HealthMonitor[]))
+      .catch(() => setMonitors([]))
+      .finally(() => setMonitorsLoading(false));
+  }, [ruleType]);
 
   useEffect(() => {
     if (!selectedHost) {
@@ -323,11 +359,7 @@ export const AddRuleDialog = ({
     api
       .listItems(selectedHost, true)
       .then((r) => {
-        setItems(
-          r.items.filter(
-            (i: { value_type: string }) => i.value_type === "0" || i.value_type === "3",
-          ),
-        );
+        setItems(r.items as ItemDef2[]);
         setSelectedItemIds(new Set());
       })
       .catch(() => setItems([]))
@@ -347,28 +379,65 @@ export const AddRuleDialog = ({
       i.key_.toLowerCase().includes(itemSearch.toLowerCase()),
   );
 
+  const filteredMonitors = monitors.filter(
+    (m) =>
+      m.name.toLowerCase().includes(monitorSearch.toLowerCase()) ||
+      m.host.toLowerCase().includes(monitorSearch.toLowerCase()),
+  );
+
   const handleAdd = async () => {
-    if (selectedItemIds.size === 0 || !threshold || !selectedHost) return;
     setCreating(true);
     try {
-      const results = await Promise.all(
-        items
-          .filter((i) => selectedItemIds.has(i.itemid))
-          .map((i) =>
-            api.createAlertRule({
-              item_id: i.itemid,
-              item_name: i.name,
-              hostname: selectedHost,
-              operator,
-              threshold: Number.parseFloat(threshold),
-              severity,
-            }),
+      if (ruleType === "service") {
+        if (!selectedMonitor) return;
+        const result = await api.createAlertRule({
+          rule_type: "service",
+          item_id: selectedMonitor.itemid,
+          item_name: selectedMonitor.name,
+          hostname: selectedMonitor.host,
+          severity,
+          expected_contains: expectedContains,
+        });
+        if (addSound !== "default") {
+          const updated = getRuleSounds();
+          updated[result.id] = addSound;
+          localStorage.setItem("alertRuleSounds", JSON.stringify(updated));
+        }
+      } else {
+        if (selectedItemIds.size === 0 || !selectedHost) return;
+        const selectedItems = items.filter((i) => selectedItemIds.has(i.itemid));
+        const allText = selectedItems.every((i) => isTextType(i.value_type));
+        if (!allText && (!threshold || Number.isNaN(Number.parseFloat(threshold)))) return;
+        const results = await Promise.all(
+          selectedItems.map((i) =>
+            api.createAlertRule(
+              isTextType(i.value_type)
+                ? {
+                    rule_type: "item",
+                    item_id: i.itemid,
+                    item_name: i.name,
+                    hostname: selectedHost,
+                    operator: operator === "!contains" ? "!contains" : "contains",
+                    severity,
+                    expected_contains: expectedContains,
+                  }
+                : {
+                    rule_type: "item",
+                    item_id: i.itemid,
+                    item_name: i.name,
+                    hostname: selectedHost,
+                    operator,
+                    threshold: Number.parseFloat(threshold),
+                    severity,
+                  },
+            ),
           ),
-      );
-      if (addSound !== "default") {
-        const updated = getRuleSounds();
-        for (const r of results) updated[r.id] = addSound;
-        localStorage.setItem("alertRuleSounds", JSON.stringify(updated));
+        );
+        if (addSound !== "default") {
+          const updated = getRuleSounds();
+          for (const r of results) updated[r.id] = addSound;
+          localStorage.setItem("alertRuleSounds", JSON.stringify(updated));
+        }
       }
       onCreated();
       onClose();
@@ -379,10 +448,21 @@ export const AddRuleDialog = ({
     }
   };
 
+  const addDisabled = (() => {
+    if (creating) return true;
+    if (ruleType === "service") return !selectedMonitor;
+    if (selectedItemIds.size === 0) return true;
+    const selectedItems = items.filter((i) => selectedItemIds.has(i.itemid));
+    const allText =
+      selectedItems.length > 0 && selectedItems.every((i) => isTextType(i.value_type));
+    if (allText) return !expectedContains.trim();
+    return !threshold || Number.isNaN(Number.parseFloat(threshold));
+  })();
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <Typography fontWeight={700}>New Alert Rules</Typography>
+        <Typography fontWeight={700}>New Alert Rule</Typography>
         <IconButton size="small" aria-label="Close dialog" onClick={onClose}>
           <CloseIcon fontSize="small" />
         </IconButton>
@@ -390,28 +470,136 @@ export const AddRuleDialog = ({
       <Divider />
       <DialogContent sx={{ p: 0 }}>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2, p: 2 }}>
-          <FormControl size="small" fullWidth>
-            <InputLabel>Host</InputLabel>
-            <SearchableSelect
-              label="Host"
-              value={selectedHost}
-              onChange={(e) => setSelectedHost(e.target.value)}
-            >
-              {hosts.map((h) => (
-                <MenuItem key={h.hostid} value={h.host}>
-                  {h.host}
-                </MenuItem>
-              ))}
-            </SearchableSelect>
-          </FormControl>
-          <ConditionRow
-            operator={operator}
-            onOperatorChange={setOperator}
-            threshold={threshold}
-            onThresholdChange={setThreshold}
-            severity={severity}
-            onSeverityChange={setSeverity}
-          />
+          {/* Rule type toggle */}
+          <Box sx={{ display: "flex", gap: 1 }}>
+            {(["item", "service"] as const).map((t) => (
+              <Button
+                key={t}
+                size="small"
+                variant={ruleType === t ? "contained" : "outlined"}
+                onClick={() => setRuleType(t)}
+                sx={{ textTransform: "none", minWidth: 120 }}
+              >
+                {t === "item" ? "Item threshold" : "Service health"}
+              </Button>
+            ))}
+          </Box>
+
+          {ruleType === "item" && (
+            <FormControl size="small" fullWidth>
+              <InputLabel>Host</InputLabel>
+              <SearchableSelect
+                label="Host"
+                value={selectedHost}
+                onChange={(e) => setSelectedHost(e.target.value)}
+              >
+                {hosts.map((h) => (
+                  <MenuItem key={h.hostid} value={h.host}>
+                    {h.host}
+                  </MenuItem>
+                ))}
+              </SearchableSelect>
+            </FormControl>
+          )}
+
+          {ruleType === "item" &&
+            (() => {
+              const selectedItems = items.filter((i) => selectedItemIds.has(i.itemid));
+              const allText =
+                selectedItems.length > 0 && selectedItems.every((i) => isTextType(i.value_type));
+              return allText ? (
+                <Box sx={{ display: "flex", gap: 1.5 }}>
+                  <FormControl size="small" sx={{ width: 160 }}>
+                    <InputLabel>Match</InputLabel>
+                    <Select
+                      label="Match"
+                      value={operator === "!contains" ? "!contains" : "contains"}
+                      onChange={(e) => setOperator(e.target.value)}
+                    >
+                      <MenuItem value="contains">contains</MenuItem>
+                      <MenuItem value="!contains">does not contain</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <TextField
+                    size="small"
+                    label="Text to match"
+                    value={expectedContains}
+                    onChange={(e) => setExpectedContains(e.target.value)}
+                    sx={{ flex: 1 }}
+                    placeholder="e.g. ERROR"
+                    helperText={
+                      operator === "contains"
+                        ? "Fires when value contains this text"
+                        : "Fires when value does not contain this text"
+                    }
+                  />
+                  <FormControl size="small" sx={{ minWidth: 130 }}>
+                    <InputLabel>Severity</InputLabel>
+                    <Select
+                      label="Severity"
+                      value={severity}
+                      onChange={(e) => setSeverity(Number(e.target.value))}
+                    >
+                      {Object.entries(SEV_LABELS)
+                        .sort((a, b) => Number(b[0]) - Number(a[0]))
+                        .map(([k, v]) => (
+                          <MenuItem key={k} value={Number(k)}>
+                            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                              <Box
+                                sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: v.color }}
+                              />
+                              {v.label}
+                            </Box>
+                          </MenuItem>
+                        ))}
+                    </Select>
+                  </FormControl>
+                </Box>
+              ) : (
+                <ConditionRow
+                  operator={operator}
+                  onOperatorChange={setOperator}
+                  threshold={threshold}
+                  onThresholdChange={setThreshold}
+                  severity={severity}
+                  onSeverityChange={setSeverity}
+                />
+              );
+            })()}
+
+          {ruleType === "service" && (
+            <FormControl size="small" fullWidth>
+              <InputLabel>Severity</InputLabel>
+              <Select
+                label="Severity"
+                value={severity}
+                onChange={(e) => setSeverity(Number(e.target.value))}
+              >
+                {Object.entries(SEV_LABELS)
+                  .sort((a, b) => Number(b[0]) - Number(a[0]))
+                  .map(([k, v]) => (
+                    <MenuItem key={k} value={Number(k)}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: v.color }} />
+                        {v.label}
+                      </Box>
+                    </MenuItem>
+                  ))}
+              </Select>
+            </FormControl>
+          )}
+
+          {ruleType === "service" && (
+            <TextField
+              size="small"
+              label="Expected response contains"
+              value={expectedContains}
+              onChange={(e) => setExpectedContains(e.target.value)}
+              helperText="Rule fires when the response body does NOT contain this string"
+              fullWidth
+            />
+          )}
+
           <SoundRow
             value={addSound}
             onChange={setAddSound}
@@ -422,7 +610,9 @@ export const AddRuleDialog = ({
           />
         </Box>
         <Divider />
-        {selectedHost && (
+
+        {/* Item rule — item list */}
+        {ruleType === "item" && selectedHost && (
           <>
             <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
               <Box
@@ -509,31 +699,108 @@ export const AddRuleDialog = ({
             </List>
           </>
         )}
-        {!selectedHost && (
+        {ruleType === "item" && !selectedHost && (
           <Box sx={{ py: 4, textAlign: "center" }}>
             <Typography variant="caption" color="text.disabled">
               Select a host to see its items
             </Typography>
           </Box>
         )}
+
+        {/* Service rule — health monitor list */}
+        {ruleType === "service" && (
+          <>
+            <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ fontWeight: 600, display: "block", mb: 1 }}
+              >
+                {monitorsLoading
+                  ? "Loading health monitors…"
+                  : `${filteredMonitors.length} health monitors`}
+              </Typography>
+              <TextField
+                size="small"
+                fullWidth
+                placeholder="Search monitors…"
+                value={monitorSearch}
+                onChange={(e) => setMonitorSearch(e.target.value)}
+                disabled={monitorsLoading}
+              />
+            </Box>
+            <List dense disablePadding sx={{ maxHeight: 280, overflowY: "auto", pb: 1 }}>
+              {monitorsLoading ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: skeleton
+                  <Box key={i} sx={{ px: 2, py: 0.5 }}>
+                    <Skeleton variant="text" height={36} />
+                  </Box>
+                ))
+              ) : filteredMonitors.length === 0 ? (
+                <Box sx={{ py: 3, textAlign: "center" }}>
+                  <Typography variant="caption" color="text.disabled">
+                    No health monitors found
+                  </Typography>
+                </Box>
+              ) : (
+                filteredMonitors.map((m) => {
+                  const selected = selectedMonitor?.itemid === m.itemid;
+                  return (
+                    <ListItem
+                      key={m.itemid}
+                      onClick={() => {
+                        setSelectedMonitor(m);
+                        setExpectedContains(m.expected || "ok");
+                      }}
+                      sx={{
+                        cursor: "pointer",
+                        px: 2,
+                        bgcolor: selected ? "rgba(59,130,246,0.07)" : "transparent",
+                        "&:hover": { bgcolor: selected ? "rgba(59,130,246,0.1)" : "action.hover" },
+                      }}
+                    >
+                      <Checkbox
+                        edge="start"
+                        size="small"
+                        checked={selected}
+                        disableRipple
+                        onChange={() => {
+                          setSelectedMonitor(m);
+                          setExpectedContains(m.expected || "ok");
+                        }}
+                        sx={{ p: 0, mr: 1.5 }}
+                      />
+                      <ListItemText
+                        primary={m.name}
+                        secondary={m.host}
+                        primaryTypographyProps={{
+                          fontSize: "0.82rem",
+                          fontWeight: selected ? 600 : 400,
+                        }}
+                        secondaryTypographyProps={{ fontSize: "0.7rem" }}
+                      />
+                      <Box
+                        sx={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: "50%",
+                          bgcolor: m.working ? "success.main" : "error.main",
+                          flexShrink: 0,
+                        }}
+                      />
+                    </ListItem>
+                  );
+                })
+              )}
+            </List>
+          </>
+        )}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button
-          variant="contained"
-          onClick={handleAdd}
-          disabled={
-            selectedItemIds.size === 0 ||
-            !threshold ||
-            Number.isNaN(Number.parseFloat(threshold)) ||
-            creating
-          }
-        >
-          {creating
-            ? "Creating…"
-            : selectedItemIds.size > 1
-              ? `Create ${selectedItemIds.size} rules`
-              : "Create rule"}
+        <Button variant="contained" onClick={handleAdd} disabled={addDisabled}>
+          {creating ? "Creating…" : "Create rule"}
         </Button>
       </DialogActions>
     </Dialog>
@@ -568,12 +835,16 @@ export const EditRuleDialog = ({
   const [saving, setSaving] = useState(false);
   const { previewingKey, handleSoundPreview } = useSoundPreview();
 
+  const [editExpectedContains, setEditExpectedContains] = useState("ok");
+
   useEffect(() => {
     if (!rule) return;
-    api
-      .listHosts()
-      .then((r) => setHosts(r.hosts))
-      .catch(() => {});
+    if (rule.rule_type !== "service") {
+      api
+        .listHosts()
+        .then((r) => setHosts(r.hosts))
+        .catch(() => {});
+    }
     setEditOperator(rule.operator);
     setEditThreshold(String(rule.threshold));
     setEditSeverity(rule.severity);
@@ -581,6 +852,7 @@ export const EditRuleDialog = ({
     setEditHost(rule.hostname);
     setEditItemId(rule.item_id);
     setEditItemName(rule.item_name);
+    setEditExpectedContains(rule.expected_contains ?? "ok");
   }, [rule, ruleSounds]);
 
   useEffect(() => {
@@ -591,13 +863,7 @@ export const EditRuleDialog = ({
     setEditItemsLoading(true);
     api
       .listItems(editHost, true)
-      .then((r) =>
-        setEditItems(
-          r.items.filter(
-            (i: { value_type: string }) => i.value_type === "0" || i.value_type === "3",
-          ),
-        ),
-      )
+      .then((r) => setEditItems(r.items as ItemDef2[]))
       .catch(() => {})
       .finally(() => setEditItemsLoading(false));
   }, [editHost]);
@@ -613,17 +879,33 @@ export const EditRuleDialog = ({
   };
 
   const handleSave = async () => {
-    if (!rule || !editThreshold || Number.isNaN(Number.parseFloat(editThreshold))) return;
+    if (!rule) return;
+    const isTextOp = editOperator === "contains" || editOperator === "!contains";
+    if (
+      rule.rule_type !== "service" &&
+      !isTextOp &&
+      (!editThreshold || Number.isNaN(Number.parseFloat(editThreshold)))
+    )
+      return;
     setSaving(true);
     try {
-      await api.updateAlertRule(rule.id, {
-        operator: editOperator,
-        threshold: Number.parseFloat(editThreshold),
-        severity: editSeverity,
-        item_id: editItemId,
-        item_name: editItemName,
-        hostname: editHost,
-      });
+      if (rule.rule_type === "service") {
+        await api.updateAlertRule(rule.id, {
+          severity: editSeverity,
+          expected_contains: editExpectedContains,
+        });
+      } else {
+        const isTextOp = editOperator === "contains" || editOperator === "!contains";
+        await api.updateAlertRule(rule.id, {
+          operator: editOperator,
+          threshold: isTextOp ? 0 : Number.parseFloat(editThreshold),
+          severity: editSeverity,
+          item_id: editItemId,
+          item_name: editItemName,
+          hostname: editHost,
+          expected_contains: isTextOp ? editExpectedContains : undefined,
+        });
+      }
       setRuleSound(rule.id, editSound);
       onSaved();
       onClose();
@@ -645,59 +927,157 @@ export const EditRuleDialog = ({
       <Divider />
       <DialogContent>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 1 }}>
-          <FormControl size="small" fullWidth>
-            <InputLabel>Host</InputLabel>
-            <SearchableSelect
-              label="Host"
-              value={editHost}
-              onChange={(e) => {
-                setEditHost(e.target.value);
-                setEditItemId("");
-                setEditItemName("");
-              }}
-            >
-              {hosts.map((h) => (
-                <MenuItem key={h.hostid} value={h.host}>
-                  {h.host}
-                </MenuItem>
-              ))}
-            </SearchableSelect>
-          </FormControl>
-          <FormControl size="small" fullWidth disabled={!editHost || editItemsLoading}>
-            <InputLabel>{editItemsLoading ? "Loading…" : "Item"}</InputLabel>
-            <SearchableSelect
-              label={editItemsLoading ? "Loading…" : "Item"}
-              value={editItemId}
-              onChange={(e) => {
-                const selected = editItems.find((i) => i.itemid === e.target.value);
-                if (selected) {
-                  setEditItemId(selected.itemid);
-                  setEditItemName(selected.name);
-                }
-              }}
-            >
-              {editItems.map((i) => (
-                <MenuItem key={i.itemid} value={i.itemid}>
-                  <Box>
-                    <Typography sx={{ fontSize: "0.82rem" }}>{i.name}</Typography>
-                    <Typography
-                      sx={{ fontSize: "0.7rem", color: "text.secondary", fontFamily: "monospace" }}
-                    >
-                      {i.key_}
-                    </Typography>
+          {rule?.rule_type === "service" ? (
+            <>
+              <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.82rem" }}>
+                <strong>Service:</strong> {rule.item_name} ({rule.hostname})
+              </Typography>
+              <TextField
+                size="small"
+                label="Expected response contains"
+                value={editExpectedContains}
+                onChange={(e) => setEditExpectedContains(e.target.value)}
+                helperText="Rule fires when the response body does NOT contain this string"
+                fullWidth
+              />
+              <FormControl size="small" fullWidth>
+                <InputLabel>Severity</InputLabel>
+                <Select
+                  label="Severity"
+                  value={editSeverity}
+                  onChange={(e) => setEditSeverity(Number(e.target.value))}
+                >
+                  {Object.entries(SEV_LABELS)
+                    .sort((a, b) => Number(b[0]) - Number(a[0]))
+                    .map(([k, v]) => (
+                      <MenuItem key={k} value={Number(k)}>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                          <Box
+                            sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: v.color }}
+                          />
+                          {v.label}
+                        </Box>
+                      </MenuItem>
+                    ))}
+                </Select>
+              </FormControl>
+            </>
+          ) : (
+            <>
+              <FormControl size="small" fullWidth>
+                <InputLabel>Host</InputLabel>
+                <SearchableSelect
+                  label="Host"
+                  value={editHost}
+                  onChange={(e) => {
+                    setEditHost(e.target.value);
+                    setEditItemId("");
+                    setEditItemName("");
+                  }}
+                >
+                  {hosts.map((h) => (
+                    <MenuItem key={h.hostid} value={h.host}>
+                      {h.host}
+                    </MenuItem>
+                  ))}
+                </SearchableSelect>
+              </FormControl>
+              <FormControl size="small" fullWidth disabled={!editHost || editItemsLoading}>
+                <InputLabel>{editItemsLoading ? "Loading…" : "Item"}</InputLabel>
+                <SearchableSelect
+                  label={editItemsLoading ? "Loading…" : "Item"}
+                  value={editItemId}
+                  onChange={(e) => {
+                    const selected = editItems.find((i) => i.itemid === e.target.value);
+                    if (selected) {
+                      setEditItemId(selected.itemid);
+                      setEditItemName(selected.name);
+                    }
+                  }}
+                >
+                  {editItems.map((i) => (
+                    <MenuItem key={i.itemid} value={i.itemid}>
+                      <Box>
+                        <Typography sx={{ fontSize: "0.82rem" }}>{i.name}</Typography>
+                        <Typography
+                          sx={{
+                            fontSize: "0.7rem",
+                            color: "text.secondary",
+                            fontFamily: "monospace",
+                          }}
+                        >
+                          {i.key_}
+                        </Typography>
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </SearchableSelect>
+              </FormControl>
+              {(() => {
+                const selItem = editItems.find((i) => i.itemid === editItemId);
+                const isText = selItem
+                  ? isTextType(selItem.value_type)
+                  : editOperator === "contains" || editOperator === "!contains";
+                return isText ? (
+                  <Box sx={{ display: "flex", gap: 1.5 }}>
+                    <FormControl size="small" sx={{ width: 160 }}>
+                      <InputLabel>Match</InputLabel>
+                      <Select
+                        label="Match"
+                        value={editOperator === "!contains" ? "!contains" : "contains"}
+                        onChange={(e) => setEditOperator(e.target.value)}
+                      >
+                        <MenuItem value="contains">contains</MenuItem>
+                        <MenuItem value="!contains">does not contain</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <TextField
+                      size="small"
+                      label="Text to match"
+                      value={editExpectedContains}
+                      onChange={(e) => setEditExpectedContains(e.target.value)}
+                      sx={{ flex: 1 }}
+                    />
+                    <FormControl size="small" sx={{ minWidth: 130 }}>
+                      <InputLabel>Severity</InputLabel>
+                      <Select
+                        label="Severity"
+                        value={editSeverity}
+                        onChange={(e) => setEditSeverity(Number(e.target.value))}
+                      >
+                        {Object.entries(SEV_LABELS)
+                          .sort((a, b) => Number(b[0]) - Number(a[0]))
+                          .map(([k, v]) => (
+                            <MenuItem key={k} value={Number(k)}>
+                              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                                <Box
+                                  sx={{
+                                    width: 7,
+                                    height: 7,
+                                    borderRadius: "50%",
+                                    bgcolor: v.color,
+                                  }}
+                                />
+                                {v.label}
+                              </Box>
+                            </MenuItem>
+                          ))}
+                      </Select>
+                    </FormControl>
                   </Box>
-                </MenuItem>
-              ))}
-            </SearchableSelect>
-          </FormControl>
-          <ConditionRow
-            operator={editOperator}
-            onOperatorChange={setEditOperator}
-            threshold={editThreshold}
-            onThresholdChange={setEditThreshold}
-            severity={editSeverity}
-            onSeverityChange={setEditSeverity}
-          />
+                ) : (
+                  <ConditionRow
+                    operator={editOperator}
+                    onOperatorChange={setEditOperator}
+                    threshold={editThreshold}
+                    onThresholdChange={setEditThreshold}
+                    severity={editSeverity}
+                    onSeverityChange={setEditSeverity}
+                  />
+                );
+              })()}
+            </>
+          )}
           <SoundRow
             value={editSound}
             onChange={setEditSound}
@@ -713,7 +1093,13 @@ export const EditRuleDialog = ({
         <Button
           variant="contained"
           onClick={handleSave}
-          disabled={!editThreshold || Number.isNaN(Number.parseFloat(editThreshold)) || saving}
+          disabled={
+            saving ||
+            (rule?.rule_type !== "service" &&
+              editOperator !== "contains" &&
+              editOperator !== "!contains" &&
+              (!editThreshold || Number.isNaN(Number.parseFloat(editThreshold))))
+          }
         >
           {saving ? "Saving…" : "Save"}
         </Button>

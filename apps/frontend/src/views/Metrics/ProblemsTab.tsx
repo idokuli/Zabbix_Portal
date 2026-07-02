@@ -1,7 +1,9 @@
 "use client";
+import CloseIcon from "@mui/icons-material/Close";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import SearchIcon from "@mui/icons-material/Search";
 import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
 import {
   Box,
@@ -15,6 +17,7 @@ import {
   DialogTitle,
   FormControl,
   IconButton,
+  InputAdornment,
   InputLabel,
   ListItemText,
   MenuItem,
@@ -34,41 +37,43 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { type Host, type HostGroup, type Problem, api } from "../../app/api";
+import { TabHeader } from "../../app/components/TabHeader";
 import { useAuth } from "../../app/context/AuthContext";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { SEVERITY_CONFIG, SeverityChip, formatAge } from "./shared";
 
 // ── Problems tab ──────────────────────────────────────────────────────
 
-export const ProblemsTab = () => {
+export const ProblemsTab = ({ initialHost = "" }: { initialHost?: string }) => {
+  const tick = useRefreshTick();
   const { user: authUser } = useAuth();
   const [problems, setProblems] = useState<Problem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSeverities, setSelectedSeverities] = useState<number[]>([]);
-  const [hostFilter, setHostFilter] = useState("");
+  const [hostFilter, setHostFilter] = useState(initialHost);
   const [hosts, setHosts] = useState<Host[]>([]);
   const [hostGroups, setHostGroups] = useState<HostGroup[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
   const [acknowledging, setAcknowledging] = useState<Set<string>>(new Set());
   const [expandedProblemId, setExpandedProblemId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const initialLoadDone = useRef(false);
 
   // Ack dialog state
   const [ackTarget, setAckTarget] = useState<Problem | null>(null);
   const [ackNote, setAckNote] = useState("");
 
-  const loadProblems = useCallback(() => {
-    if (!initialLoadDone.current) setLoading(true);
+  const loadProblems = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
     setLoadError(null);
     Promise.all([api.getProblems(), api.listHosts(), api.listHostGroups()])
       .then(([pr, hr, gr]) => {
         setProblems(pr.problems);
         setHosts(hr.hosts);
         setHostGroups(gr.groups);
-        initialLoadDone.current = true;
       })
       .catch((e) => setLoadError(e instanceof Error ? e.message : "Failed to load problems."))
       .finally(() => setLoading(false));
@@ -113,10 +118,13 @@ export const ProblemsTab = () => {
   }, []);
 
   useEffect(() => {
-    loadProblems();
-    const timer = setInterval(loadProblems, 10_000);
-    return () => clearInterval(timer);
+    void loadProblems();
   }, [loadProblems]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) void loadProblems(true);
+  }, [tick]);
 
   const toggleSeverity = (sev: number) => {
     setSelectedSeverities((prev) =>
@@ -130,10 +138,17 @@ export const ProblemsTab = () => {
       ? hosts
       : hosts.filter((h) => h.groups?.some((g) => selectedGroups.includes(g.name)));
 
+  const searchLower = search.toLowerCase();
   const filtered = problems.filter((p) => {
     if (selectedSeverities.length > 0 && !selectedSeverities.includes(p.severity)) return false;
     if (hostFilter && p.hostname !== hostFilter) return false;
     if (selectedGroups.length > 0 && !p.groups.some((g) => selectedGroups.includes(g)))
+      return false;
+    if (
+      searchLower &&
+      !p.name.toLowerCase().includes(searchLower) &&
+      !p.hostname.toLowerCase().includes(searchLower)
+    )
       return false;
     return true;
   });
@@ -145,6 +160,10 @@ export const ProblemsTab = () => {
 
   return (
     <Box>
+      <TabHeader
+        title="Active Problems"
+        description="View all current unresolved problems, with severity, duration, and acknowledgement status."
+      />
       {loadError && (
         <Typography variant="body2" color="error" sx={{ mb: 1.5 }}>
           {loadError}
@@ -167,7 +186,27 @@ export const ProblemsTab = () => {
             sx={{ height: 18, fontSize: "0.68rem" }}
           />
         )}
-        <Box sx={{ flex: 1 }} />
+        <TextField
+          size="small"
+          placeholder="Search problem or host…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ flex: 1, minWidth: 180 }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ fontSize: 16, color: "text.disabled" }} />
+              </InputAdornment>
+            ),
+            endAdornment: search ? (
+              <InputAdornment position="end">
+                <IconButton size="small" onClick={() => setSearch("")}>
+                  <CloseIcon sx={{ fontSize: 14 }} />
+                </IconButton>
+              </InputAdornment>
+            ) : undefined,
+          }}
+        />
         <FormControl size="small" sx={{ minWidth: 180 }}>
           <InputLabel shrink sx={{ fontSize: "0.78rem" }}>
             Filter by group
@@ -214,7 +253,7 @@ export const ProblemsTab = () => {
           </SearchableSelect>
         </FormControl>
         <Tooltip title="Refresh">
-          <IconButton size="small" onClick={loadProblems} disabled={loading}>
+          <IconButton size="small" onClick={() => void loadProblems()} disabled={loading}>
             <RefreshIcon sx={{ fontSize: 18 }} />
           </IconButton>
         </Tooltip>
@@ -257,19 +296,21 @@ export const ProblemsTab = () => {
             sx={{ fontSize: "0.72rem" }}
           />
         )}
-        {!loading && (selectedSeverities.length > 0 || hostFilter || selectedGroups.length > 0) && (
-          <Chip
-            label="Clear filters"
-            size="small"
-            variant="outlined"
-            onDelete={() => {
-              setSelectedSeverities([]);
-              setHostFilter("");
-              setSelectedGroups([]);
-            }}
-            sx={{ fontSize: "0.72rem" }}
-          />
-        )}
+        {!loading &&
+          (selectedSeverities.length > 0 || hostFilter || selectedGroups.length > 0 || search) && (
+            <Chip
+              label="Clear filters"
+              size="small"
+              variant="outlined"
+              onDelete={() => {
+                setSelectedSeverities([]);
+                setHostFilter("");
+                setSelectedGroups([]);
+                setSearch("");
+              }}
+              sx={{ fontSize: "0.72rem" }}
+            />
+          )}
       </Box>
 
       {/* Problems table */}

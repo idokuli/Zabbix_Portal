@@ -1,5 +1,5 @@
 {
-  "name": "@zabbix-portal/frontend",
+  "name": "@overwatch/frontend",
   "private": true,
   "version": "0.0.0",
   "scripts": {
@@ -8,12 +8,16 @@
     "start": "next start -p 42069",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "docker:build": "docker compose -f ../../docker-compose.yml build",
+    "docker:up": "docker compose -f ../../docker-compose.yml up -d",
+    "docker:down": "docker compose -f ../../docker-compose.yml down"
   },
   "dependencies": {
     "@emotion/cache": "11.14.0",
     "@emotion/react": "11.14.0",
     "@emotion/styled": "11.14.1",
+    "@fontsource/heebo": "5.1.1",
     "@fontsource/inter": "5.1.1",
     "@mui/icons-material": "5.16.14",
     "@mui/material": "5.16.14",
@@ -23,11 +27,14 @@
     "chartjs-plugin-zoom": "2.0.1",
     "dotenv": "16.4.7",
     "hammerjs": "2.0.8",
+    "i18next": "23.7.6",
+    "i18next-browser-languagedetector": "8.0.0",
     "next": "15.5.19",
     "react": "18.3.1",
     "react-chartjs-2": "5.3.1",
     "react-dom": "18.3.1",
     "react-grid-layout": "1.4.4",
+    "react-i18next": "14.1.0",
     "stylis-plugin-rtl": "2.1.1"
   },
   "devDependencies": {

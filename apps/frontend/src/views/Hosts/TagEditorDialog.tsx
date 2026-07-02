@@ -1,4 +1,5 @@
 "use client";
+import { generateId } from "../../app/utils";
 import AddIcon from "@mui/icons-material/Add";
 import {
   Box,
@@ -40,7 +41,7 @@ export const TagEditorDialog = ({
       setEditTags(
         (tagHost.tags ?? [])
           .filter((t) => t.tag !== "team")
-          .map((t) => ({ _key: crypto.randomUUID(), ...t })),
+          .map((t) => ({ _key: generateId(), ...t })),
       );
       setNewTagName("");
       setNewTagValue("");
@@ -51,7 +52,7 @@ export const TagEditorDialog = ({
     if (!newTagName.trim()) return;
     setEditTags((prev) => [
       ...prev,
-      { _key: crypto.randomUUID(), tag: newTagName.trim(), value: newTagValue.trim() },
+      { _key: generateId(), tag: newTagName.trim(), value: newTagValue.trim() },
     ]);
     setNewTagName("");
     setNewTagValue("");

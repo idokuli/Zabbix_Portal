@@ -6,16 +6,45 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Variables in code:** whenever you write a variable that the user needs to fill in (CI variables, image names, URLs, tokens, credentials, runner tags, etc.), always use a descriptive dummy name (e.g. `<your-oc-image>`, `staging-runner`, `STAGING_TOKEN`) and add an inline comment explaining exactly what it is and where it needs to be changed. Never leave a variable placeholder without a comment.
 
-## Formatting — mandatory after every edit
+## Code quality — mandatory baseline
 
-After editing any file, always run the formatter for that side before finishing:
+Every change must keep the codebase at this quality level. Do not degrade any of these gates.
+
+### Formatting — run after every edit
 
 | Side | Formatter | Command (run from repo root) |
 |------|-----------|------------------------------|
 | **Backend** (`apps/backend/**/*.py`) | `ruff format` | `cd apps/backend && ruff format .` |
 | **Frontend** (`apps/frontend/**/*.ts`, `*.tsx`) | `biome format` | `cd apps/frontend && npx biome format --write .` |
 
-Never leave backend Python files un-ruff-formatted or frontend TypeScript files un-biome-formatted. A `PostToolUse` hook in `.claude/settings.json` runs both formatters automatically after every Edit/Write, but always verify with `ruff check .` (backend) and `npx biome check .` (frontend) before finishing a task.
+A `PostToolUse` hook runs both formatters automatically after every Edit/Write. Always verify with `ruff check .` (backend) and `npx biome check .` (frontend) before finishing a task. For import-ordering violations run `npx biome check --fix .` — it is always safe.
+
+### Lint and typecheck — must pass clean
+
+Run and fix before marking any task done:
+
+```bash
+# Backend
+cd apps/backend && ruff check . && python3 -m mypy . --ignore-missing-imports
+
+# Frontend
+cd apps/frontend && npx biome check . && npx --no-install tsc --noEmit
+```
+
+Zero errors required. Do not suppress warnings with `# type: ignore` or `// biome-ignore` comments unless you quote the exact reason inline and there is genuinely no fix.
+
+### SonarQube quality gates — maintain ≥ 80 %
+
+The codebase is held to SonarQube's 80 % quality gate. Every new or changed file must comply:
+
+| Category | Rule |
+|----------|------|
+| **Security** | No hardcoded credentials or secrets. Use `secrets.token_urlsafe()` for generated passwords. Never commit real tokens. |
+| **Reliability** | No bare `except: pass` — always log with `logger.debug("...: %s", exc)`. No wrong return-type annotations. No dead unreachable code. |
+| **Maintainability** | Keep cognitive complexity low. Extract helpers rather than deepening nesting. No large blocks of copy-pasted code — if the same pattern appears 3+ times, extract it. |
+| **Duplication** | Shared logic belongs in shared modules (`api/deps.py` for backend route helpers, `src/app/components/` for reusable React components). Do not duplicate across files. |
+
+These rules produced the helpers `resolve_team()`, `zabbix_call()` in `api/deps.py`, and the shared `ConfirmDelete` component — use those patterns as the reference.
 
 ---
 
@@ -166,7 +195,7 @@ flowchart LR
 - **`Actions_Manager`** wraps trigger/service/discovery/autoregistration/internal actions, media types, and scripts (list/create/delete/toggle).
 - **`ZabbixAdmin_Manager`** wraps Zabbix server administration: user groups, a read-only Zabbix user list, user roles, API tokens, proxies, proxy groups (Zabbix 7.x), global macros, authentication settings, the item processing queue, and housekeeping settings.
 - **`Services_Manager`** wraps business services, SLAs (with SLA reports), and "health monitor" items (simple URL/host checks surfaced as services).
-- **`Database.py`** owns a `psycopg2.pool.ThreadedConnectionPool`, creates the schema on `init_db()`, and runs idempotent migrations. `get_conn()` returns a pooled connection whose `close()` returns it to the pool. Tables: `teams`, `team_users` (with `roles TEXT[]`), `host_assignments`, `dashboard_layouts`, `alert_rules`, `alert_events`, `problem_acknowledgements`.
+- **`Database.py`** owns a `psycopg2.pool.ThreadedConnectionPool`, creates the schema on `init_db()`, and runs idempotent migrations. `get_conn()` returns a pooled connection whose `close()` returns it to the pool. Tables: `teams`, `team_users` (with `roles TEXT[]`), `user_team_memberships` (many-to-many user↔team join, auto-migrated from `team_users.team_id` on startup), `host_assignments`, `dashboard_layouts`, `alert_rules`, `alert_events`, `problem_acknowledgements`.
 - **`Auth.py`** handles password hashing (`bcrypt`), JWT creation/validation (`python-jose`), and FastAPI dependency functions: `get_current_user`, `require_root`, `require_admin`, `require_operator`. Also exports `can_grant_roles()` — the guard that prevents users from granting roles higher than their own.
 - **`User_Management.py`** contains all SQL queries for users, teams, host assignments, dashboard layouts, and the overview aggregation. `seed_root()` seeds a root user on first startup from `ADMIN_USERNAME` / `ADMIN_PASSWORD` (default `Admin` / `admin`, with a logged warning if no password is set).
 - **`Zabbix_Main.py`** instantiates all 11 managers at module load (`host_bot`, `item_bot`, `metrics_bot`, `dashboard_bot`, `alert_bot`, `sync_bot`, `dc_bot`, `report_bot`, `actions_bot`, `zadmin_bot`, `services_bot`) and runs startup work (`init_db()`, `install_notify_triggers()`, `seed_root()`, sync bootstrap, alert-checker thread) inside a FastAPI **`lifespan`** context manager. All ~150 route handlers live here. There is no dependency injection.
@@ -225,6 +254,7 @@ The Zabbix URL is normalised — either `http://host` or `http://host/api_jsonrp
 - Shell: `src/app/layout/AppShell.tsx` — polls `/api/health` every **15 s** and shows live status dots (green/red) for Backend API and Zabbix in the sidebar. The nav is grouped (Overview, Hosts, Dashboard, Monitoring, Services, Reports, Data collection, Alerts, Users, Administration); the **Administration** group is hidden in the sidebar for roles other than `root` / `team_lead` (the corresponding API endpoints are still independently gated server-side via `require_admin` / `require_root`, regardless of nav visibility).
 - No global state manager — components call `api.*` directly.
 - All page components are client components (`'use client'`) because they use React hooks and browser APIs.
+- **i18n** — `react-i18next` is installed and configured at `src/app/i18n/config.ts`. Translation files: `src/app/i18n/en.json` (English) and `src/app/i18n/he.json` (Hebrew stubs). ~45 view files use `useTranslation()` / `t()`. The Hebrew language switcher was built but is currently hidden — the infrastructure is in place to re-enable it (add EN/עב toggle to AppShell, load `@fontsource/heebo`, set RTL font in `theme.ts`). Direction switching (RTL/LTR) is wired through `ThemeContext.setDirection` and MUI `CacheProvider` with `stylis-plugin-rtl`.
 
 ### Frontend code style
 
@@ -241,6 +271,97 @@ function MyComponent() { ... }
 function useMyHook() { ... }
 function handleClick() { ... }
 ```
+
+### Frontend patterns — follow these everywhere
+
+**Delete confirmations** — always use the shared `ConfirmDelete` component. Never use `window.confirm()` and never define a local Dialog just for deleting. Import from `../../app/components/ConfirmDelete` (or re-export it via the view's `shared.tsx`).
+
+```tsx
+// correct
+import { ConfirmDelete } from "../../app/components/ConfirmDelete";
+<ConfirmDelete open={open} name={item.name} onConfirm={handleDelete} onClose={() => setOpen(false)} />
+
+// wrong
+window.confirm(`Delete ${item.name}?`);
+// wrong
+<Dialog open={open}><DialogTitle>Delete?</DialogTitle>...</Dialog>  // inline one-off
+```
+
+**Toolbar layout** — every tab toolbar must follow this left-to-right order: search `TextField` (`sx={{ flex: 1 }}`), then filter dropdowns with fixed `minWidth`, then action icon buttons. Never put a `<Box sx={{ flex: 1 }} />` spacer between title and filters — the search field is the flex element.
+
+```tsx
+// correct
+<Stack direction="row" spacing={1.5} alignItems="center">
+  <TextField placeholder="Search…" sx={{ flex: 1 }} InputProps={{ startAdornment: <SearchIcon /> }} />
+  <FormControl size="small" sx={{ minWidth: 180 }}><InputLabel>Filter</InputLabel>...</FormControl>
+  <IconButton><RefreshIcon /></IconButton>
+</Stack>
+```
+
+**Type-only imports** — always use `import type` when importing only types. Biome enforces this; running `npx biome check --fix .` will auto-correct it.
+
+```tsx
+// correct
+import type { MyType } from "./shared";
+import { myHelper, type MyOtherType } from "./shared";
+```
+
+---
+
+## Backend patterns — follow these everywhere
+
+**Team resolution in route handlers** — never inline `live_team_id` + `um.get_team_name`. Use `resolve_team(current_user)` from `api.deps`:
+
+```python
+# correct
+from api.deps import resolve_team
+team_name = resolve_team(current_user)
+
+# wrong
+team_id = live_team_id(current_user)
+team_name = um.get_team_name(team_id) if team_id else ""
+```
+
+**Zabbix manager calls in route handlers** — never write a bare `try/except RuntimeError` block. Use the `zabbix_call` context manager from `api.deps`:
+
+```python
+# correct
+from api.deps import zabbix_call
+with zabbix_call():
+    result = some_bot.do_thing(...)
+    return {"ok": True}
+
+# wrong
+try:
+    result = some_bot.do_thing(...)
+    return {"ok": True}
+except RuntimeError as e:
+    raise HTTPException(status_code=422, detail=zabbix_err(e))
+```
+
+**Zabbix API output fields** — always use `output="extend"` when calling `zapi.*`. Never pass a hardcoded list of field names — it breaks on Zabbix versions that don't have all those fields.
+
+```python
+# correct
+result = self.zapi.proxy.get(output="extend")
+
+# wrong
+result = self.zapi.proxy.get(output=["proxyid", "name", "status"])
+```
+
+**Exception handling** — never silence exceptions with `except Exception: pass`. Always log them:
+
+```python
+# correct
+except Exception as exc:
+    logger.debug("Context about what failed: %s", exc)
+
+# wrong
+except Exception:
+    pass
+```
+
+**Return type annotations** — all functions must have correct mypy-compatible return types. `-> None` on a function that returns a value is a mypy error. Run `python3 -m mypy . --ignore-missing-imports` before finishing.
 
 ---
 
@@ -289,11 +410,12 @@ The pipeline fires **only on tag pushes** (or `FORCE_BUILD=1` from a branch — 
 ## Things to know before editing
 
 - The frontend Docker build context is `apps/frontend/` — the Dockerfile lives there and uses plain `npm ci`.
-- `apps/frontend/.env` is baked into the frontend image at build time (not excluded by `.dockerignore`). Update it before building the image when the backend address changes.
+- `apps/frontend/.env` is baked into the frontend image at build time (not excluded by `.dockerignore`). Update it before building the image when the backend address changes. Exception: `REFRESH_INTERVAL` is read at runtime via the `/api/config` server route — it can be changed in the OpenShift Secret without rebuilding the image.
 - `SECRET_KEY` in `apps/backend/.env` must be a long random string in any real deployment. Rotating it invalidates all existing JWT sessions immediately.
 - The database schema is created and migrated automatically on every backend startup (`init_db()` in `Database.py`). Migrations are idempotent — safe to run against existing data. No manual migration step is needed.
 - On first startup the backend seeds a root user from `ADMIN_USERNAME` / `ADMIN_PASSWORD` (default `Admin` / `admin`, with a logged warning if no password is set). This account must have its password changed before the system is used in any real environment.
 - Roles are stored as a PostgreSQL `TEXT[]` array in `team_users.roles`. A user can hold multiple roles simultaneously. The JWT `roles` claim is a JSON array.
+- A user can belong to multiple teams simultaneously via the `user_team_memberships` join table. `team_hostname_filter()` in `api/deps.py` returns the union of hosts from all the user's teams. The TeamCard "Add Member" button adds to `user_team_memberships`; the trash icon removes from it (never deletes the user account). `team_users.team_id` is kept for backward compatibility and as the "home team" for JWT display purposes.
 - `can_grant_roles()` in `Auth.py` is enforced on both `POST /users` and `PUT /users/{id}`. It prevents any user from granting a role higher than their own. Only `root` can grant `auditor`.
 - When you change Helm values that drive in-cluster behaviour, also bump the chart's `version:` in `Chart.yaml` (a new chart revision; also keeps the future ArgoCD migration clean).
 - Don't reintroduce nginx in the frontend container without thinking through OpenShift compatibility — the standard nginx image runs as root and binds port 80, both of which fail under the `restricted` SCC.

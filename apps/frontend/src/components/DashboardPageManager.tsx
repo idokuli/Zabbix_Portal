@@ -17,6 +17,7 @@ import {
 } from "@mui/material";
 import { useEffect, useState } from "react";
 import { type DashboardPage, type DashboardPageKind, api } from "../app/api";
+import { ConfirmDelete } from "../app/components/ConfirmDelete";
 
 type DashboardPageManagerProps = {
   kind: DashboardPageKind;
@@ -37,6 +38,7 @@ export const DashboardPageManager = ({
   const [dialog, setDialog] = useState<"new" | "rename" | null>(null);
   const [nameInput, setNameInput] = useState("");
   const [saving, setSaving] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
   useEffect(() => {
     api
@@ -72,13 +74,14 @@ export const DashboardPageManager = ({
 
   const handleDelete = async () => {
     if (!current || current.is_default) return;
-    if (!window.confirm(`Delete dashboard "${current.name}"? This cannot be undone.`)) return;
     try {
       await api.deleteDashboardPage(scope, kind, current.page);
       setPages((prev) => prev.filter((p) => p.page !== current.page));
       onPageChange(kind);
     } catch {
       // silently fail — user can retry
+    } finally {
+      setConfirmDeleteOpen(false);
     }
   };
 
@@ -128,7 +131,11 @@ export const DashboardPageManager = ({
       </Tooltip>
       <Tooltip title="Delete dashboard">
         <span>
-          <IconButton size="small" disabled={!current || current.is_default} onClick={handleDelete}>
+          <IconButton
+            size="small"
+            disabled={!current || current.is_default}
+            onClick={() => setConfirmDeleteOpen(true)}
+          >
             <DeleteOutlineIcon sx={{ fontSize: 16 }} />
           </IconButton>
         </span>
@@ -159,6 +166,13 @@ export const DashboardPageManager = ({
           </Button>
         </DialogActions>
       </Dialog>
+
+      <ConfirmDelete
+        open={confirmDeleteOpen}
+        name={current?.name ?? ""}
+        onConfirm={() => void handleDelete()}
+        onClose={() => setConfirmDeleteOpen(false)}
+      />
     </>
   );
 };

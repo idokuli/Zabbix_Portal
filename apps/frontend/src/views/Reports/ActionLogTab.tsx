@@ -1,10 +1,14 @@
 "use client";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import {
   Box,
   Button,
   Chip,
   CircularProgress,
+  Collapse,
+  IconButton,
   Stack,
   Table,
   TableBody,
@@ -16,12 +20,15 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../app/api";
+import { TabHeader } from "../../app/components/TabHeader";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 import { TimeBar, fmtTs } from "./shared";
 
 const STATUS_COLORS: Record<number, string> = { 0: "#22C55E", 1: "#F59E0B", 2: "#EF4444" };
 const STATUS_LABELS: Record<number, string> = { 0: "Sent", 1: "In progress", 2: "Failed" };
 
 export const ActionLogTab = () => {
+  const tick = useRefreshTick();
   const [hours, setHours] = useState(24);
   const [data, setData] = useState<
     Array<{
@@ -35,28 +42,41 @@ export const ActionLogTab = () => {
     }>
   >([]);
   const [loading, setLoading] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    api
-      .getActionLog({ limit: 200, hours })
-      .then((r) => setData(r.entries))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [hours]);
+  const load = useCallback(
+    (silent = false) => {
+      if (!silent) setLoading(true);
+      api
+        .getActionLog({ limit: 200, hours })
+        .then((r) => setData(r.entries))
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    },
+    [hours],
+  );
   useEffect(() => {
     void load();
   }, [load]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) void load(true);
+  }, [tick]);
+
   return (
     <Stack spacing={2}>
+      <TabHeader
+        title="Action Log"
+        description="See a history of automated actions taken by Zabbix in response to triggers and events."
+      />
       <Box sx={{ display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
         <TimeBar hours={hours} onChange={setHours} />
         <Button
           size="small"
           variant="outlined"
           startIcon={<RefreshIcon />}
-          onClick={load}
+          onClick={() => void load()}
           disabled={loading}
         >
           Refresh
@@ -80,6 +100,7 @@ export const ActionLogTab = () => {
         <Table size="small" stickyHeader>
           <TableHead>
             <TableRow>
+              <TableCell sx={{ width: 32, p: 0 }} />
               <TableCell sx={{ fontWeight: 700, width: 140 }}>Time</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Subject</TableCell>
               <TableCell sx={{ fontWeight: 700, width: 180 }}>Sent to</TableCell>
@@ -90,7 +111,7 @@ export const ActionLogTab = () => {
           <TableBody>
             {data.length === 0 && !loading && (
               <TableRow>
-                <TableCell colSpan={5}>
+                <TableCell colSpan={6}>
                   <Typography variant="body2" color="text.disabled" sx={{ py: 1 }}>
                     No actions sent in this window.
                   </Typography>
@@ -98,46 +119,164 @@ export const ActionLogTab = () => {
               </TableRow>
             )}
             {data.map((a) => (
-              <TableRow key={a.alertid} hover>
-                <TableCell
-                  sx={{
-                    fontFamily: "monospace",
-                    fontSize: "0.72rem",
-                    color: "text.secondary",
-                    whiteSpace: "nowrap",
-                  }}
+              <>
+                <TableRow
+                  key={a.alertid}
+                  hover
+                  onClick={() => setExpandedId(expandedId === a.alertid ? null : a.alertid)}
+                  sx={{ cursor: "pointer" }}
                 >
-                  {fmtTs(a.clock)}
-                </TableCell>
-                <TableCell>
-                  <Typography variant="body2" noWrap sx={{ maxWidth: 300 }}>
-                    {a.subject || "—"}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  <Typography variant="body2" color="text.secondary" noWrap sx={{ maxWidth: 170 }}>
-                    {a.sendto || "—"}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  <Chip
-                    label={STATUS_LABELS[a.status] ?? String(a.status)}
-                    size="small"
+                  <TableCell sx={{ width: 32, p: 0, pl: 0.5 }}>
+                    <IconButton size="small" tabIndex={-1}>
+                      {expandedId === a.alertid ? (
+                        <KeyboardArrowDownIcon sx={{ fontSize: 16 }} />
+                      ) : (
+                        <KeyboardArrowRightIcon sx={{ fontSize: 16 }} />
+                      )}
+                    </IconButton>
+                  </TableCell>
+                  <TableCell
                     sx={{
-                      height: 18,
-                      fontSize: "0.62rem",
-                      color: STATUS_COLORS[a.status] ?? "#9E9E9E",
-                      bgcolor: `${STATUS_COLORS[a.status] ?? "#9E9E9E"}18`,
-                      border: `1px solid ${STATUS_COLORS[a.status] ?? "#9E9E9E"}40`,
+                      fontFamily: "monospace",
+                      fontSize: "0.72rem",
+                      color: "text.secondary",
+                      whiteSpace: "nowrap",
                     }}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Typography variant="caption" color="error.light" noWrap sx={{ maxWidth: 200 }}>
-                    {a.error || "—"}
-                  </Typography>
-                </TableCell>
-              </TableRow>
+                  >
+                    {fmtTs(a.clock)}
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" noWrap sx={{ maxWidth: 300 }}>
+                      {a.subject || "—"}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      noWrap
+                      sx={{ maxWidth: 170 }}
+                    >
+                      {a.sendto || "—"}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={STATUS_LABELS[a.status] ?? String(a.status)}
+                      size="small"
+                      sx={{
+                        height: 18,
+                        fontSize: "0.62rem",
+                        color: STATUS_COLORS[a.status] ?? "#9E9E9E",
+                        bgcolor: `${STATUS_COLORS[a.status] ?? "#9E9E9E"}18`,
+                        border: `1px solid ${STATUS_COLORS[a.status] ?? "#9E9E9E"}40`,
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="caption" color="error.light" noWrap sx={{ maxWidth: 200 }}>
+                      {a.error || "—"}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+                <TableRow key={`${a.alertid}-detail`}>
+                  <TableCell
+                    colSpan={6}
+                    sx={{ p: 0, borderBottom: expandedId === a.alertid ? undefined : "none" }}
+                  >
+                    <Collapse in={expandedId === a.alertid} timeout="auto" unmountOnExit>
+                      <Box
+                        sx={{
+                          px: 3,
+                          py: 1.5,
+                          bgcolor: "action.hover",
+                          display: "grid",
+                          gridTemplateColumns: "140px 1fr",
+                          gap: "4px 12px",
+                        }}
+                      >
+                        {[
+                          ["Type", a.alerttype === 0 ? "Message" : "Script"],
+                          ["Status", STATUS_LABELS[a.status] ?? String(a.status)],
+                          ["Sent to", a.sendto || "—"],
+                        ].map(([label, value]) => (
+                          <>
+                            <Typography
+                              key={`${label}-label`}
+                              variant="caption"
+                              sx={{
+                                color: "text.disabled",
+                                fontWeight: 600,
+                                textTransform: "uppercase",
+                                letterSpacing: "0.05em",
+                                fontSize: "0.6rem",
+                                alignSelf: "center",
+                              }}
+                            >
+                              {label}
+                            </Typography>
+                            <Typography
+                              key={`${label}-value`}
+                              variant="body2"
+                              sx={{ fontSize: "0.78rem" }}
+                            >
+                              {value}
+                            </Typography>
+                          </>
+                        ))}
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color: "text.disabled",
+                            fontWeight: 600,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            fontSize: "0.6rem",
+                            alignSelf: "flex-start",
+                            pt: 0.25,
+                          }}
+                        >
+                          Subject
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          sx={{ fontSize: "0.78rem", wordBreak: "break-all" }}
+                        >
+                          {a.subject || "—"}
+                        </Typography>
+                        {a.error && (
+                          <>
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                color: "text.disabled",
+                                fontWeight: 600,
+                                textTransform: "uppercase",
+                                letterSpacing: "0.05em",
+                                fontSize: "0.6rem",
+                                alignSelf: "flex-start",
+                                pt: 0.25,
+                              }}
+                            >
+                              Error
+                            </Typography>
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                fontSize: "0.78rem",
+                                wordBreak: "break-all",
+                                color: "error.light",
+                              }}
+                            >
+                              {a.error}
+                            </Typography>
+                          </>
+                        )}
+                      </Box>
+                    </Collapse>
+                  </TableCell>
+                </TableRow>
+              </>
             ))}
           </TableBody>
         </Table>

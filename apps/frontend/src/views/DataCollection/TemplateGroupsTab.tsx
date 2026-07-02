@@ -25,6 +25,8 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../app/api";
+import { TabHeader } from "../../app/components/TabHeader";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 import { ConfirmDelete, MembersDialog, SectionHeader, type TemplateGroup } from "./shared";
 
 type TemplateOption = { templateid: string; name: string };
@@ -50,24 +52,33 @@ export const TemplateGroupsTab = ({
   const [allTemplates, setAllTemplates] = useState<TemplateOption[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [selectedTemplates, setSelectedTemplates] = useState<TemplateOption[]>([]);
+  const tick = useRefreshTick();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const r = await api.listTemplateGroups();
-      setGroups(r.groups);
-      setLoadError(false);
-    } catch (e) {
-      setLoadError(true);
-      showToast(e instanceof Error ? e.message : String(e), "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [showToast]);
+  const load = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+      try {
+        const r = await api.listTemplateGroups();
+        setGroups(r.groups);
+        setLoadError(false);
+      } catch (e) {
+        setLoadError(true);
+        showToast(e instanceof Error ? e.message : String(e), "error");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [showToast],
+  );
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) void load(true);
+  }, [tick]);
 
   const openDialog = async (target: TemplateGroup | null) => {
     setEditTarget(target);
@@ -152,6 +163,10 @@ export const TemplateGroupsTab = ({
 
   return (
     <>
+      <TabHeader
+        title="Template Groups"
+        description="Organize monitoring templates into logical groups."
+      />
       <SectionHeader
         title="Template Groups"
         count={groups.length}

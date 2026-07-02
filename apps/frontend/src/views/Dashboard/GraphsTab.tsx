@@ -41,6 +41,8 @@ import {
   type WidgetConfig,
   api,
 } from "../../app/api";
+import { TabHeader } from "../../app/components/TabHeader";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 import { DashboardPageManager } from "../../components/DashboardPageManager";
 import { AddGraphDialog } from "./AddGraphDialog";
 import { WidgetCard } from "./WidgetCard";
@@ -61,6 +63,7 @@ ChartJS.register(
 // ── Tab panels ────────────────────────────────────────────────────────
 
 export const GraphsTab = () => {
+  const tick = useRefreshTick();
   const [widgets, setWidgets] = useState<WidgetConfig[]>([]);
   const [isDirty, setIsDirty] = useState(false);
   const [saveScope, setSaveScope] = useState<"user" | "team">("user");
@@ -72,29 +75,35 @@ export const GraphsTab = () => {
   const [allAlertEvents, setAllAlertEvents] = useState<AlertEvent[]>([]);
   const [allProblems, setAllProblems] = useState<Problem[]>([]);
 
-  useEffect(() => {
-    const fetchEvents = () => {
-      api
-        .getAlertEvents(500)
-        .then((r) => setAllAlertEvents(r.events))
-        .catch(() => {});
-    };
-    fetchEvents();
-    const timer = setInterval(fetchEvents, 10_000);
-    return () => clearInterval(timer);
+  const fetchEvents = useCallback(() => {
+    api
+      .getAlertEvents(500)
+      .then((r) => setAllAlertEvents(r.events))
+      .catch(() => {});
+  }, []);
+
+  const fetchProblems = useCallback(() => {
+    api
+      .getProblems()
+      .then((r) => setAllProblems(r.problems))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
-    const fetchProblems = () => {
-      api
-        .getProblems()
-        .then((r) => setAllProblems(r.problems))
-        .catch(() => {});
-    };
+    fetchEvents();
+  }, [fetchEvents]);
+
+  useEffect(() => {
     fetchProblems();
-    const timer = setInterval(fetchProblems, 10_000);
-    return () => clearInterval(timer);
-  }, []);
+  }, [fetchProblems]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) {
+      fetchEvents();
+      fetchProblems();
+    }
+  }, [tick]);
 
   useEffect(() => {
     api
@@ -218,6 +227,10 @@ export const GraphsTab = () => {
 
   return (
     <Box>
+      <TabHeader
+        title="Graphs"
+        description="Zabbix native graphs arranged in a customisable drag-and-drop layout."
+      />
       {/* Toolbar */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
         <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: "0.85rem" }}>

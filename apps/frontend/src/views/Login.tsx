@@ -16,12 +16,14 @@ import {
 } from "@mui/material";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "../app/api";
 import { useAuth } from "../app/context/AuthContext";
 
 type Snack = { open: boolean; message: string; severity: "success" | "error" };
 
 export const Login = () => {
+  const { t } = useTranslation();
   const { login } = useAuth();
   const router = useRouter();
   const [username, setUsername] = useState("");
@@ -92,7 +94,7 @@ export const Login = () => {
             Overwatch
           </Typography>
           <Typography variant="body2" sx={{ mt: 0.5, color: "#64748B" }}>
-            Sign in to your control plane
+            {t("auth.monitoringPortal")}
           </Typography>
         </Box>
 
@@ -116,7 +118,7 @@ export const Login = () => {
                 variant="caption"
                 sx={{ color: "#64748B", fontWeight: 500, mb: 0.75, display: "block" }}
               >
-                Username
+                {t("auth.username")}
               </Typography>
               <TextField
                 value={username}
@@ -144,7 +146,7 @@ export const Login = () => {
                 variant="caption"
                 sx={{ color: "#64748B", fontWeight: 500, mb: 0.75, display: "block" }}
               >
-                Password
+                {t("auth.password")}
               </Typography>
               <TextField
                 type={showPassword ? "text" : "password"}
@@ -207,7 +209,11 @@ export const Login = () => {
                 "&:disabled": { opacity: 0.6 },
               }}
             >
-              {loading === "local" ? <CircularProgress size={20} color="inherit" /> : "Sign in"}
+              {loading === "local" ? (
+                <CircularProgress size={20} color="inherit" />
+              ) : (
+                t("auth.signIn")
+              )}
             </Button>
 
             {ldapEnabled && (
@@ -240,7 +246,7 @@ export const Login = () => {
                   {loading === "ldap" ? (
                     <CircularProgress size={20} color="inherit" />
                   ) : (
-                    "Sign in with LDAP"
+                    `${t("auth.signIn")} — LDAP`
                   )}
                 </Button>
               </>

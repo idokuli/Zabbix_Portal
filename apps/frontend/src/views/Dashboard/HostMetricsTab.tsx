@@ -34,6 +34,8 @@ import {
 import ZoomPlugin from "chartjs-plugin-zoom";
 import { useCallback, useEffect, useState } from "react";
 import { type HostMetrics, api } from "../../app/api";
+import { TabHeader } from "../../app/components/TabHeader";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 
 ChartJS.register(
   CategoryScale,
@@ -83,6 +85,7 @@ const MetricBar = ({ value, label }: { value?: number; label: string }) => {
 };
 
 export const HostMetricsTab = () => {
+  const tick = useRefreshTick();
   const [hosts, setHosts] = useState<HostMetrics[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("");
@@ -101,22 +104,29 @@ export const HostMetricsTab = () => {
   }, []);
 
   useEffect(() => {
-    load();
-    const t = setInterval(() => load(true), 10_000);
-    return () => clearInterval(t);
+    void load();
   }, [load]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) void load(true);
+  }, [tick]);
 
   const filtered = hosts.filter((h) => h.hostname.toLowerCase().includes(filter.toLowerCase()));
 
   return (
     <Box>
+      <TabHeader
+        title="Host Metrics"
+        description="Live CPU, memory, disk, and network metrics for all monitored hosts."
+      />
       <Box sx={{ display: "flex", gap: 2, mb: 2, alignItems: "center" }}>
         <TextField
           size="small"
           placeholder="Filter hosts…"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          sx={{ minWidth: 220 }}
+          sx={{ flex: 1 }}
         />
         <Tooltip title="Refresh now">
           <IconButton size="small" onClick={() => load(false)} disabled={loading}>

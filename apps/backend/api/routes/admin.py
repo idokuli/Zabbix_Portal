@@ -1,3 +1,4 @@
+from api.deps import zabbix_call, zabbix_err
 from fastapi import APIRouter, Depends, HTTPException
 from Auth import get_current_user, require_admin, require_root
 from api.managers import zadmin_bot
@@ -56,7 +57,7 @@ def list_zabbix_users(_user=Depends(require_admin)):
 
 @router.post("/user-groups")
 def create_user_group(body: UserGroupCreateRequest, _user=Depends(require_admin)):
-    try:
+    with zabbix_call():
         gid = zadmin_bot.create_user_group(
             body.name,
             body.gui_access,
@@ -67,18 +68,14 @@ def create_user_group(body: UserGroupCreateRequest, _user=Depends(require_admin)
             templategroup_rights=body.templategroup_rights or None,
             tag_filters=body.tag_filters or None,
         )
-        return {"usrgrpid": gid}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"usrgrpid": gid}
 
 
 @router.delete("/user-groups/{usrgrpid}")
 def delete_user_group(usrgrpid: str, _user=Depends(require_admin)):
-    try:
+    with zabbix_call():
         zadmin_bot.delete_user_group(usrgrpid)
-        return {"ok": True}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"ok": True}
 
 
 @router.get("/roles")
@@ -88,7 +85,7 @@ def list_roles(_user=Depends(require_admin)):
 
 @router.post("/roles")
 def create_role(body: RoleCreateRequest, _user=Depends(require_admin)):
-    try:
+    with zabbix_call():
         rid = zadmin_bot.create_role(
             body.name,
             body.type,
@@ -99,27 +96,21 @@ def create_role(body: RoleCreateRequest, _user=Depends(require_admin)):
             modules_default_access=body.modules_default_access,
             api_access=body.api_access,
         )
-        return {"roleid": rid}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"roleid": rid}
 
 
 @router.put("/roles/{roleid}")
 def update_role(roleid: str, body: RoleUpdateRequest, _user=Depends(require_admin)):
-    try:
+    with zabbix_call():
         zadmin_bot.update_role(roleid, body.name)
-        return {"ok": True}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"ok": True}
 
 
 @router.delete("/roles/{roleid}")
 def delete_role(roleid: str, _user=Depends(require_admin)):
-    try:
+    with zabbix_call():
         zadmin_bot.delete_role(roleid)
-        return {"ok": True}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"ok": True}
 
 
 @router.get("/api-tokens")
@@ -129,22 +120,18 @@ def list_api_tokens(_user=Depends(require_root)):
 
 @router.post("/api-tokens")
 def create_api_token(body: TokenCreateRequest, _user=Depends(require_root)):
-    try:
+    with zabbix_call():
         tokenid, token_value = zadmin_bot.create_api_token(
             body.name, body.userid, body.expires_at
         )
-        return {"tokenid": tokenid, "token": token_value}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"tokenid": tokenid, "token": token_value}
 
 
 @router.delete("/api-tokens/{tokenid}")
 def delete_api_token(tokenid: str, _user=Depends(require_root)):
-    try:
+    with zabbix_call():
         zadmin_bot.delete_api_token(tokenid)
-        return {"ok": True}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"ok": True}
 
 
 @router.get("/proxies")
@@ -154,29 +141,23 @@ def list_proxies(_user=Depends(get_current_user)):
 
 @router.post("/proxies")
 def create_proxy(body: ProxyCreateRequest, _user=Depends(require_admin)):
-    try:
+    with zabbix_call():
         pid = zadmin_bot.create_proxy(**body.to_manager_kwargs())
-        return {"proxyid": pid}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"proxyid": pid}
 
 
 @router.put("/proxies/{proxyid}")
 def update_proxy(proxyid: str, body: ProxyUpdateRequest, _user=Depends(require_admin)):
-    try:
+    with zabbix_call():
         zadmin_bot.update_proxy(proxyid, **body.to_manager_kwargs())
-        return {"ok": True}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"ok": True}
 
 
 @router.delete("/proxies/{proxyid}")
 def delete_proxy(proxyid: str, _user=Depends(require_admin)):
-    try:
+    with zabbix_call():
         zadmin_bot.delete_proxy(proxyid)
-        return {"ok": True}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"ok": True}
 
 
 @router.get("/proxy_groups")
@@ -186,22 +167,18 @@ def list_proxy_groups(_user=Depends(get_current_user)):
 
 @router.post("/proxy_groups")
 def create_proxy_group(body: ProxyGroupCreateRequest, _user=Depends(require_admin)):
-    try:
+    with zabbix_call():
         pgid = zadmin_bot.create_proxy_group(
             body.name, body.failover_delay, body.min_online, body.description
         )
-        return {"proxygroupid": pgid}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"proxygroupid": pgid}
 
 
 @router.delete("/proxy_groups/{proxygroupid}")
 def delete_proxy_group(proxygroupid: str, _user=Depends(require_admin)):
-    try:
+    with zabbix_call():
         zadmin_bot.delete_proxy_group(proxygroupid)
-        return {"ok": True}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"ok": True}
 
 
 @router.get("/macros")
@@ -211,33 +188,27 @@ def list_macros(_user=Depends(get_current_user)):
 
 @router.post("/macros")
 def create_macro(body: MacroCreateRequest, _user=Depends(require_admin)):
-    try:
+    with zabbix_call():
         mid = zadmin_bot.create_global_macro(
             body.macro, body.value, body.description, body.type
         )
-        return {"globalmacroid": mid}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"globalmacroid": mid}
 
 
 @router.put("/macros/{globalmacroid}")
 def update_macro(
     globalmacroid: str, body: MacroUpdateRequest, _user=Depends(require_admin)
 ):
-    try:
+    with zabbix_call():
         zadmin_bot.update_global_macro(globalmacroid, body.value, body.description)
-        return {"ok": True}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"ok": True}
 
 
 @router.delete("/macros/{globalmacroid}")
 def delete_macro(globalmacroid: str, _user=Depends(require_admin)):
-    try:
+    with zabbix_call():
         zadmin_bot.delete_global_macro(globalmacroid)
-        return {"ok": True}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"ok": True}
 
 
 @router.get("/admin/queue")
@@ -247,104 +218,83 @@ def get_queue(_user=Depends(require_admin)):
 
 @router.get("/admin/settings")
 def get_settings(_user=Depends(require_admin)):
-    try:
+    with zabbix_call(status=502):
         return zadmin_bot.get_settings()
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
 
 
 @router.put("/admin/housekeeping")
 def update_housekeeping(body: HousekeepingUpdateRequest, _user=Depends(require_root)):
-    try:
+    with zabbix_call():
         zadmin_bot.update_housekeeping(body.model_dump(exclude_none=True))
-        return {"ok": True}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"ok": True}
 
 
 @router.get("/admin/auth")
 def get_auth_settings(_user=Depends(require_root)):
-    try:
+    with zabbix_call(status=502):
         return zadmin_bot.get_auth_settings()
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
 
 
 @router.put("/admin/auth")
 def update_auth_settings(body: AuthSettingsUpdateRequest, _user=Depends(require_root)):
-    try:
+    with zabbix_call():
         zadmin_bot.update_auth_settings(body.model_dump(exclude_none=True))
-        return {"ok": True}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"ok": True}
 
 
 @router.post("/admin/auth/ldap/test")
 def test_ldap_connection(body: LdapTestRequest, _user=Depends(require_root)):
-    try:
+    with zabbix_call():
         params = body.model_dump(
             exclude={"test_username", "test_password"}, exclude_none=True
         )
         result = zadmin_bot.test_ldap_connection(
             params, body.test_username, body.test_password
         )
-        return {"result": result}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"result": result}
 
 
 @router.get("/admin/auth/ldap/servers")
 def list_ldap_servers(_user=Depends(require_root)):
-    try:
-        return {"servers": zadmin_bot.list_ldap_userdirectories()}
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+    with zabbix_call(status=502):
+        servers = zadmin_bot.list_ldap_userdirectories()
+    return {"servers": servers}
 
 
 @router.get("/admin/auth/ldap/servers/{userdirectoryid}")
 def get_ldap_server(userdirectoryid: str, _user=Depends(require_root)):
-    try:
+    with zabbix_call(status=404):
         return zadmin_bot.get_ldap_userdirectory(userdirectoryid)
-    except RuntimeError as e:
-        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.post("/admin/auth/ldap/servers")
 def create_ldap_server(body: LdapServerRequest, _user=Depends(require_root)):
-    try:
+    with zabbix_call():
         userdirectoryid = zadmin_bot.create_ldap_userdirectory(body.model_dump())
-        return {"userdirectoryid": userdirectoryid}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"userdirectoryid": userdirectoryid}
 
 
 @router.put("/admin/auth/ldap/servers/{userdirectoryid}")
 def update_ldap_server(
     userdirectoryid: str, body: LdapServerRequest, _user=Depends(require_root)
 ):
-    try:
+    with zabbix_call():
         zadmin_bot.update_ldap_userdirectory(userdirectoryid, body.model_dump())
-        return {"ok": True}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"ok": True}
 
 
 @router.delete("/admin/auth/ldap/servers/{userdirectoryid}")
 def delete_ldap_server(userdirectoryid: str, _user=Depends(require_root)):
-    try:
+    with zabbix_call():
         zadmin_bot.delete_ldap_userdirectory(userdirectoryid)
-        return {"ok": True}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"ok": True}
 
 
 @router.post("/admin/auth/ldap/servers/{userdirectoryid}/default")
 def set_default_ldap_server(userdirectoryid: str, _user=Depends(require_root)):
-    try:
+    with zabbix_call():
         zadmin_bot.set_default_ldap_userdirectory(userdirectoryid)
-        return {"ok": True}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+    return {"ok": True}
 
 
 @router.get("/admin/auth/portal-ldap")
@@ -409,7 +359,7 @@ def test_portal_ldap(body: PortalLdapTestRequest, _user=Depends(require_root)):
             detail=f"User '{test_username}' not found in LDAP directory.",
         )
     except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=zabbix_err(e))
 
     if result:
         return {

@@ -11,10 +11,6 @@ import {
   Chip,
   CircularProgress,
   Collapse,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Divider,
   FormControl,
   FormControlLabel,
@@ -37,6 +33,9 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../app/api";
+import { ConfirmDelete } from "../../app/components/ConfirmDelete";
+import { TabHeader } from "../../app/components/TabHeader";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 import { EMPTY_LDAP_FORM, LdapServerDialog, type LdapServerForm } from "./LdapServerDialog";
 
 const AUTH_TYPE_LABELS: Record<string, string> = { "0": "Internal", "1": "LDAP", "2": "SAML" };
@@ -68,6 +67,7 @@ type LdapServer = {
 export const AuthenticationTab = ({
   showToast,
 }: { showToast: (m: string, s: "success" | "error") => void }) => {
+  const tick = useRefreshTick();
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -79,8 +79,7 @@ export const AuthenticationTab = ({
   const [serverDialogOpen, setServerDialogOpen] = useState(false);
   const [editServerId, setEditServerId] = useState<string | null>(null);
   const [editServerForm, setEditServerForm] = useState<LdapServerForm>(EMPTY_LDAP_FORM);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  const [deleteConfirmServer, setDeleteConfirmServer] = useState<LdapServer | null>(null);
 
   // Portal login LDAP config (stored in portal DB, separate from Zabbix)
   const [portalLdap, setPortalLdap] = useState({
@@ -173,24 +172,35 @@ export const AuthenticationTab = ({
     }
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const s = await api.getAuthSettings();
-      setSettings(s);
-      setForm(s);
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : String(e), "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [showToast]);
+  const load = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+      try {
+        const s = await api.getAuthSettings();
+        setSettings(s);
+        setForm(s);
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : String(e), "error");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [showToast],
+  );
 
   useEffect(() => {
     void load();
     void loadLdapServers();
     void loadPortalLdap();
   }, [load, loadLdapServers, loadPortalLdap]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) {
+      void load(true);
+      void loadLdapServers();
+    }
+  }, [tick]);
 
   const set = (key: string, val: string | number) => setForm((f) => ({ ...f, [key]: val }));
 
@@ -274,17 +284,16 @@ export const AuthenticationTab = ({
   };
 
   const onDelete = async () => {
-    if (!deleteConfirmId) return;
-    setDeleting(true);
+    if (!deleteConfirmServer) return;
     try {
-      await api.deleteLdapServer(deleteConfirmId);
+      await api.deleteLdapServer(deleteConfirmServer.userdirectoryid);
       showToast("LDAP server deleted.", "success");
-      setDeleteConfirmId(null);
+      setDeleteConfirmServer(null);
       void loadLdapServers();
     } catch (e) {
       showToast(e instanceof Error ? e.message : String(e), "error");
     } finally {
-      setDeleting(false);
+      setDeleteConfirmServer(null);
     }
   };
 
@@ -321,6 +330,10 @@ export const AuthenticationTab = ({
 
   return (
     <Stack spacing={3}>
+      <TabHeader
+        title="Authentication Settings"
+        description="Configure LDAP integration and password policy for portal and Zabbix user login."
+      />
       {/* Portal login via LDAP — shown first since this is the primary use case for this page */}
       <Box
         sx={{
@@ -698,7 +711,7 @@ export const AuthenticationTab = ({
                                 <IconButton
                                   size="small"
                                   color="error"
-                                  onClick={() => setDeleteConfirmId(s.userdirectoryid)}
+                                  onClick={() => setDeleteConfirmServer(s)}
                                 >
                                   <DeleteOutlineIcon sx={{ fontSize: 16 }} />
                                 </IconButton>
@@ -925,27 +938,18 @@ export const AuthenticationTab = ({
         showToast={showToast}
       />
 
-      {/* Delete confirmation */}
-      <Dialog
-        open={!!deleteConfirmId}
-        onClose={() => setDeleteConfirmId(null)}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle sx={{ fontWeight: 700 }}>Delete LDAP server?</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">
-            This will remove the LDAP server from Zabbix. Any user groups mapped to it may lose
-            their authentication.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteConfirmId(null)}>Cancel</Button>
-          <Button variant="contained" color="error" onClick={onDelete} disabled={deleting}>
-            {deleting ? <CircularProgress size={14} /> : "Delete"}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDelete
+        open={!!deleteConfirmServer}
+        name={deleteConfirmServer?.name ?? ""}
+        description={
+          <>
+            Remove LDAP server <strong>{deleteConfirmServer?.name}</strong> from Zabbix? Any user
+            groups mapped to it may lose their authentication.
+          </>
+        }
+        onConfirm={onDelete}
+        onClose={() => setDeleteConfirmServer(null)}
+      />
     </Stack>
   );
 };

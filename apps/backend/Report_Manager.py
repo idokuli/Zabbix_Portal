@@ -250,16 +250,18 @@ class Report_Manager(Zabbix_Base):
                         userids=user_ids, output=["userid", "username"]
                     )
                     user_map = {u["userid"]: u["username"] for u in users}
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Failed to enrich notification user names: %s", exc)
             if mtype_ids:
                 try:
                     mtypes = self.zapi.mediatype.get(
                         mediatypeids=mtype_ids, output=["mediatypeid", "name"]
                     )
                     mtype_map = {m["mediatypeid"]: m["name"] for m in mtypes}
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug(
+                        "Failed to enrich notification media type names: %s", exc
+                    )
             STATUS_LABELS = {0: "Not sent", 1: "Sent", 2: "Failed"}
             return [
                 {

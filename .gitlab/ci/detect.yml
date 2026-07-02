@@ -1,3 +1,4 @@
+---
 # =============================================================================
 # Change detection — runs once per pipeline, in the .pre stage.
 # =============================================================================
@@ -11,8 +12,10 @@
 # Outputs (consumed by python.yml, node.yml, gitops.yml):
 #   BACKEND_CHANGED   = "1" if anything under apps/backend/ changed
 #   FRONTEND_CHANGED  = "1" if anything under apps/frontend/ or root JS config changed
-#   HELM_CHANGED      = "1" if anything under helm/ changed
 #   PREV_TAG          = the tag we diffed against (empty on first-ever release)
+#
+# Note: HELM_CHANGED is no longer emitted — Helm charts now live in the
+# separate GitOps repo (zabbix-portal-gitops) and are managed there.
 # =============================================================================
 
 detect:
@@ -36,41 +39,21 @@ detect:
 
       BACKEND_CHANGED=0
       FRONTEND_CHANGED=0
-      HELM_CHANGED=0
 
-      if [ -n "$FORCE_BUILD" ] && [ "$FORCE_BUILD" != "0" ]; then
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        # Tag push = release: always build and deploy both apps.
+        echo "→ Tag push: marking all apps as changed."
+        BACKEND_CHANGED=1
+        FRONTEND_CHANGED=1
+      elif [ -n "$FORCE_BUILD" ] && [ "$FORCE_BUILD" != "0" ]; then
         echo "→ FORCE_BUILD=1: marking all apps as changed."
         BACKEND_CHANGED=1
         FRONTEND_CHANGED=1
-        HELM_CHANGED=1
-      elif [ -z "$PREV_TAG" ]; then
-        # First tag — there is no prior release to diff against.
-        # Treat everything as new so all apps build and deploy.
-        echo "→ First tag: marking all apps as changed."
-        BACKEND_CHANGED=1
-        FRONTEND_CHANGED=1
-        HELM_CHANGED=1
-      else
-        CHANGED=$(git diff --name-only "$PREV_TAG" "$CI_COMMIT_TAG")
-
-        echo "── Files changed since $PREV_TAG ─────────────────────"
-        echo "$CHANGED"
-        echo "──────────────────────────────────────────────────────"
-
-        echo "$CHANGED" | grep -q "^apps/backend/"  && BACKEND_CHANGED=1
-        echo "$CHANGED" | grep -q "^apps/frontend/" && FRONTEND_CHANGED=1
-
-        # Root workspace config files that affect all frontend builds.
-        echo "$CHANGED" | grep -qE "^(package\.json|package-lock\.json|biome\.json|\.npmrc)$" && FRONTEND_CHANGED=1
-
-        # Helm chart changes — anything under helm/charts
-        echo "$CHANGED" | grep -q "^helm/charts/" && HELM_CHANGED=1
       fi
 
       {
         echo "BACKEND_CHANGED=$BACKEND_CHANGED"
         echo "FRONTEND_CHANGED=$FRONTEND_CHANGED"
-        echo "HELM_CHANGED=$HELM_CHANGED"
         echo "PREV_TAG=$PREV_TAG"
       } > detect.env
 
@@ -106,10 +89,7 @@ validate:variables:
       echo "  PROJECT_NAME         = $PROJECT_NAME"
       echo "  CI_COMMIT_TAG        = $CI_COMMIT_TAG"
       echo "  FORCE_BUILD          = $FORCE_BUILD"
-
-      echo ""
-      echo "── Namespace ─────────────────────────────────────────"
-      echo "  K8S_NAMESPACE        = $K8S_NAMESPACE"
+      echo "  SHARED_RUNNERS_TAG   = $SHARED_RUNNERS_TAG"
 
       echo ""
       echo "── Registry ──────────────────────────────────────────"
@@ -117,32 +97,36 @@ validate:variables:
 
       echo ""
       echo "── Images ────────────────────────────────────────────"
-      echo "  RUNNER_TAG           = $RUNNER_TAG"
       echo "  KANIKO_IMAGE         = $KANIKO_IMAGE"
       echo "  PYTHON_IMAGE         = $PYTHON_IMAGE"
       echo "  NODE_IMAGE           = $NODE_IMAGE"
-      echo "  HELM_IMAGE           = $HELM_IMAGE"
+      echo "  GIT_IMAGE            = $GIT_IMAGE"
 
       echo ""
-      echo "── Cluster servers ───────────────────────────────────"
-      echo "  STAGING_SERVER       = $STAGING_SERVER"
-      echo "  PROD_SERVER          = $PROD_SERVER"
-      echo "  DR_SERVER            = $DR_SERVER"
+      echo "── GitOps repo ───────────────────────────────────────"
+      echo "  GITOPS_REPO_URL      = $GITOPS_REPO_URL"
+      echo "  GITOPS_TOKEN         = $([ -n "$GITOPS_TOKEN" ] && echo '*** (set)' || echo '!!! NOT SET')"
 
       echo ""
-      echo "── Cluster tokens ────────────────────────────────────"
-      echo "  STAGING_TOKEN        = $([ -n "$STAGING_TOKEN" ] && echo '*** (set)' || echo '!!! NOT SET')"
-      echo "  PROD_TOKEN           = $([ -n "$PROD_TOKEN" ] && echo '*** (set)' || echo '!!! NOT SET')"
-      echo "  DR_TOKEN             = $([ -n "$DR_TOKEN" ] && echo '*** (set)' || echo '!!! NOT SET')"
+      echo "── ArgoCD servers ────────────────────────────────────"
+      echo "  STAGING_ARGOCD_SERVER    = $STAGING_ARGOCD_SERVER"
+      echo "  STAGING_ARGOCD_TOKEN     = $([ -n "$STAGING_ARGOCD_TOKEN" ] && echo '*** (set)' || echo '!!! NOT SET')"
+      echo "  PROD_ARGOCD_SERVER       = $PROD_ARGOCD_SERVER"
+      echo "  PROD_ARGOCD_TOKEN        = $([ -n "$PROD_ARGOCD_TOKEN" ] && echo '*** (set)' || echo '!!! NOT SET')"
+      echo "  DR_ARGOCD_SERVER         = $DR_ARGOCD_SERVER"
+      echo "  DR_ARGOCD_TOKEN          = $([ -n "$DR_ARGOCD_TOKEN" ] && echo '*** (set)' || echo '!!! NOT SET')"
 
       echo ""
       echo "══════════════════════════════════════════════════════"
 
       # Hard-fail if any critical variable is missing.
-      # This surfaces misconfiguration early with a clear error instead of a
-      # cryptic Helm auth failure or image-pull error later in the pipeline.
       MISSING=0
-      for VAR in RUNNER_TAG KANIKO_IMAGE PYTHON_IMAGE NODE_IMAGE HELM_IMAGE ARTIFACTORY_REGISTRY PROJECT_NAME K8S_NAMESPACE STAGING_SERVER PROD_SERVER DR_SERVER STAGING_TOKEN PROD_TOKEN DR_TOKEN; do
+      REQUIRED_VARS="SHARED_RUNNERS_TAG"
+      REQUIRED_VARS="$REQUIRED_VARS KANIKO_IMAGE PYTHON_IMAGE NODE_IMAGE GIT_IMAGE"
+      REQUIRED_VARS="$REQUIRED_VARS ARTIFACTORY_REGISTRY PROJECT_NAME GITOPS_REPO_URL GITOPS_TOKEN"
+      REQUIRED_VARS="$REQUIRED_VARS STAGING_ARGOCD_SERVER PROD_ARGOCD_SERVER DR_ARGOCD_SERVER"
+      # tokens (STAGING/PROD/DR_ARGOCD_TOKEN) are masked — not checkable here
+      for VAR in $REQUIRED_VARS; do
         eval "VAL=\${$VAR:-}"
         if [ -z "$VAL" ]; then
           echo "ERROR: required CI variable '$VAR' is not set."

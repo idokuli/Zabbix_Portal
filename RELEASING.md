@@ -4,7 +4,7 @@ How to ship code changes — from a single bug-fix commit to a tagged production
 
 > **The CI/CD pipeline runs ONLY on git tag pushes.** Branch pushes and merge requests do nothing in CI. The tag *is* the release. Until you tag, nothing is built, nothing is deployed.
 >
-> **Deployment runs via direct `helm upgrade --install` from CI.** ArgoCD manifests in `argocd/` are the planned future path but are not yet wired into the pipeline — every command below uses Helm.
+> **Deployment uses a GitOps flow.** The CI pipeline pushes updated image tags to the `zabbix-portal-gitops` repo; ArgoCD syncs each cluster from there. Staging auto-syncs; production and DR require a manual sync click in the ArgoCD UI.
 
 If you only want to understand what the pipeline does, read [`WORKFLOW.md`](./WORKFLOW.md). This document is a runbook — what commands to run, in what order, when something needs to ship.
 
@@ -12,13 +12,13 @@ If you only want to understand what the pipeline does, read [`WORKFLOW.md`](./WO
 
 ## Quick reference
 
-| I want to…                              | Do this                                                  |
-| --------------------------------------- | -------------------------------------------------------- |
-| Ship a release                          | Push a git tag — manually or via the workspace tool.     |
-| Roll production back                    | `helm rollback` to a previous revision (see §6).         |
-| Hotfix production                       | Branch from the production tag → tag a new patch.        |
-| Bump only the Helm chart                | Tag a release — only `helm/` changed since the last tag. |
-| Validate locally before tagging         | `npm run lint && npm run typecheck` (frontend) + `ruff check . && mypy .` (backend) + `helm lint helm/charts/*`. |
+| I want to…                              | Do this                                                                                               |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Ship a release                          | Push a git tag — manually or via the workspace tool.                                                  |
+| Roll production back                    | In ArgoCD: sync the Application to a previous Git revision, or pin the old tag in the GitOps repo.   |
+| Hotfix production                       | Branch from the production tag → tag a new patch.                                                    |
+| Bump only the Helm chart                | Edit the chart in the GitOps repo directly — no tag push needed here.                                |
+| Validate locally before tagging         | `npm run lint && npm run typecheck` (frontend) + `ruff check . && mypy .` (backend).                 |
 
 ---
 
@@ -27,14 +27,12 @@ If you only want to understand what the pipeline does, read [`WORKFLOW.md`](./WO
 Before your first release ensure:
 
 - You have **Maintainer** access on the GitLab project.
-- `RUNNER_TAG`, `KANIKO_IMAGE`, `PYTHON_IMAGE`, `NODE_IMAGE`, `HELM_IMAGE`, `GIT_IMAGE`, `ARTIFACTORY_REGISTRY`, `PROJECT_NAME`, `K8S_NAMESPACE`, `STAGING_SERVER`, `PROD_SERVER`, and `DR_SERVER` are filled in at the top of `.gitlab-ci.yml` (or overridden as GitLab CI/CD Variables).
-- These cluster-access secrets are configured as GitLab CI/CD Variables (Settings → CI/CD → Variables, masked + protected):
-  - `STAGING_TOKEN` — staging cluster service-account token
-  - `PROD_TOKEN` — production cluster service-account token
-  - `DR_TOKEN` — DR cluster service-account token. **DR is its own cluster** (`DR_SERVER` / `DR_TOKEN`) — it does not reuse production's.
+- `RUNNER_TAG`, `KANIKO_IMAGE`, `PYTHON_IMAGE`, `NODE_IMAGE`, `HELM_IMAGE`, `GIT_IMAGE`, `ARTIFACTORY_REGISTRY`, `PROJECT_NAME`, and `GITOPS_REPO_URL` are filled in at the top of `.gitlab-ci.yml` (or overridden as GitLab CI/CD Variables).
+- This secret is configured as a GitLab CI/CD Variable (Settings → CI/CD → Variables, masked + protected):
+  - `GITOPS_DEPLOY_KEY` — private SSH key matching a Deploy Key with **write** access on the `zabbix-portal-gitops` repo.
 - The container registry is reachable from the GitLab runners and from each cluster.
+- ArgoCD is installed in the cluster and its `ApplicationSet` is applied from the GitOps repo.
 - The Artifactory registry path is set via `ARTIFACTORY_REGISTRY` at the top of `.gitlab-ci.yml` — see [`PRIVATE_NETWORK.md`](./PRIVATE_NETWORK.md).
-- See [`.cienv-example`](./.cienv-example) for the full list of CI variables.
 
 `validate:variables` in the `.pre` stage hard-fails the pipeline if any required variable above is missing, so a misconfiguration is caught before any build runs.
 
@@ -46,11 +44,11 @@ Before your first release ensure:
 flowchart LR
     A["merge to main"] --> B["git tag -a vX.Y.Z"]
     B --> C["git push origin vX.Y.Z"]
-    C --> D["CI: detect + lint + build"]
-    D --> E["staging: auto-deploy"]
+    C --> D["CI: detect + lint + build + promote"]
+    D --> E["ArgoCD: staging auto-syncs"]
     E --> F["validate staging"]
-    F --> G["▶ production (manual)"]
-    G --> H["▶ dr (manual, optional)"]
+    F --> G["▶ ArgoCD: sync production (manual)"]
+    G --> H["▶ ArgoCD: sync DR (manual, optional)"]
 ```
 
 ### 2.1 Prepare your changes
@@ -101,39 +99,35 @@ Whatever tool you use, the moment a tag lands on the remote, CI starts.
 
 ### 2.3 What CI does on the tag
 
-1. **`detect`** (`.pre` stage) — compares the new tag against the previous ancestor tag and emits per-app `BACKEND_CHANGED` / `FRONTEND_CHANGED` / `HELM_CHANGED` flags. `validate:variables` checks required CI variables are set.
-2. **`lint` stage** — ruff, mypy, Biome, tsc, helm lint/template run only for apps that changed.
+1. **`detect`** (`.pre` stage) — compares the new tag against the previous ancestor tag and emits per-app `BACKEND_CHANGED` / `FRONTEND_CHANGED` flags. `validate:variables` checks required CI variables are set.
+2. **`lint` stage** — yamllint, ruff, mypy, Biome, tsc run (yamllint always; app checks only for apps that changed).
 3. **`build` stage** — Kaniko builds Docker images for changed apps and pushes them tagged `:<git-tag>`.
-4. **`staging` stage** — `plan:staging` resolves image tags (from Helm history) and previews the values that will be applied; `deploy:staging` then runs `helm upgrade --install` against the staging cluster, pinning changed apps to the new tag and keeping unchanged apps on their last-deployed tag. Both run automatically.
-5. **`production` stage** — `plan:production` runs automatically (falling back to staging's resolved tag if production has no prior Helm history); `deploy:production` is a manual gate. Click ▶ when staging looks good.
-6. **`dr` stage** — DR is its **own cluster** (`DR_SERVER` / `DR_TOKEN`). `plan:dr` runs automatically (falling back to production's resolved tag on a first deploy); `deploy:dr` is a manual gate to deploy to the DR namespace/cluster.
+4. **`promote` stage** — `push-image-tags` clones the GitOps repo, updates `tag:` in `environments/{staging,production,dr}/values.yaml` for each changed app, and commits + pushes. ArgoCD detects the change and syncs each environment.
+
+After the pipeline finishes:
+- **Staging** — ArgoCD auto-syncs within seconds of the commit landing in the GitOps repo.
+- **Production / DR** — ArgoCD shows OutOfSync. Open the ArgoCD UI and click **Sync** for each when you're ready.
 
 ### 2.4 Validate on staging
 
-Spot-check the change in the staging UI. Watch the deployment:
+Spot-check the change in the staging UI. In the ArgoCD UI, confirm the staging Application is **Healthy** and **Synced**. To watch via kubectl:
 
 ```bash
-helm status     "$PROJECT_NAME" -n "$STAGING_NAMESPACE"
-helm history    "$PROJECT_NAME" -n "$STAGING_NAMESPACE"
-kubectl -n "$STAGING_NAMESPACE" rollout status deploy/"$PROJECT_NAME"-zabbix-portal-frontend
+kubectl -n zabbix-portal-staging rollout status deploy/zabbix-portal-staging-frontend
+kubectl -n zabbix-portal-staging rollout status deploy/zabbix-portal-staging-backend
 ```
 
 If something is wrong: see §6 to roll back, then fix and re-tag.
 
 ### 2.5 Promote to production
 
-`plan:production` resolves tags automatically once staging has deployed. Open the pipeline in GitLab → click ▶ on `deploy:production`. The job runs the same `helm upgrade --install` as staging, against the production cluster:
+The `push-image-tags` job already updated the production `values.yaml` in the GitOps repo. ArgoCD is just waiting for you to approve the sync:
 
-```bash
-helm upgrade --install "$PROJECT_NAME" "helm/charts/$PROJECT_NAME/" \
-  --namespace "$K8S_NAMESPACE" \
-  -f values.yaml -f values-production.yaml \
-  --set backend.image.tag=<resolved> \
-  --set frontend.image.tag=<resolved> \
-  --wait --timeout 5m
-```
+1. Open the ArgoCD UI.
+2. Find the `zabbix-portal-production` Application — it will show **OutOfSync**.
+3. Click **Sync** → confirm.
 
-Only apps that changed since the previous tag are pinned to the new tag; unchanged apps keep whatever tag was last deployed (read back from `helm history`). If `--wait` times out or a pod fails its readiness probe, the job fails and production stays on the old release.
+ArgoCD renders the Helm chart from the GitOps repo and applies the new manifests. Only apps whose tags changed will roll their pods. Unchanged apps are unaffected.
 
 ---
 
@@ -149,18 +143,18 @@ Only apps that changed since the previous tag are pinned to the new tag; unchang
 
 ### Helm chart versions
 
-Two distinct fields in each `Chart.yaml`:
+Helm charts now live in the `zabbix-portal-gitops` repo under `helm-charts/`. Two distinct fields in each `Chart.yaml`:
 
 - **`version:`** — the Helm chart version. Bump on **any** chart change.
 - **`appVersion:`** — the application version this chart was authored for.
 
-When you cut release `v1.4.0`, also update `appVersion: "1.4.0"` in:
+When you cut release `v1.4.0`, update `appVersion: "1.4.0"` and bump `version:` in:
 
-- `helm/charts/backend/Chart.yaml`
-- `helm/charts/frontend/Chart.yaml`
-- `helm/charts/zabbix-portal/Chart.yaml`
+- `helm-charts/backend/Chart.yaml`
+- `helm-charts/frontend/Chart.yaml`
+- `helm-charts/zabbix-portal/Chart.yaml`
 
-…and bump each `version:` field by at least a patch level. Commit those changes to `main` **before** creating the tag, so the tag captures the matching chart version.
+Commit those changes directly to the GitOps repo — no app tag push needed.
 
 ---
 
@@ -200,7 +194,7 @@ Per-app releases are automatic — no extra ceremony required. The detect job di
 | Tag with backend-only changes since last tag          | rebuilt | unchanged |
 | Tag with frontend-only changes                        | unchanged | rebuilt |
 | Tag with changes to both                              | rebuilt | rebuilt |
-| Tag with only `helm/` changes (no app code)           | unchanged | unchanged |
+| Helm chart changes (in GitOps repo, no app code)      | unchanged | unchanged |
 | First-ever tag (no previous tag to diff against)      | rebuilt | rebuilt |
 
 In each deploy job, the same diff drives `helm --set image.tag`: only changed apps are pinned to the new tag. Unchanged apps keep the tag read back from `helm history`.
@@ -211,33 +205,27 @@ In each deploy job, the same diff drives `helm --set image.tag`: only changed ap
 
 There is no automatic rollback. Production stays on whatever was last deployed, even if `main` advances.
 
-### 6.1 Roll back to the previous Helm revision
+### 6.1 Roll back via ArgoCD (recommended)
 
-Each successful `helm upgrade` is a revision. Roll back in one command:
+In the ArgoCD UI, open the Application → **History and Rollback** → select the previous revision → click **Rollback**. ArgoCD re-applies the chart and values from that Git revision, restoring the previously deployed image tags. This is the fastest path during an incident — no Git changes needed.
 
-```bash
-helm history  "$PROJECT_NAME" -n "$K8S_NAMESPACE"
-helm rollback "$PROJECT_NAME" <REVISION_NUMBER> -n "$K8S_NAMESPACE" --wait --timeout 5m
-```
+### 6.2 Roll back by editing the GitOps repo
 
-This restores both the chart and the values (including the image tags) to that revision. This is the recommended path during an incident — no Git revert required. Open a follow-up MR afterwards to revert the offending commits in source so the next tag does not reintroduce the bad code.
-
-### 6.2 Roll forward to a specific known-good tag
-
-If you'd rather re-deploy an explicit older tag than step back a revision:
+Pin the old image tag directly in the GitOps repo:
 
 ```bash
-helm upgrade --install "$PROJECT_NAME" "helm/charts/$PROJECT_NAME/" \
-  --namespace "$K8S_NAMESPACE" \
-  -f values.yaml -f values-production.yaml \
-  --set backend.image.tag=v1.3.0 \
-  --set frontend.image.tag=v1.3.0 \
-  --wait --timeout 5m
+# In zabbix-portal-gitops:
+# Edit environments/production/values.yaml
+# Set backend.image.tag and/or frontend.image.tag to the known-good version
+git commit -am "revert: pin backend to v1.3.0 after bad deploy"
+git push
 ```
+
+ArgoCD detects the change and shows OutOfSync — click Sync to apply. For staging it applies automatically.
 
 ### 6.3 Roll back staging
 
-Re-run the previous tag's pipeline, `helm rollback` staging, or tag a new patch release that reverts the bad commits.
+In ArgoCD, use History and Rollback on the staging Application, or push a corrected tag to the GitOps repo — staging will auto-sync.
 
 ---
 
@@ -246,9 +234,9 @@ Re-run the previous tag's pipeline, `helm rollback` staging, or tag a new patch 
 - [ ] Code merged to `main` and the tip of `main` builds locally
 - [ ] `npm run lint && npm run typecheck` passes in `apps/frontend/`
 - [ ] `ruff check . && mypy . --ignore-missing-imports` passes in `apps/backend/`
-- [ ] `helm lint helm/charts/{backend,frontend,zabbix-portal}` passes
-- [ ] `Chart.yaml` `version:` and `appVersion:` are bumped
-- [ ] Any new Helm values are documented in `helm/charts/zabbix-portal/values.yaml` with comments
+- [ ] Helm chart changes (if any) are already committed to the GitOps repo and pass its pipeline
+- [ ] `Chart.yaml` `version:` and `appVersion:` are bumped in the GitOps repo (if charts changed)
+- [ ] Any new Helm values are documented in `helm-charts/zabbix-portal/values.yaml` with comments
 - [ ] Breaking changes are flagged in the tag annotation message
 - [ ] At least one other maintainer has reviewed the diff against the previous tag:
 

@@ -26,3 +26,7 @@ class HostTagItem(BaseModel):
 
 class TagsUpdateRequest(BaseModel):
     tags: list[HostTagItem]
+
+
+class HostTemplateLinkRequest(BaseModel):
+    templateid: str

@@ -1,8 +1,7 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
-import User_Management as um
 from Auth import get_current_user, require_operator
-from api.deps import live_team_id, team_hostname_filter
+from api.deps import resolve_team, team_hostname_filter, zabbix_call, zabbix_err
 from api.managers import item_bot
 from api.schemas import (
     BrowserItemRequest,
@@ -19,6 +18,9 @@ from api.schemas import (
     ItemRequest,
     ItemUpdateRequest,
     JmxItemRequest,
+    ProcessItemRequest,
+    TemplateItemRequest,
+    WindowsServiceItemRequest,
     ScriptItemRequest,
     ServiceItemRequest,
     SnmpItemRequest,
@@ -31,6 +33,15 @@ from api.schemas import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Items"])
+
+
+def _item_response(item_id: str | None, err: str | None, label: str) -> dict:
+    """Raise 400 if the item was not created; otherwise return the success envelope."""
+    if not item_id:
+        raise HTTPException(
+            status_code=400, detail=err or f"Failed to add {label} item."
+        )
+    return {"message": f"{label} item added successfully.", "itemid": item_id}
 
 
 @router.get("/items", tags=["Items"], summary="List all items across all hosts")
@@ -46,10 +57,88 @@ def list_all_items(
     try:
         items = item_bot.list_all_items(search=search, hostname=hostname, limit=limit)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Zabbix API error: {e}")
+        raise HTTPException(status_code=502, detail=zabbix_err(e))
     if allowed is not None:
         items = [i for i in items if i["hostname"] in allowed]
     return {"items": items, "total": len(items)}
+
+
+@router.get(
+    "/templates/{templateid}/items",
+    tags=["Templates"],
+    summary="List items on a template",
+)
+def list_template_items(templateid: str, _user: dict = Depends(get_current_user)):
+    """List items defined directly on a Zabbix template (not inherited)."""
+    with zabbix_call():
+        return {"items": item_bot.list_template_items(templateid)}
+
+
+@router.post(
+    "/templates/{templateid}/items",
+    tags=["Templates"],
+    summary="Add item to a template",
+    status_code=201,
+)
+def add_template_item(
+    templateid: str,
+    data: TemplateItemRequest,
+    _user: dict = Depends(require_operator),
+):
+    """Add a new item directly to a Zabbix template."""
+    with zabbix_call():
+        item_id, err = item_bot.add_item_to_template(
+            templateid=templateid,
+            name=data.name,
+            key_=data.key_,
+            type_=data.type_,
+            value_type=data.value_type,
+            delay=data.delay,
+            history=data.history,
+            trends=data.trends,
+            units=data.units,
+            description=data.description,
+        )
+    return _item_response(item_id, err, "Template item")
+
+
+@router.put(
+    "/templates/{templateid}/items/{itemid}",
+    tags=["Templates"],
+    summary="Update a template item",
+)
+def update_template_item(
+    templateid: str,
+    itemid: str,
+    body: ItemUpdateRequest,
+    _user: dict = Depends(require_operator),
+):
+    """Update a template item. templateid is validated for consistency but item.update operates by itemid."""
+    try:
+        item_bot.update_item(
+            itemid, name=body.name, delay=body.delay, status=body.status, key_=body.key_
+        )
+        return {"ok": True}
+    except RuntimeError as e:
+        raise HTTPException(status_code=422, detail=zabbix_err(e))
+
+
+@router.delete(
+    "/templates/{templateid}/items/{itemid}",
+    tags=["Templates"],
+    summary="Delete a template item",
+)
+def delete_template_item(
+    templateid: str,
+    itemid: str,
+    _user: dict = Depends(require_operator),
+):
+    """Delete an item from a template by itemid."""
+    if not item_bot.delete_item(itemid):
+        raise HTTPException(
+            status_code=404, detail="Item not found or could not be deleted."
+        )
+    return {"message": "Template item deleted."}
 
 
 @router.get(
@@ -79,7 +168,7 @@ def update_item(itemid: str, body: ItemUpdateRequest, _user=Depends(require_oper
         )
         return {"ok": True}
     except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=zabbix_err(e))
 
 
 @router.delete("/items/{itemid}", tags=["Items"], summary="Delete item by ID")
@@ -101,14 +190,13 @@ def delete_item(itemid: str, current_user: dict = Depends(require_operator)):
 @router.post("/items", tags=["Items"], summary="Add Monitoring Item", status_code=201)
 def add_item(data: ItemRequest, current_user: dict = Depends(require_operator)):
     """Adds a monitoring item (metric) to an existing host."""
-    team_id = live_team_id(current_user)
-    team_name = um.get_team_name(team_id) if team_id else None
+    team_name = resolve_team(current_user)
     item_id, err = item_bot.add_item(
         data.hostname,
         data.item_name,
         data.item_key,
         data.value_type,
-        team_name or "",
+        team_name,
         delay=data.delay,
         units=data.units,
         history=data.history,
@@ -117,9 +205,7 @@ def add_item(data: ItemRequest, current_user: dict = Depends(require_operator)):
         status=data.status,
         timeout=data.timeout,
     )
-    if not item_id:
-        raise HTTPException(status_code=400, detail=err or "Failed to add item.")
-    return {"message": "Item added successfully.", "itemid": item_id}
+    return _item_response(item_id, err, "")
 
 
 @router.post(
@@ -129,8 +215,7 @@ def add_http_item(
     data: HttpItemRequest, current_user: dict = Depends(require_operator)
 ):
     """Adds an HTTP agent item (type 19). Zabbix server fetches the URL and stores the result."""
-    team_id = live_team_id(current_user)
-    team_name = um.get_team_name(team_id) if team_id else None
+    team_name = resolve_team(current_user)
     item_id, err = item_bot.add_http_item(
         hostname=data.hostname,
         item_name=data.item_name,
@@ -169,9 +254,7 @@ def add_http_item(
         trends=data.trends,
         description=data.description,
     )
-    if not item_id:
-        raise HTTPException(status_code=400, detail=err or "Failed to add HTTP item.")
-    return {"message": "HTTP item added successfully.", "itemid": item_id}
+    return _item_response(item_id, err, "HTTP")
 
 
 @router.post(
@@ -181,8 +264,7 @@ def add_service_item(
     data: ServiceItemRequest, current_user: dict = Depends(require_operator)
 ):
     """Adds a simple-check service item (type 3): ICMP ping, TCP port, HTTP/HTTPS/SSH/SMTP/FTP."""
-    team_id = live_team_id(current_user)
-    team_name = um.get_team_name(team_id) if team_id else None
+    team_name = resolve_team(current_user)
     item_id, err = item_bot.add_service_item(
         hostname=data.hostname,
         service_type=data.service_type,
@@ -194,11 +276,69 @@ def add_service_item(
         trends=data.trends,
         description=data.description,
     )
-    if not item_id:
-        raise HTTPException(
-            status_code=400, detail=err or "Failed to add service item."
+    return _item_response(item_id, err, "Service")
+
+
+@router.post(
+    "/items/process",
+    tags=["Items"],
+    summary="Add Process Monitor Item",
+    status_code=201,
+)
+def add_process_item(
+    data: ProcessItemRequest, current_user: dict = Depends(require_operator)
+):
+    """Adds a proc.num[] agent item to check if a process is running, optionally filtered by
+    the OS user running it, process state, or command-line regex.
+    Auto-creates a trigger that fires when the process count drops to 0.
+    """
+    team_name = resolve_team(current_user)
+    with zabbix_call():
+        item_id, err = item_bot.add_process_item(
+            hostname=data.hostname,
+            process_name=data.process_name,
+            run_as_user=data.run_as_user,
+            cmdline_regex=data.cmdline_regex,
+            state=data.state,
+            item_name=data.item_name,
+            team_name=team_name or data.team_name,
+            create_trigger=data.create_trigger,
+            trigger_priority=data.trigger_priority,
+            delay=data.delay,
+            history=data.history,
+            trends=data.trends,
+            description=data.description,
         )
-    return {"message": "Service item added successfully.", "itemid": item_id}
+    return _item_response(item_id, err, "Process monitor")
+
+
+@router.post(
+    "/items/winsvc",
+    tags=["Items"],
+    summary="Add Windows Service Monitor Item",
+    status_code=201,
+)
+def add_windows_service_item(
+    data: WindowsServiceItemRequest, current_user: dict = Depends(require_operator)
+):
+    """Adds a Zabbix agent item using service.info[name,state] to monitor a Windows service.
+    Requires the Zabbix agent running on the Windows host.
+    """
+    team_name = resolve_team(current_user)
+    with zabbix_call():
+        item_id, err = item_bot.add_windows_service_item(
+            hostname=data.hostname,
+            service_name=data.service_name,
+            item_name=data.item_name,
+            team_name=team_name or data.team_name,
+            create_trigger=data.create_trigger,
+            trigger_priority=data.trigger_priority,
+            delay=data.delay,
+            history=data.history,
+            trends=data.trends,
+            description=data.description,
+        )
+    return _item_response(item_id, err, "Windows service monitor")
 
 
 @router.post(
@@ -210,8 +350,7 @@ def add_file_watch_item(
     """Creates an agent item that monitors a file property.
     Optionally auto-creates a change-detection trigger on the same item.
     """
-    team_id = live_team_id(current_user)
-    team_name = um.get_team_name(team_id) if team_id else None
+    team_name = resolve_team(current_user)
     item_id, err = item_bot.add_file_watch_item(
         hostname=data.hostname,
         file_path=data.file_path,
@@ -281,8 +420,7 @@ def add_script_item(
     """Adds an agent item that runs a bash or PowerShell script via system.run[].
     Requires EnableRemoteCommands=1 in the Zabbix agent config on the target host.
     """
-    team_id = live_team_id(current_user)
-    team_name = um.get_team_name(team_id) if team_id else None
+    team_name = resolve_team(current_user)
     item_id, err = item_bot.add_script_item(
         hostname=data.hostname,
         script_type=data.script_type,
@@ -300,9 +438,7 @@ def add_script_item(
         status=data.status,
         timeout=data.timeout,
     )
-    if not item_id:
-        raise HTTPException(status_code=400, detail=err or "Failed to add script item.")
-    return {"message": "Script item added successfully.", "itemid": item_id}
+    return _item_response(item_id, err, "Script")
 
 
 @router.post(
@@ -318,8 +454,7 @@ def add_db_odbc_item(
     allowed = team_hostname_filter(current_user)
     if allowed is not None and data.hostname not in allowed:
         raise HTTPException(status_code=403, detail="Host not in your team.")
-    team_id = live_team_id(current_user)
-    team_name = (um.get_team_name(team_id) if team_id else "") or ""
+    team_name = resolve_team(current_user)
     item_id, err = item_bot.add_db_odbc_item(
         hostname=data.hostname,
         dsn=data.dsn,
@@ -337,9 +472,7 @@ def add_db_odbc_item(
         status=data.status,
         timeout=data.timeout,
     )
-    if not item_id:
-        raise HTTPException(status_code=400, detail=err or "Failed to add ODBC item.")
-    return {"message": "ODBC item added.", "itemid": item_id}
+    return _item_response(item_id, err, "ODBC")
 
 
 @router.post(
@@ -355,8 +488,7 @@ def add_db_agent2_item(
     allowed = team_hostname_filter(current_user)
     if allowed is not None and data.hostname not in allowed:
         raise HTTPException(status_code=403, detail="Host not in your team.")
-    team_id = live_team_id(current_user)
-    team_name = (um.get_team_name(team_id) if team_id else "") or ""
+    team_name = resolve_team(current_user)
     item_id, err = item_bot.add_db_agent2_item(
         hostname=data.hostname,
         engine=data.engine,
@@ -367,11 +499,7 @@ def add_db_agent2_item(
         value_type=data.value_type,
         team_name=team_name,
     )
-    if not item_id:
-        raise HTTPException(
-            status_code=400, detail=err or "Failed to add Agent2 DB item."
-        )
-    return {"message": "Agent2 DB item added.", "itemid": item_id}
+    return _item_response(item_id, err, "Agent2 DB")
 
 
 @router.post(
@@ -386,8 +514,7 @@ def bulk_add_items(
     """Adds the same item (agent, HTTP agent, or service check) to multiple hosts in one call."""
     if not data.hostnames:
         raise HTTPException(status_code=400, detail="hostnames list is empty.")
-    team_id = live_team_id(current_user)
-    team_name = (um.get_team_name(team_id) if team_id else "") or ""
+    team_name = resolve_team(current_user)
     config = data.model_dump(exclude={"hostnames"})
     config["team_name"] = team_name or config.get("team_name", "")
     results = item_bot.bulk_add_items(data.hostnames, config)
@@ -405,8 +532,7 @@ def add_snmp_item(
     data: SnmpItemRequest, current_user: dict = Depends(require_operator)
 ):
     """Add an SNMP agent item (type 20). Supports SNMPv1, v2c, and v3."""
-    team_id = live_team_id(current_user)
-    team_name = (um.get_team_name(team_id) if team_id else "") or ""
+    team_name = resolve_team(current_user)
     item_id, err = item_bot.add_snmp_item(
         hostname=data.hostname,
         item_name=data.item_name,
@@ -430,9 +556,7 @@ def add_snmp_item(
         description=data.description,
         status=data.status,
     )
-    if not item_id:
-        raise HTTPException(status_code=400, detail=err or "Failed to add SNMP item.")
-    return {"message": "SNMP item added successfully.", "itemid": item_id}
+    return _item_response(item_id, err, "SNMP")
 
 
 @router.post(
@@ -442,8 +566,7 @@ def add_snmp_trap_item(
     data: SnmpTrapRequest, current_user: dict = Depends(require_operator)
 ):
     """Add an SNMP trap item (type 17). Receives traps pushed by external devices."""
-    team_id = live_team_id(current_user)
-    team_name = (um.get_team_name(team_id) if team_id else "") or ""
+    team_name = resolve_team(current_user)
     item_id, err = item_bot.add_snmp_trap_item(
         hostname=data.hostname,
         item_name=data.item_name,
@@ -455,11 +578,7 @@ def add_snmp_trap_item(
         description=data.description,
         status=data.status,
     )
-    if not item_id:
-        raise HTTPException(
-            status_code=400, detail=err or "Failed to add SNMP trap item."
-        )
-    return {"message": "SNMP trap item added successfully.", "itemid": item_id}
+    return _item_response(item_id, err, "SNMP trap")
 
 
 @router.post(
@@ -472,8 +591,7 @@ def add_internal_item(
     data: InternalItemRequest, current_user: dict = Depends(require_operator)
 ):
     """Add a Zabbix internal item (type 5) using built-in zabbix[...] keys."""
-    team_id = live_team_id(current_user)
-    team_name = (um.get_team_name(team_id) if team_id else "") or ""
+    team_name = resolve_team(current_user)
     item_id, err = item_bot.add_internal_item(
         hostname=data.hostname,
         item_name=data.item_name,
@@ -487,11 +605,7 @@ def add_internal_item(
         description=data.description,
         status=data.status,
     )
-    if not item_id:
-        raise HTTPException(
-            status_code=400, detail=err or "Failed to add internal item."
-        )
-    return {"message": "Internal item added successfully.", "itemid": item_id}
+    return _item_response(item_id, err, "Internal")
 
 
 @router.post(
@@ -501,8 +615,7 @@ def add_trapper_item(
     data: TrapperItemRequest, current_user: dict = Depends(require_operator)
 ):
     """Add a Zabbix trapper item (type 2). Accepts data pushed via zabbix_sender."""
-    team_id = live_team_id(current_user)
-    team_name = (um.get_team_name(team_id) if team_id else "") or ""
+    team_name = resolve_team(current_user)
     item_id, err = item_bot.add_trapper_item(
         hostname=data.hostname,
         item_name=data.item_name,
@@ -515,11 +628,7 @@ def add_trapper_item(
         description=data.description,
         status=data.status,
     )
-    if not item_id:
-        raise HTTPException(
-            status_code=400, detail=err or "Failed to add trapper item."
-        )
-    return {"message": "Trapper item added successfully.", "itemid": item_id}
+    return _item_response(item_id, err, "Trapper")
 
 
 @router.post(
@@ -532,8 +641,7 @@ def add_external_item(
     data: ExternalItemRequest, current_user: dict = Depends(require_operator)
 ):
     """Add an external check item (type 10). Script must exist in ExternalScripts dir on Zabbix server."""
-    team_id = live_team_id(current_user)
-    team_name = (um.get_team_name(team_id) if team_id else "") or ""
+    team_name = resolve_team(current_user)
     item_id, err = item_bot.add_external_item(
         hostname=data.hostname,
         item_name=data.item_name,
@@ -547,11 +655,7 @@ def add_external_item(
         description=data.description,
         status=data.status,
     )
-    if not item_id:
-        raise HTTPException(
-            status_code=400, detail=err or "Failed to add external check item."
-        )
-    return {"message": "External check item added successfully.", "itemid": item_id}
+    return _item_response(item_id, err, "External check")
 
 
 @router.post(
@@ -561,8 +665,7 @@ def add_ipmi_item(
     data: IpmiItemRequest, current_user: dict = Depends(require_operator)
 ):
     """Add an IPMI agent item (type 12). Requires an IPMI interface on the host."""
-    team_id = live_team_id(current_user)
-    team_name = (um.get_team_name(team_id) if team_id else "") or ""
+    team_name = resolve_team(current_user)
     item_id, err = item_bot.add_ipmi_item(
         hostname=data.hostname,
         item_name=data.item_name,
@@ -577,9 +680,7 @@ def add_ipmi_item(
         description=data.description,
         status=data.status,
     )
-    if not item_id:
-        raise HTTPException(status_code=400, detail=err or "Failed to add IPMI item.")
-    return {"message": "IPMI item added successfully.", "itemid": item_id}
+    return _item_response(item_id, err, "IPMI")
 
 
 @router.post(
@@ -587,8 +688,7 @@ def add_ipmi_item(
 )
 def add_ssh_item(data: SshItemRequest, current_user: dict = Depends(require_operator)):
     """Add an SSH agent item (type 13). Zabbix server SSHes into the host and runs the script."""
-    team_id = live_team_id(current_user)
-    team_name = (um.get_team_name(team_id) if team_id else "") or ""
+    team_name = resolve_team(current_user)
     item_id, err = item_bot.add_ssh_item(
         hostname=data.hostname,
         item_name=data.item_name,
@@ -609,9 +709,7 @@ def add_ssh_item(data: SshItemRequest, current_user: dict = Depends(require_oper
         status=data.status,
         timeout=data.timeout,
     )
-    if not item_id:
-        raise HTTPException(status_code=400, detail=err or "Failed to add SSH item.")
-    return {"message": "SSH item added successfully.", "itemid": item_id}
+    return _item_response(item_id, err, "SSH")
 
 
 @router.post(
@@ -621,8 +719,7 @@ def add_telnet_item(
     data: TelnetItemRequest, current_user: dict = Depends(require_operator)
 ):
     """Add a Telnet agent item (type 14). Zabbix server connects via Telnet and runs the script."""
-    team_id = live_team_id(current_user)
-    team_name = (um.get_team_name(team_id) if team_id else "") or ""
+    team_name = resolve_team(current_user)
     item_id, err = item_bot.add_telnet_item(
         hostname=data.hostname,
         item_name=data.item_name,
@@ -639,9 +736,7 @@ def add_telnet_item(
         description=data.description,
         status=data.status,
     )
-    if not item_id:
-        raise HTTPException(status_code=400, detail=err or "Failed to add Telnet item.")
-    return {"message": "Telnet item added successfully.", "itemid": item_id}
+    return _item_response(item_id, err, "Telnet")
 
 
 @router.post(
@@ -649,8 +744,7 @@ def add_telnet_item(
 )
 def add_jmx_item(data: JmxItemRequest, current_user: dict = Depends(require_operator)):
     """Add a JMX agent item (type 16). Requires Zabbix Java Gateway and a JMX interface."""
-    team_id = live_team_id(current_user)
-    team_name = (um.get_team_name(team_id) if team_id else "") or ""
+    team_name = resolve_team(current_user)
     item_id, err = item_bot.add_jmx_item(
         hostname=data.hostname,
         item_name=data.item_name,
@@ -667,9 +761,7 @@ def add_jmx_item(data: JmxItemRequest, current_user: dict = Depends(require_oper
         description=data.description,
         status=data.status,
     )
-    if not item_id:
-        raise HTTPException(status_code=400, detail=err or "Failed to add JMX item.")
-    return {"message": "JMX item added successfully.", "itemid": item_id}
+    return _item_response(item_id, err, "JMX")
 
 
 @router.post(
@@ -679,8 +771,7 @@ def add_calculated_item(
     data: CalculatedItemRequest, current_user: dict = Depends(require_operator)
 ):
     """Add a calculated item (type 15). Derives its value from a formula on other items."""
-    team_id = live_team_id(current_user)
-    team_name = (um.get_team_name(team_id) if team_id else "") or ""
+    team_name = resolve_team(current_user)
     item_id, err = item_bot.add_calculated_item(
         hostname=data.hostname,
         item_name=data.item_name,
@@ -695,11 +786,7 @@ def add_calculated_item(
         description=data.description,
         status=data.status,
     )
-    if not item_id:
-        raise HTTPException(
-            status_code=400, detail=err or "Failed to add calculated item."
-        )
-    return {"message": "Calculated item added successfully.", "itemid": item_id}
+    return _item_response(item_id, err, "Calculated")
 
 
 @router.post(
@@ -709,8 +796,7 @@ def add_dependent_item(
     data: DependentItemRequest, current_user: dict = Depends(require_operator)
 ):
     """Add a dependent item (type 18). Preprocesses output from a master item."""
-    team_id = live_team_id(current_user)
-    team_name = (um.get_team_name(team_id) if team_id else "") or ""
+    team_name = resolve_team(current_user)
     item_id, err = item_bot.add_dependent_item(
         hostname=data.hostname,
         item_name=data.item_name,
@@ -723,11 +809,7 @@ def add_dependent_item(
         description=data.description,
         status=data.status,
     )
-    if not item_id:
-        raise HTTPException(
-            status_code=400, detail=err or "Failed to add dependent item."
-        )
-    return {"message": "Dependent item added successfully.", "itemid": item_id}
+    return _item_response(item_id, err, "Dependent")
 
 
 @router.post(
@@ -740,8 +822,7 @@ def add_zabbix_script_item(
     data: ZabbixScriptItemRequest, current_user: dict = Depends(require_operator)
 ):
     """Add a Zabbix Script item (type 21). JavaScript code runs on the Zabbix server/proxy."""
-    team_id = live_team_id(current_user)
-    team_name = (um.get_team_name(team_id) if team_id else "") or ""
+    team_name = resolve_team(current_user)
     item_id, err = item_bot.add_zabbix_script_item(
         hostname=data.hostname,
         item_name=data.item_name,
@@ -758,11 +839,7 @@ def add_zabbix_script_item(
         status=data.status,
         timeout=data.timeout,
     )
-    if not item_id:
-        raise HTTPException(
-            status_code=400, detail=err or "Failed to add Zabbix script item."
-        )
-    return {"message": "Zabbix script item added successfully.", "itemid": item_id}
+    return _item_response(item_id, err, "Zabbix script")
 
 
 @router.post(
@@ -772,8 +849,7 @@ def add_browser_item(
     data: BrowserItemRequest, current_user: dict = Depends(require_operator)
 ):
     """Add a Browser item (type 26). JavaScript browser automation on Zabbix 7.x+ server."""
-    team_id = live_team_id(current_user)
-    team_name = (um.get_team_name(team_id) if team_id else "") or ""
+    team_name = resolve_team(current_user)
     item_id, err = item_bot.add_browser_item(
         hostname=data.hostname,
         item_name=data.item_name,
@@ -790,8 +866,4 @@ def add_browser_item(
         status=data.status,
         timeout=data.timeout,
     )
-    if not item_id:
-        raise HTTPException(
-            status_code=400, detail=err or "Failed to add browser item."
-        )
-    return {"message": "Browser item added successfully.", "itemid": item_id}
+    return _item_response(item_id, err, "Browser")

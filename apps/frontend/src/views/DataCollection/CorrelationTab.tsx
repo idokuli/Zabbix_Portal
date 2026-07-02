@@ -1,4 +1,5 @@
 "use client";
+import { generateId } from "../../app/utils";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import {
   Box,
@@ -29,6 +30,8 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../app/api";
+import { TabHeader } from "../../app/components/TabHeader";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 import { ConfirmDelete, type Correlation, SectionHeader, StatusChip } from "./shared";
 
 type CorrCondition = { _key: string; type: number; operator: number; tag: string; value: string };
@@ -45,7 +48,7 @@ const COND_OP_LABELS: Record<number, string> = {
   3: "does not contain",
 };
 const EMPTY_CONDITION: Omit<CorrCondition, "_key"> = { type: 1, operator: 0, tag: "", value: "" };
-const newCondition = (): CorrCondition => ({ _key: crypto.randomUUID(), ...EMPTY_CONDITION });
+const newCondition = (): CorrCondition => ({ _key: generateId(), ...EMPTY_CONDITION });
 
 export const CorrelationTab = ({
   showToast,
@@ -63,27 +66,36 @@ export const CorrelationTab = ({
     operation_type: 0,
   });
   const [conditions, setConditions] = useState<CorrCondition[]>([newCondition()]);
+  const tick = useRefreshTick();
 
   const resetForm = () => {
     setForm({ name: "", description: "", status: 0, evaltype: 0, operation_type: 0 });
     setConditions([newCondition()]);
   };
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const r = await api.listCorrelations();
-      setItems(r.correlations);
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : String(e), "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [showToast]);
+  const load = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+      try {
+        const r = await api.listCorrelations();
+        setItems(r.correlations);
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : String(e), "error");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [showToast],
+  );
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) void load(true);
+  }, [tick]);
 
   const onSave = async () => {
     setSaving(true);
@@ -125,6 +137,10 @@ export const CorrelationTab = ({
 
   return (
     <>
+      <TabHeader
+        title="Event Correlation"
+        description="Define conditions under which Zabbix correlates and closes related events."
+      />
       <SectionHeader
         title="Event Correlation"
         count={items.length}

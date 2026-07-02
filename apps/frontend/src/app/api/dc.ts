@@ -79,6 +79,35 @@ export const dcApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     }),
+  getDcTemplate: (templateid: string) =>
+    apiFetch<{
+      templateid: string;
+      name: string;
+      visible_name: string;
+      description: string;
+      item_count: number;
+      groups: Array<{ groupid: string; name: string }>;
+      linked_templates: Array<{ templateid: string; name: string }>;
+      tags: Array<{ tag: string; value: string }>;
+      macros: Array<{ macro: string; value: string; description: string }>;
+    }>(`/dc/templates/${templateid}`),
+  updateDcTemplate: (
+    templateid: string,
+    payload: {
+      name?: string;
+      visible_name?: string;
+      description?: string;
+      group_ids?: string[];
+      template_ids?: string[];
+      tags?: Array<{ tag: string; value: string }>;
+      macros?: Array<{ macro: string; value: string; description?: string }>;
+    },
+  ) =>
+    apiFetch<{ message: string }>(`/dc/templates/${templateid}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
   deleteDcTemplate: (templateid: string) =>
     apiFetch<{ message: string }>(`/dc/templates/${templateid}`, { method: "DELETE" }),
   listMaintenances: () =>

@@ -27,6 +27,8 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../app/api";
+import { TabHeader } from "../../app/components/TabHeader";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 import { ConfirmDelete, type HostGroup, type Maintenance, SectionHeader, fmtTs } from "./shared";
 
 export const MaintenanceTab = ({
@@ -38,6 +40,7 @@ export const MaintenanceTab = ({
   const [addOpen, setAddOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Maintenance | null>(null);
+  const tick = useRefreshTick();
 
   const nowIso = () => new Date(Date.now() + 60000).toISOString().slice(0, 16);
   const laterIso = () => new Date(Date.now() + 3600000).toISOString().slice(0, 16);
@@ -51,22 +54,30 @@ export const MaintenanceTab = ({
     description: "",
   });
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [mr, gr] = await Promise.all([api.listMaintenances(), api.listHostGroups()]);
-      setItems(mr.maintenances);
-      setHostGroups(gr.groups);
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : String(e), "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [showToast]);
+  const load = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+      try {
+        const [mr, gr] = await Promise.all([api.listMaintenances(), api.listHostGroups()]);
+        setItems(mr.maintenances);
+        setHostGroups(gr.groups);
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : String(e), "error");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [showToast],
+  );
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) void load(true);
+  }, [tick]);
 
   const onSave = async () => {
     setSaving(true);
@@ -105,6 +116,10 @@ export const MaintenanceTab = ({
 
   return (
     <>
+      <TabHeader
+        title="Maintenance Windows"
+        description="Schedule maintenance periods to suppress alerts during planned downtime."
+      />
       <SectionHeader
         title="Maintenance"
         count={items.length}

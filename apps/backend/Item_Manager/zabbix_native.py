@@ -3,6 +3,7 @@ calculated (15), dependent (18), JS script (21), browser (26).
 """
 
 import logging
+from Zabbix_Base import zabbix_err
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -70,7 +71,7 @@ class ZabbixNativeItemsMixin:
             return item_id, None
         except Exception as e:
             logger.error("add_internal_item(%r) failed: %r", hostname, e)
-            return None, str(e)
+            return None, zabbix_err(e)
 
     def add_trapper_item(
         self,
@@ -122,7 +123,7 @@ class ZabbixNativeItemsMixin:
             return item_id, None
         except Exception as e:
             logger.error("add_trapper_item(%r) failed: %r", hostname, e)
-            return None, str(e)
+            return None, zabbix_err(e)
 
     def add_external_item(
         self,
@@ -182,7 +183,7 @@ class ZabbixNativeItemsMixin:
             return item_id, None
         except Exception as e:
             logger.error("add_external_item(%r) failed: %r", hostname, e)
-            return None, str(e)
+            return None, zabbix_err(e)
 
     def add_calculated_item(
         self,
@@ -241,7 +242,7 @@ class ZabbixNativeItemsMixin:
             return item_id, None
         except Exception as e:
             logger.error("add_calculated_item(%r) failed: %r", hostname, e)
-            return None, str(e)
+            return None, zabbix_err(e)
 
     def add_dependent_item(
         self,
@@ -295,7 +296,7 @@ class ZabbixNativeItemsMixin:
             return item_id, None
         except Exception as e:
             logger.error("add_dependent_item(%r) failed: %r", hostname, e)
-            return None, str(e)
+            return None, zabbix_err(e)
 
     def add_zabbix_script_item(
         self,
@@ -364,7 +365,7 @@ class ZabbixNativeItemsMixin:
             return item_id, None
         except Exception as e:
             logger.error("add_zabbix_script_item(%r) failed: %r", hostname, e)
-            return None, str(e)
+            return None, zabbix_err(e)
 
     def add_browser_item(
         self,
@@ -433,4 +434,4 @@ class ZabbixNativeItemsMixin:
             return item_id, None
         except Exception as e:
             logger.error("add_browser_item(%r) failed: %r", hostname, e)
-            return None, str(e)
+            return None, zabbix_err(e)

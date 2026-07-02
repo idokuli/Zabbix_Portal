@@ -20,6 +20,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Problem, StoredNotif } from "../api";
 import { getSev } from "./alertSounds";
@@ -161,6 +162,7 @@ export const NotificationCenter = ({
   onAcknowledge: (id: string) => Promise<void>;
   loading: boolean;
 }) => {
+  const router = useRouter();
   const [tab, setTab] = useState(0);
   const [ackingId, setAckingId] = useState<string | null>(null);
   const [ackError, setAckError] = useState<string | null>(null);
@@ -446,12 +448,20 @@ export const NotificationCenter = ({
                     <Box key={p.eventid}>
                       {idx > 0 && <Divider />}
                       <Box
+                        onClick={() => {
+                          onClose();
+                          router.push(
+                            `/metrics?tab=problems&host=${encodeURIComponent(p.hostname)}`,
+                          );
+                        }}
                         sx={{
                           display: "flex",
                           gap: 1.5,
                           px: 2,
                           py: 1.25,
                           borderLeft: `3px solid ${sev.color}`,
+                          cursor: "pointer",
+                          "&:hover": { bgcolor: "action.hover" },
                         }}
                       >
                         <Box

@@ -182,12 +182,6 @@ The backend exposes a health endpoint that reports API + Zabbix connectivity:
 curl http://localhost:6769/health
 ```
 
-The frontend exposes a lightweight ping endpoint used by Helm liveness/readiness probes:
-
-```bash
-curl http://localhost:42069/api/ping    # → {"ok":true}
-```
-
 In the UI, the sidebar shows two live status dots — one for the Backend API and one for Zabbix (green = up, red = down) — updated every 15 seconds. On mobile, the top bar shows a single "Healthy" / "Degraded" chip.
 
 ---

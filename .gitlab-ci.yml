@@ -1,47 +1,51 @@
+---
 stages:
   - .pre
   - lint
   - build
-  - staging
-  - production
-  - dr
+  - promote    # push new image tags to the GitOps repo
+  - bootstrap  # apply ArgoCD Application manifests to the cluster (idempotent)
 
 # =============================================================================
 # Project-level variables — edit these values and the pipeline will work.
-# Sensitive values (STAGING_TOKEN, PROD_TOKEN) must be set in
+# Sensitive values (GITOPS_DEPLOY_KEY) must be set in
 # GitLab Settings → CI/CD → Variables (masked + protected) — never here.
 # =============================================================================
 variables:
 
-  # ── Runner ────────────────────────────────────────────────────────────────
-  RUNNER_TAG: "<your-runner-tag>"                   # GitLab runner tag (e.g. docker, staging-runner)
+  # ── Runners ───────────────────────────────────────────────────────────────
+  SHARED_RUNNERS_TAG: "<your-build-runner-tag>" # privileged runner for Kaniko docker builds
 
   # ── Private registry images ───────────────────────────────────────────────
-  KANIKO_IMAGE: "<your-kaniko-image>"               # internal Kaniko image (e.g. your-registry/kaniko:latest)
-  PYTHON_IMAGE: "<your-python-image>"               # internal Python image (e.g. your-registry/python:3.12-slim)
-  NODE_IMAGE: "<your-node-image>"                   # internal Node image (e.g. your-registry/node:22-alpine)
-  HELM_IMAGE: "<your-helm-image>"       
-  GIT_IMAGE: "<your-git-image>"            # internal Helm image (e.g. your-registry/helm:latest)
+  KANIKO_IMAGE: "<your-kaniko-image>" # e.g. your-registry/kaniko:latest
+  PYTHON_IMAGE: "<your-python-image>" # e.g. your-registry/python:3.12-slim
+  NODE_IMAGE: "<your-node-image>" # e.g. your-registry/node:22-alpine
+  HELM_IMAGE: "<your-helm-image>" # e.g. your-registry/helm:latest
+  GIT_IMAGE: "<your-git-image>" # e.g. your-registry/alpine-git:latest (needs git + yq + curl)
 
+  # ── ArgoCD servers (non-sensitive — URLs only) ───────────────────────────
+  # Tokens MUST be set in GitLab Settings → CI/CD → Variables (masked + protected):
+  #   STAGING_ARGOCD_TOKEN, PROD_ARGOCD_TOKEN, DR_ARGOCD_TOKEN
+  STAGING_ARGOCD_SERVER: "<your-staging-argocd-server>" # e.g. argocd.apps.staging.example.com
+  STAGING_ARGOCD_TOKEN: "<your-staging-argocd-token>" # masked — set in GitLab CI/CD Variables
+  PROD_ARGOCD_SERVER: "<your-prod-argocd-server>" # e.g. argocd.apps.prod.example.com
+  PROD_ARGOCD_TOKEN: "<your-prod-argocd-token>" # masked — set in GitLab CI/CD Variables
+  DR_ARGOCD_SERVER: "<your-dr-argocd-server>" # e.g. argocd.apps.dr.example.com
+  DR_ARGOCD_TOKEN: "<your-dr-argocd-token>" # masked — set in GitLab CI/CD Variables
   # ── Artifactory registry ──────────────────────────────────────────────────
   ARTIFACTORY_REGISTRY: "<your-artifactory-registry>"  # registry path (e.g. artifactory.example.com/docker-local)
 
   # ── Build control ────────────────────────────────────────────────────────
   FORCE_BUILD: "0"                                  # set to "1" to force rebuild all apps even without code changes
 
-  # ── Helm / Kubernetes ─────────────────────────────────────────────────────
-  PROJECT_NAME: "zabbix-portal"                     # Helm release name — must match helm/charts/<name>/
-  K8S_NAMESPACE: "<your-namespace>"                 # OpenShift namespace to deploy into
+  # ── GitOps repo ───────────────────────────────────────────────────────────
+  # HTTPS URL of overwatch-gitops repo (e.g. https://gitlab.example.com/team/overwatch-gitops.git)
+  GITOPS_REPO_URL: "<your-gitops-repo-url>"
+  # GITOPS_TOKEN: masked CI variable — set in GitLab Settings → CI/CD → Variables
+  #   GitLab access token with write_repository scope on the GitOps repo.
 
-  # ── Cluster endpoints ─────────────────────────────────────────────────────
-  STAGING_SERVER: "<your-staging-api-url>"          # staging cluster API URL (e.g. https://api.staging.example.com:6443)
-  PROD_SERVER: "<your-prod-api-url>"                # production cluster API URL
-  DR_SERVER: "<your-dr-api-url>"                    # DR cluster API URL
-
-  # ── Cluster tokens — set in GitLab Settings → CI/CD → Variables ──────────
-  # STAGING_TOKEN: masked + protected CI variable
-  # PROD_TOKEN:    masked + protected CI variable
-  # DR_TOKEN:      masked + protected CI variable
+  # ── Project name ─────────────────────────────────────────────────────────
+  PROJECT_NAME: "overwatch"                          # Helm release name prefix
 
 include:
   - local: ".gitlab/ci/common.yml"

@@ -85,6 +85,35 @@ class ServiceItemRequest(BaseModel):
     description: str = ""
 
 
+class WindowsServiceItemRequest(BaseModel):
+    hostname: str
+    service_name: str  # Windows service name (not display name), e.g. "wuauserv"
+    item_name: str = ""
+    team_name: str = ""
+    create_trigger: bool = True
+    trigger_priority: int = 3
+    delay: str = "1m"
+    history: str = "31d"
+    trends: str = "365d"
+    description: str = ""
+
+
+class ProcessItemRequest(BaseModel):
+    hostname: str
+    process_name: str
+    run_as_user: str = ""  # filter by the OS user running the process
+    cmdline_regex: str = ""  # regex matched against the full command line
+    state: str = "all"  # all | run | sleep | zomb | disk | trace | paging
+    item_name: str = ""
+    team_name: str = ""
+    create_trigger: bool = True
+    trigger_priority: int = 3  # 3 = high
+    delay: str = "1m"
+    history: str = "31d"
+    trends: str = "365d"
+    description: str = ""
+
+
 class FileWatchRequest(BaseModel):
     hostname: str
     file_path: str
@@ -383,3 +412,15 @@ class BrowserItemRequest(BaseModel):
     description: str = ""
     status: int = 0
     timeout: str = ""
+
+
+class TemplateItemRequest(BaseModel):
+    name: str
+    key_: str
+    type_: int = 0  # 0=agent, 2=trapper, 3=simple, 5=internal, etc.
+    value_type: int = 3  # 0=float, 1=char, 2=log, 3=uint, 4=text
+    delay: str = "1m"
+    history: str = "31d"
+    trends: str = "365d"
+    units: str = ""
+    description: str = ""

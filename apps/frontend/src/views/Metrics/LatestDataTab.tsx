@@ -31,6 +31,8 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type Host, api } from "../../app/api";
+import { TabHeader } from "../../app/components/TabHeader";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 import { SearchableSelect } from "../../components/SearchableSelect";
 
 // ── Latest Data tab ───────────────────────────────────────────────────
@@ -86,6 +88,7 @@ const formatLastCheck = (clock: number | null): string => {
 };
 
 export const LatestDataTab = () => {
+  const tick = useRefreshTick();
   const [hosts, setHosts] = useState<Host[]>([]);
   const [hostsLoading, setHostsLoading] = useState(true);
   const [selectedHost, setSelectedHost] = useState("");
@@ -97,25 +100,23 @@ export const LatestDataTab = () => {
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    const fetchHosts = () =>
-      api
-        .listHosts()
-        .then((r) => {
-          if (!cancelled) setHosts(r.hosts);
-        })
-        .catch(() => {})
-        .finally(() => {
-          if (!cancelled) setHostsLoading(false);
-        });
-    void fetchHosts();
-    const t = window.setInterval(fetchHosts, 10_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(t);
-    };
+  const fetchHosts = useCallback((silent = false) => {
+    if (!silent) setHostsLoading(true);
+    api
+      .listHosts()
+      .then((r) => setHosts(r.hosts))
+      .catch(() => {})
+      .finally(() => setHostsLoading(false));
   }, []);
+
+  useEffect(() => {
+    fetchHosts();
+  }, [fetchHosts]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) fetchHosts(true);
+  }, [tick]);
 
   const loadItems = useCallback(async (host: string) => {
     if (!host) return;
@@ -163,24 +164,12 @@ export const LatestDataTab = () => {
 
   return (
     <Stack spacing={2}>
+      <TabHeader
+        title="Latest Data"
+        description="See the most recent collected value for every item on monitored hosts."
+      />
       {/* ── Controls ── */}
       <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems="center">
-        <FormControl size="small" sx={{ minWidth: 240 }}>
-          <InputLabel>Host</InputLabel>
-          <SearchableSelect
-            label="Host"
-            value={selectedHost}
-            onChange={(e) => setSelectedHost(e.target.value)}
-            disabled={hostsLoading}
-          >
-            {hosts.map((h) => (
-              <MenuItem key={h.hostid} value={h.host}>
-                {h.host}
-              </MenuItem>
-            ))}
-          </SearchableSelect>
-        </FormControl>
-
         <TextField
           size="small"
           placeholder="Search name, key, or value…"
@@ -202,6 +191,22 @@ export const LatestDataTab = () => {
             ) : undefined,
           }}
         />
+
+        <FormControl size="small" sx={{ minWidth: 240 }}>
+          <InputLabel>Host</InputLabel>
+          <SearchableSelect
+            label="Host"
+            value={selectedHost}
+            onChange={(e) => setSelectedHost(e.target.value)}
+            disabled={hostsLoading}
+          >
+            {hosts.map((h) => (
+              <MenuItem key={h.hostid} value={h.host}>
+                {h.host}
+              </MenuItem>
+            ))}
+          </SearchableSelect>
+        </FormControl>
 
         <FormControl size="small" sx={{ minWidth: 130 }}>
           <InputLabel>Status</InputLabel>

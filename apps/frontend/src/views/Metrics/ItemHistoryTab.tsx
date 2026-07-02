@@ -27,6 +27,8 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import ReactGridLayout, { WidthProvider } from "react-grid-layout";
 import { type MetricWidgetConfig, api } from "../../app/api";
+import { TabHeader } from "../../app/components/TabHeader";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 import { DashboardPageManager } from "../../components/DashboardPageManager";
 import { AddMetricDialog, type ItemDef, MetricWidgetCard } from "./shared";
 
@@ -35,6 +37,7 @@ const GridLayout = WidthProvider(ReactGridLayout);
 // ── Item Graphs tab (widget grid) ────────────────────────────────────
 
 export const ItemHistoryTab = () => {
+  const tick = useRefreshTick();
   const [widgets, setWidgets] = useState<MetricWidgetConfig[]>([]);
   const [isDirty, setIsDirty] = useState(false);
   const [saveScope, setSaveScope] = useState<"user" | "team">("user");
@@ -54,20 +57,23 @@ export const ItemHistoryTab = () => {
     setConfirmMsg(msg);
     setConfirmAction(() => action);
   };
-  // Alert events fetched once — used to draw breach markers on each chart
   const [allAlertEvents, setAllAlertEvents] = useState<import("../../app/api").AlertEvent[]>([]);
 
-  useEffect(() => {
-    const fetchEvents = () => {
-      api
-        .getAlertEvents(500)
-        .then((r) => setAllAlertEvents(r.events))
-        .catch(() => {});
-    };
-    fetchEvents();
-    const timer = setInterval(fetchEvents, 10_000);
-    return () => clearInterval(timer);
+  const fetchEvents = useCallback(() => {
+    api
+      .getAlertEvents(500)
+      .then((r) => setAllAlertEvents(r.events))
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    void fetchEvents();
+  }, [fetchEvents]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) void fetchEvents();
+  }, [tick]);
 
   useEffect(() => {
     api
@@ -194,6 +200,10 @@ export const ItemHistoryTab = () => {
 
   return (
     <Box>
+      <TabHeader
+        title="Item Graphs"
+        description="Build a custom dashboard of live metric charts pinned from any monitored host."
+      />
       {/* Toolbar */}
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
         <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: "0.85rem" }}>

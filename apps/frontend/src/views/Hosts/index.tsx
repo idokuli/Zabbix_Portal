@@ -1,8 +1,11 @@
 "use client";
+import AddIcon from "@mui/icons-material/Add";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
 import LocalOfferOutlinedIcon from "@mui/icons-material/LocalOfferOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import RouterOutlinedIcon from "@mui/icons-material/RouterOutlined";
@@ -12,14 +15,18 @@ import {
   Button,
   Card,
   Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
   IconButton,
+  InputLabel,
   LinearProgress,
   Menu,
   MenuItem,
+  Select,
   Snackbar,
   Stack,
   Tooltip,
@@ -28,7 +35,11 @@ import {
 import { useTheme } from "@mui/material/styles";
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { type Host, type HostInterface, type HostTag, api } from "../../app/api";
+import { hostsApi } from "../../app/api/hosts";
+import { ConfirmDelete } from "../../app/components/ConfirmDelete";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 import { useSync } from "../../app/context/SyncContext";
 import { useFavorites } from "../../lib/favorites";
 import { AddHostAccordion } from "./AddHostAccordion";
@@ -39,9 +50,11 @@ import { TagEditorDialog } from "./TagEditorDialog";
 import { AvailabilityCell, ProblemsCell } from "./shared";
 
 export const Hosts = () => {
+  const { t } = useTranslation();
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
   const { lastSync } = useSync();
+  const tick = useRefreshTick();
 
   const [hostname, setHostname] = useState("");
   const [ip, setIp] = useState("");
@@ -130,22 +143,30 @@ export const Hosts = () => {
     setToast({ open: true, message, severity });
   }, []);
 
-  const reload = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await api.listHosts();
-      setHosts(res.hosts);
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : String(e), "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [showToast]);
+  const reload = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+      try {
+        const res = await api.listHosts();
+        setHosts(res.hosts);
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : String(e), "error");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [showToast],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: lastSync triggers re-fetch on sync events
   useEffect(() => {
     void reload();
   }, [reload, lastSync]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) void reload(true);
+  }, [tick]);
 
   useEffect(() => {
     api
@@ -245,6 +266,58 @@ export const Hosts = () => {
     setTagHost(h);
   }, []);
 
+  // ── Template management dialog ────────────────────────────────────────
+  const [tplHost, setTplHost] = useState<Host | null>(null);
+  const [hostTemplates, setHostTemplates] = useState<Array<{ templateid: string; name: string }>>(
+    [],
+  );
+  const [tplLoading, setTplLoading] = useState(false);
+  const [tplLinkId, setTplLinkId] = useState("");
+  const [tplLinking, setTplLinking] = useState(false);
+
+  const openTplDialog = useCallback(async (h: Host) => {
+    setTplHost(h);
+    setTplLinkId("");
+    setTplLoading(true);
+    try {
+      const r = await hostsApi.getHostTemplates(h.host);
+      setHostTemplates(r.templates);
+    } catch {
+      setHostTemplates([]);
+    } finally {
+      setTplLoading(false);
+    }
+  }, []);
+
+  const onLinkTemplate = async () => {
+    if (!tplHost || !tplLinkId) return;
+    setTplLinking(true);
+    try {
+      await hostsApi.linkTemplate(tplHost.host, tplLinkId);
+      showToast("Template linked.", "success");
+      const r = await hostsApi.getHostTemplates(tplHost.host);
+      setHostTemplates(r.templates);
+      setTplLinkId("");
+      await reload();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : String(e), "error");
+    } finally {
+      setTplLinking(false);
+    }
+  };
+
+  const onUnlinkTemplate = async (templateid: string) => {
+    if (!tplHost) return;
+    try {
+      await hostsApi.unlinkTemplate(tplHost.host, templateid);
+      showToast("Template unlinked.", "success");
+      setHostTemplates((prev) => prev.filter((t) => t.templateid !== templateid));
+      await reload();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : String(e), "error");
+    }
+  };
+
   const onSaveTags = async (tags: HostTag[]) => {
     if (!tagHost) return;
     try {
@@ -282,10 +355,16 @@ export const Hosts = () => {
     try {
       const res = await api.bulkCreateHosts(uploadFile);
       if (res.failed_count > 0) {
-        showToast(
-          `Imported with warnings: ${res.created_count} created, ${res.failed_count} failed.`,
-          "error",
-        );
+        const failLines = (res.failed as { hostname?: string; reason?: string }[])
+          .map((f) =>
+            f.hostname ? `• ${f.hostname}: ${f.reason ?? "failed"}` : `• ${f.reason ?? "failed"}`,
+          )
+          .join("\n");
+        const summary =
+          res.created_count > 0
+            ? `${res.created_count} created, ${res.failed_count} failed:\n${failLines}`
+            : `All ${res.failed_count} hosts failed:\n${failLines}`;
+        showToast(summary, "error");
       } else {
         showToast(`Bulk import: ${res.created_count} hosts created.`, "success");
       }
@@ -393,6 +472,47 @@ export const Hosts = () => {
               variant="outlined"
               sx={{ height: 18, fontSize: "0.65rem" }}
             />
+          );
+        },
+      },
+      {
+        field: "parentTemplates",
+        headerName: "Templates",
+        flex: 1,
+        minWidth: 160,
+        sortable: false,
+        filterable: false,
+        renderHeader: () => <Typography sx={headerSx}>Templates</Typography>,
+        renderCell: (params) => {
+          const tmpls =
+            (params.value as Array<{ templateid: string; name: string }> | undefined) ?? [];
+          if (tmpls.length === 0)
+            return (
+              <Typography variant="caption" color="text.disabled">
+                —
+              </Typography>
+            );
+          return (
+            <Tooltip title={tmpls.map((t) => t.name).join(", ")} placement="top">
+              <Box sx={{ display: "flex", gap: 0.4, overflow: "hidden", flexWrap: "nowrap" }}>
+                {tmpls.slice(0, 2).map((t) => (
+                  <Chip
+                    key={t.templateid}
+                    label={t.name}
+                    size="small"
+                    variant="outlined"
+                    sx={{ fontSize: "0.62rem", height: 20, maxWidth: 140 }}
+                  />
+                ))}
+                {tmpls.length > 2 && (
+                  <Chip
+                    label={`+${tmpls.length - 2}`}
+                    size="small"
+                    sx={{ fontSize: "0.62rem", height: 20 }}
+                  />
+                )}
+              </Box>
+            </Tooltip>
           );
         },
       },
@@ -505,7 +625,7 @@ export const Hosts = () => {
       {
         field: "actions",
         headerName: "",
-        width: 115,
+        width: 145,
         sortable: false,
         filterable: false,
         renderCell: (params) => (
@@ -528,6 +648,15 @@ export const Hosts = () => {
                 <LocalOfferOutlinedIcon sx={{ fontSize: 16 }} />
               </IconButton>
             </Tooltip>
+            <Tooltip title="Manage templates" placement="left">
+              <IconButton
+                size="small"
+                onClick={() => void openTplDialog(params.row as Host)}
+                sx={{ color: "text.disabled", "&:hover": { color: "primary.main" } }}
+              >
+                <LayersOutlinedIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
             <Tooltip title="Delete host" placement="left">
               <IconButton
                 size="small"
@@ -541,7 +670,7 @@ export const Hosts = () => {
         ),
       },
     ],
-    [headerSx, isDark, deleteTagInline, proxies, openEditHost, openTagEditor],
+    [headerSx, isDark, deleteTagInline, proxies, openEditHost, openTagEditor, openTplDialog],
   );
 
   const totalProblems = hosts.reduce((sum, h) => sum + (h.problem_count ?? 0), 0);
@@ -552,7 +681,7 @@ export const Hosts = () => {
       <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
         <Box>
           <Typography variant="h5" sx={{ fontWeight: 700 }}>
-            Hosts
+            {t("hosts.title")}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
             Manage hosts, interfaces, and monitor availability
@@ -669,7 +798,7 @@ export const Hosts = () => {
             Host inventory
           </Typography>
           <Tooltip title="Refresh">
-            <IconButton size="small" onClick={reload}>
+            <IconButton size="small" onClick={() => void reload()}>
               <RefreshIcon sx={{ fontSize: 17 }} />
             </IconButton>
           </Tooltip>
@@ -770,24 +899,81 @@ export const Hosts = () => {
         onSave={onEditSave}
       />
 
-      {/* ── Delete confirm dialog ── */}
-      <Dialog open={!!confirmDelete} onClose={() => setConfirmDelete(null)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700 }}>Delete host?</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">
-            Permanently removes <strong>{confirmDelete?.host}</strong> from Zabbix. This cannot be
-            undone.
-          </Typography>
+      <ConfirmDelete
+        open={!!confirmDelete}
+        name={confirmDelete?.host ?? ""}
+        onConfirm={() => confirmDelete && onDelete(confirmDelete)}
+        onClose={() => setConfirmDelete(null)}
+      />
+
+      {/* ── Manage Templates dialog ── */}
+      <Dialog open={!!tplHost} onClose={() => setTplHost(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Manage Templates — {tplHost?.host}</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            {tplLoading && <CircularProgress size={20} />}
+            {!tplLoading && hostTemplates.length === 0 && (
+              <Typography variant="body2" color="text.secondary">
+                No templates linked to this host.
+              </Typography>
+            )}
+            {hostTemplates.map((t) => (
+              <Box
+                key={t.templateid}
+                sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}
+              >
+                <Typography variant="body2">{t.name}</Typography>
+                <Tooltip title="Unlink template (removes inherited items)">
+                  <IconButton
+                    size="small"
+                    color="error"
+                    onClick={() => void onUnlinkTemplate(t.templateid)}
+                  >
+                    <DeleteOutlineIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            ))}
+
+            <Box sx={{ borderTop: "1px solid", borderColor: "divider", pt: 1.5 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: "block" }}>
+                Link a new template
+              </Typography>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <FormControl size="small" sx={{ flex: 1 }}>
+                  <InputLabel>Template</InputLabel>
+                  <Select
+                    label="Template"
+                    value={tplLinkId}
+                    onChange={(e) => setTplLinkId(e.target.value)}
+                  >
+                    <MenuItem value="">
+                      <em>Select…</em>
+                    </MenuItem>
+                    {templates
+                      .filter((t) => !hostTemplates.some((ht) => ht.templateid === t.templateid))
+                      .map((t) => (
+                        <MenuItem key={t.templateid} value={t.templateid}>
+                          {t.name}
+                        </MenuItem>
+                      ))}
+                  </Select>
+                </FormControl>
+                <Button
+                  variant="contained"
+                  size="small"
+                  startIcon={tplLinking ? <CircularProgress size={12} /> : <AddIcon />}
+                  disabled={!tplLinkId || tplLinking}
+                  onClick={() => void onLinkTemplate()}
+                >
+                  Link
+                </Button>
+              </Stack>
+            </Box>
+          </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setConfirmDelete(null)}>Cancel</Button>
-          <Button
-            variant="contained"
-            color="error"
-            onClick={() => confirmDelete && onDelete(confirmDelete)}
-          >
-            Delete
-          </Button>
+          <Button onClick={() => setTplHost(null)}>Close</Button>
         </DialogActions>
       </Dialog>
 

@@ -1,8 +1,0 @@
-{{/*
-ConfigMap is intentionally empty — the frontend is now served by `serve`
-(a Node.js static file server) instead of nginx, so no server config is
-required inside the container.
-
-The /api/ proxy that nginx used to handle is now done at the Ingress level
-when apiProxy.enabled is true. See templates/ingress.yaml.
-*/}}

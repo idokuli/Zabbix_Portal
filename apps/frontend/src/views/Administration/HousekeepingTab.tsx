@@ -16,6 +16,8 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../app/api";
+import { TabHeader } from "../../app/components/TabHeader";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 
 const HK_FIELDS: Array<{ key: string; label: string; unit?: string }> = [
   { key: "hk_events_mode", label: "Enable internal housekeeping for events" },
@@ -44,22 +46,31 @@ export const HousekeepingTab = ({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [edited, setEdited] = useState<Record<string, string>>({});
+  const tick = useRefreshTick();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const s = await api.getAdminSettings();
-      setSettings(s);
-      setEdited({});
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : String(e), "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [showToast]);
+  const load = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+      try {
+        const s = await api.getAdminSettings();
+        setSettings(s);
+        setEdited({});
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : String(e), "error");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [showToast],
+  );
   useEffect(() => {
     void load();
   }, [load]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) void load(true);
+  }, [tick]);
 
   const current = (key: string) => edited[key] ?? settings[key] ?? "";
   const onSave = async () => {
@@ -84,13 +95,17 @@ export const HousekeepingTab = ({
 
   return (
     <Stack spacing={2}>
+      <TabHeader
+        title="Housekeeping"
+        description="Configure data retention periods and automatic cleanup settings."
+      />
       <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
           Housekeeping
         </Typography>
         <Stack direction="row" spacing={1}>
           <Tooltip title="Refresh">
-            <IconButton size="small" onClick={load} disabled={loading}>
+            <IconButton size="small" onClick={() => void load()} disabled={loading}>
               <RefreshIcon sx={{ fontSize: 16 }} />
             </IconButton>
           </Tooltip>

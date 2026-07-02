@@ -75,59 +75,34 @@ Replace with your actual registry path (e.g. `artifactory.company.com/docker-loc
 
 ---
 
-## 5. Helm & ArgoCD image repositories
+## 5. Helm image repositories (GitOps repo)
 
-Replace `your-registry` with your actual registry path in all values files.
+Helm charts now live in the **`zabbix-portal-gitops`** repo under `helm-charts/`. Replace `your-registry` in the values files there.
 
-> PostgreSQL is NOT deployed by Helm — it is a shared/external database reached
-> via `DATABASE_URL`. There is no postgres image to mirror in the Helm chart
-> (only in the planned ArgoCD `values-*.yaml`, which are not yet wired in).
+> PostgreSQL is NOT deployed by Helm — it is a shared/external database reached via `DATABASE_URL`. There is no postgres image to mirror.
 
-### `helm/charts/zabbix-portal/values.yaml`
-| Line | Key | Current value |
-|------|-----|---------------|
-| 7 | `backend.image.repository` | `your-registry/backend` |
-| 44 | `frontend.image.repository` | `your-registry/frontend` |
-| 57 | `frontend.backendUrl` | `http://<your-backend-service-name>:6769` |
+### `helm-charts/zabbix-portal/values.yaml` (in the GitOps repo)
+| Key | Current value | Replace with |
+|-----|---------------|--------------|
+| `backend.image.repository` | `your-registry/backend` | `<your-artifactory-registry>/backend` |
+| `frontend.image.repository` | `your-registry/frontend` | `<your-artifactory-registry>/frontend` |
+| `frontend.backendUrl` | `http://<your-backend-service-name>:6769` | The backend Service name in-cluster, e.g. `http://<release-name>-backend:6769` |
 
-`frontend.backendUrl` is passed through to the frontend deployment's `BACKEND_URL` env var — set it to the backend Service name within the cluster, e.g. `http://<release-name>-backend:6769`.
-
-### `argocd/values-dev.yaml` (ArgoCD — planned, not yet wired into CI)
-| Line | Key | Current value |
-|------|-----|---------------|
-| 9 | `backend.image.repository` | `your-registry/backend` |
-| 49 | `frontend.image.repository` | `your-registry/frontend` |
-| 76 | `postgres.image.repository` | `your-registry/postgres` |
-
-### `argocd/values-staging.yaml` (ArgoCD — planned, not yet wired into CI)
-| Line | Key | Current value |
-|------|-----|---------------|
-| 9 | `backend.image.repository` | `your-registry/backend` |
-| 54 | `frontend.image.repository` | `your-registry/frontend` |
-| 86 | `postgres.image.repository` | `your-registry/postgres` |
-
-### `argocd/values-production.yaml` (ArgoCD — planned, not yet wired into CI)
-| Line | Key | Current value |
-|------|-----|---------------|
-| 10 | `backend.image.repository` | `your-registry/backend` |
-| 79 | `frontend.image.repository` | `your-registry/frontend` |
-| 133 | `postgres.image.repository` | `your-registry/postgres` |
+Per-environment overrides (image tags, replica counts, resource limits) are in `environments/{staging,production,dr}/values.yaml` in the GitOps repo. Image tags in those files are updated automatically by the CI pipeline — do not edit them manually.
 
 ---
 
 ## 6. GitLab CI/CD variables & secrets
 
-Everything in section 3 and 4 above lives in `.gitlab-ci.yml` and can be edited in-repo. The variables below are **cluster access secrets** and must be set as real GitLab CI/CD Variables (Settings → CI/CD → Variables) — never commit them to the repo.
+Everything in section 3 and 4 above lives in `.gitlab-ci.yml` and can be edited in-repo. The variable below is a **secret** and must be set as a real GitLab CI/CD Variable (Settings → CI/CD → Variables) — never commit it to the repo.
 
 | Variable | Description | Sensitive |
 |----------|-------------|-----------|
-| `STAGING_TOKEN` | Staging cluster service account token (`HELM_KUBETOKEN` for `plan:staging` / `deploy:staging`) | **Yes — mask + protect** |
-| `PROD_TOKEN` | Production cluster service account token | **Yes — mask + protect** |
-| `DR_TOKEN` | DR cluster service account token — **DR has its own cluster and its own token**, it does not fall back to `PROD_TOKEN` | **Yes — mask + protect** |
+| `GITOPS_DEPLOY_KEY` | Private SSH key matching a Deploy Key with **write** access on the `zabbix-portal-gitops` repo. Used by `push-image-tags` to clone and push back. | **Yes — mask + protect** |
 
-The corresponding cluster API URLs (`STAGING_SERVER`, `PROD_SERVER`, `DR_SERVER`) and `K8S_NAMESPACE` / `PROJECT_NAME` are non-sensitive and are already declared as editable placeholders in `.gitlab-ci.yml`'s top-level `variables:` block (lines 33–39) — change them there, or override via the GitLab UI the same way as section 3.
+`GITOPS_REPO_URL` (the SSH URL of the GitOps repo) is non-sensitive and is declared as an editable placeholder in `.gitlab-ci.yml`'s top-level `variables:` block — change it there.
 
-`validate:variables` (in `.gitlab/ci/detect.yml`) hard-fails the pipeline at the very first stage if any of `RUNNER_TAG`, `KANIKO_IMAGE`, `PYTHON_IMAGE`, `NODE_IMAGE`, `HELM_IMAGE`, `ARTIFACTORY_REGISTRY`, `PROJECT_NAME`, `K8S_NAMESPACE`, `STAGING_SERVER`, `PROD_SERVER`, `DR_SERVER`, `STAGING_TOKEN`, `PROD_TOKEN`, or `DR_TOKEN` is unset — so a misconfiguration is caught before any build runs, not as a cryptic Helm/registry error later.
+`validate:variables` (in `.gitlab/ci/detect.yml`) hard-fails the pipeline at the very first stage if any of `RUNNER_TAG`, `KANIKO_IMAGE`, `PYTHON_IMAGE`, `NODE_IMAGE`, `GIT_IMAGE`, `ARTIFACTORY_REGISTRY`, `PROJECT_NAME`, `GITOPS_REPO_URL`, or `GITOPS_DEPLOY_KEY` is unset — so a misconfiguration is caught before any build runs.
 
 ---
 

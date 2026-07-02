@@ -254,11 +254,11 @@ export const ItemChart = ({
           return g;
         },
         borderWidth: sparsePoints ? 2.5 : 2,
-        pointRadius: sparsePoints ? 4 : 0,
+        pointRadius: sparsePoints ? 4 : 2,
         pointBackgroundColor: lineColor,
         pointBorderColor: "#fff",
-        pointBorderWidth: sparsePoints ? 1.5 : 0,
-        pointHoverRadius: sparsePoints ? 6 : 5,
+        pointBorderWidth: sparsePoints ? 1.5 : 1,
+        pointHoverRadius: 7,
         pointHoverBackgroundColor: lineColor,
         pointHoverBorderColor: "#fff",
         pointHoverBorderWidth: 2,
@@ -275,7 +275,8 @@ export const ItemChart = ({
               backgroundColor: "transparent",
               pointStyle: "circle" as const,
               pointRadius: 8,
-              pointHoverRadius: 10,
+              pointHoverRadius: 12,
+              pointHitRadius: 16,
               pointBackgroundColor: eventItems.map((e) => e.color),
               pointBorderColor: "#fff",
               pointBorderWidth: 2,
@@ -292,7 +293,7 @@ export const ItemChart = ({
     responsive: true,
     maintainAspectRatio: false,
     animation: { duration: 250 } as const,
-    interaction: { mode: "nearest" as const, intersect: false, axis: "x" as const },
+    interaction: { mode: "nearest" as const, intersect: false, axis: "xy" as const },
     plugins: {
       legend: { display: false },
       zoom: {

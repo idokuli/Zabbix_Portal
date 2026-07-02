@@ -1,6 +1,7 @@
 """Item processing queue overview, and global settings / housekeeping."""
 
 import logging
+from Zabbix_Base import zabbix_err
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -44,8 +45,10 @@ class SystemMixin:
                             "item_name": it["name"],
                             "hostname": host,
                         }
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug(
+                        "Failed to enrich item queue with host/item names: %s", exc
+                    )
             enriched = []
             for o in overview:
                 info = name_map.get(o.get("itemid", ""), {})
@@ -54,7 +57,7 @@ class SystemMixin:
             return {"items": enriched, "total": len(enriched)}
         except Exception as e:
             logger.warning("queue.get failed: %s", e)
-            return {"items": [], "total": 0, "error": str(e)}
+            return {"items": [], "total": 0, "error": zabbix_err(e)}
 
     def get_settings(self) -> dict:
         if not self.zapi:

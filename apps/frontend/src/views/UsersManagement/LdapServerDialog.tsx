@@ -1,4 +1,5 @@
 "use client";
+import { generateId } from "../../app/utils";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import {
@@ -434,10 +435,10 @@ export const LdapServerDialog = ({
     setTestUsername("");
     setTestPassword("");
     setProvisionGroups(
-      (initialForm.provision_groups ?? []).map((g) => ({ _key: crypto.randomUUID(), ...g })),
+      (initialForm.provision_groups ?? []).map((g) => ({ _key: generateId(), ...g })),
     );
     setProvisionMedia(
-      (initialForm.provision_media ?? []).map((m) => ({ _key: crypto.randomUUID(), ...m })),
+      (initialForm.provision_media ?? []).map((m) => ({ _key: generateId(), ...m })),
     );
     setDropdownsLoaded(false);
   }, [initialForm, open]);
@@ -544,7 +545,7 @@ export const LdapServerDialog = ({
         prev.map((item, i) => (i === editGroupIdx ? { ...item, ...g } : item)),
       );
     } else {
-      setProvisionGroups((prev) => [...prev, { _key: crypto.randomUUID(), ...g }]);
+      setProvisionGroups((prev) => [...prev, { _key: generateId(), ...g }]);
     }
     setEditGroupIdx(null);
   };
@@ -555,7 +556,7 @@ export const LdapServerDialog = ({
         prev.map((item, i) => (i === editMediaIdx ? { ...item, ...m } : item)),
       );
     } else {
-      setProvisionMedia((prev) => [...prev, { _key: crypto.randomUUID(), ...m }]);
+      setProvisionMedia((prev) => [...prev, { _key: generateId(), ...m }]);
     }
     setEditMediaIdx(null);
   };

@@ -1,4 +1,5 @@
 "use client";
+import { generateId } from "../../app/utils";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import RefreshIcon from "@mui/icons-material/Refresh";
@@ -33,6 +34,8 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../app/api";
+import { TabHeader } from "../../app/components/TabHeader";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 import { ConfirmDelete } from "./shared";
 
 // ── User Groups ───────────────────────────────────────────────────────
@@ -62,6 +65,7 @@ export const makeEmptyUGForm = () => ({
 export const UserGroupsTab = ({
   showToast,
 }: { showToast: (m: string, s: "success" | "error") => void }) => {
+  const tick = useRefreshTick();
   const [items, setItems] = useState<UserGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -75,20 +79,28 @@ export const UserGroupsTab = ({
     [],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const r = await api.listUserGroups();
-      setItems(r.groups);
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : String(e), "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [showToast]);
+  const load = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+      try {
+        const r = await api.listUserGroups();
+        setItems(r.groups);
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : String(e), "error");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [showToast],
+  );
   useEffect(() => {
     void load();
   }, [load]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) void load(true);
+  }, [tick]);
 
   const openAdd = async () => {
     setForm(makeEmptyUGForm());
@@ -162,6 +174,10 @@ export const UserGroupsTab = ({
 
   return (
     <>
+      <TabHeader
+        title="User Groups"
+        description="Group users to simplify host and template permission assignments."
+      />
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
@@ -175,7 +191,7 @@ export const UserGroupsTab = ({
         </Box>
         <Stack direction="row" spacing={1}>
           <Tooltip title="Refresh">
-            <IconButton size="small" onClick={load} disabled={loading}>
+            <IconButton size="small" onClick={() => void load()} disabled={loading}>
               <RefreshIcon sx={{ fontSize: 16 }} />
             </IconButton>
           </Tooltip>
@@ -652,7 +668,7 @@ export const UserGroupsTab = ({
                     tag_filters: [
                       ...f.tag_filters,
                       {
-                        _key: crypto.randomUUID(),
+                        _key: generateId(),
                         groupid: hostGroups[0]?.groupid ?? "",
                         tag: "",
                         value: "",

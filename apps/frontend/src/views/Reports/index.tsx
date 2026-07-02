@@ -1,6 +1,5 @@
 "use client";
-import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
-import { Box, Card, Stack, Typography } from "@mui/material";
+import { Box, Card, Stack } from "@mui/material";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { NotificationsTab } from "../Metrics/NotificationsTab";
@@ -17,17 +16,6 @@ const ReportsInner = () => {
 
   return (
     <Stack spacing={3}>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-        <AssessmentOutlinedIcon sx={{ fontSize: 28, color: "primary.main" }} />
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>
-            Reports
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Availability, top triggers, audit log, action log, and notifications.
-          </Typography>
-        </Box>
-      </Box>
       <Card>
         <Box sx={{ p: 2 }}>
           {tab === 0 && <AvailabilityTab />}

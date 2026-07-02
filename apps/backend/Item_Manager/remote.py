@@ -1,6 +1,7 @@
 """Remote-protocol agent items: IPMI (12), SSH (13), Telnet (14), JMX (16)."""
 
 import logging
+from Zabbix_Base import zabbix_err
 import re
 from typing import TYPE_CHECKING
 
@@ -84,7 +85,7 @@ class RemoteItemsMixin:
             return item_id, None
         except Exception as e:
             logger.error("add_ipmi_item(%r) failed: %r", hostname, e)
-            return None, str(e)
+            return None, zabbix_err(e)
 
     def add_ssh_item(
         self,
@@ -162,7 +163,7 @@ class RemoteItemsMixin:
             return item_id, None
         except Exception as e:
             logger.error("add_ssh_item(%r) failed: %r", hostname, e)
-            return None, str(e)
+            return None, zabbix_err(e)
 
     def add_telnet_item(
         self,
@@ -229,7 +230,7 @@ class RemoteItemsMixin:
             return item_id, None
         except Exception as e:
             logger.error("add_telnet_item(%r) failed: %r", hostname, e)
-            return None, str(e)
+            return None, zabbix_err(e)
 
     def add_jmx_item(
         self,
@@ -305,4 +306,4 @@ class RemoteItemsMixin:
             return item_id, None
         except Exception as e:
             logger.error("add_jmx_item(%r) failed: %r", hostname, e)
-            return None, str(e)
+            return None, zabbix_err(e)

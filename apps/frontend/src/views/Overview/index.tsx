@@ -22,9 +22,10 @@ import {
   Typography,
 } from "@mui/material";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { type AlertEvent, type Problem, type Team, api } from "../../app/api";
 import { useAuth } from "../../app/context/AuthContext";
+import { useRefreshTick } from "../../app/context/RefreshContext";
 import { useSync } from "../../app/context/SyncContext";
 import { ActionButton } from "./ActionButton";
 import { AlertEventRow } from "./AlertEventRow";
@@ -33,6 +34,7 @@ import { StatCard } from "./StatCard";
 import { StatusRow } from "./StatusRow";
 
 export const Overview = () => {
+  const tick = useRefreshTick();
   const { user } = useAuth();
   const { lastSync } = useSync();
 
@@ -62,42 +64,48 @@ export const Overview = () => {
     year: "numeric",
   });
 
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const [hostsRes, teamsRes, healthRes, problemsRes, eventsRes] = await Promise.all([
+        api.listHosts(),
+        api.getTeamsOverview(),
+        api.health(),
+        api.getProblems(),
+        api.getAlertEvents(10),
+      ]);
+
+      const online = hostsRes.hosts.filter((h) => h.status === "0").length;
+      const teams: Team[] = teamsRes.teams;
+      const users = teams.reduce((sum, t) => sum + t.users.length, 0);
+      const assigned = new Set(teams.flatMap((t) => t.hosts)).size;
+
+      setStats({
+        totalHosts: hostsRes.count,
+        onlineHosts: online,
+        totalTeams: teams.length,
+        totalUsers: users,
+        assignedServers: assigned,
+      });
+      setHealth({ ok: healthRes.status === "online", zabbix: !!healthRes.zabbix_connected });
+      setProblems(problemsRes.problems ?? []);
+      setAlertEvents((eventsRes.events ?? []).slice(0, 6));
+    } catch {
+      /* individual sections stay in loading / empty state */
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: lastSync triggers re-fetch on sync events
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        const [hostsRes, teamsRes, healthRes, problemsRes, eventsRes] = await Promise.all([
-          api.listHosts(),
-          api.getTeamsOverview(),
-          api.health(),
-          api.getProblems(),
-          api.getAlertEvents(10),
-        ]);
-
-        const online = hostsRes.hosts.filter((h) => h.status === "0").length;
-        const teams: Team[] = teamsRes.teams;
-        const users = teams.reduce((sum, t) => sum + t.users.length, 0);
-        const assigned = new Set(teams.flatMap((t) => t.hosts)).size;
-
-        setStats({
-          totalHosts: hostsRes.count,
-          onlineHosts: online,
-          totalTeams: teams.length,
-          totalUsers: users,
-          assignedServers: assigned,
-        });
-        setHealth({ ok: healthRes.status === "online", zabbix: !!healthRes.zabbix_connected });
-        setProblems(problemsRes.problems ?? []);
-        setAlertEvents((eventsRes.events ?? []).slice(0, 6));
-      } catch {
-        /* individual sections stay in loading / empty state */
-      } finally {
-        setLoading(false);
-      }
-    };
     void load();
-  }, [lastSync]);
+  }, [load, lastSync]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
+  useEffect(() => {
+    if (tick > 0) void load(true);
+  }, [tick]);
 
   const offlineCount = stats ? stats.totalHosts - stats.onlineHosts : 0;
   const allOk = health?.ok && health?.zabbix;
