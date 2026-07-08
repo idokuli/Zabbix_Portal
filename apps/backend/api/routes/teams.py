@@ -118,6 +118,10 @@ def add_team_member(
         )
     if not um.add_team_membership(data.user_id, team_id):
         raise HTTPException(status_code=400, detail="Failed to add member.")
+    user = um.get_user_by_id(data.user_id)
+    team_name = um.get_team_name(team_id)
+    if user and team_name:
+        sync_bot.push_user(user["username"], "", user["roles"], team_name)
     return {"message": "Member added."}
 
 

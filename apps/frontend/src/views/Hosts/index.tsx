@@ -9,6 +9,7 @@ import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
 import LocalOfferOutlinedIcon from "@mui/icons-material/LocalOfferOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import RouterOutlinedIcon from "@mui/icons-material/RouterOutlined";
+import SearchIcon from "@mui/icons-material/Search";
 import {
   Alert,
   Box,
@@ -22,6 +23,7 @@ import {
   DialogTitle,
   FormControl,
   IconButton,
+  InputAdornment,
   InputLabel,
   LinearProgress,
   Menu,
@@ -29,6 +31,7 @@ import {
   Select,
   Snackbar,
   Stack,
+  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -67,7 +70,10 @@ export const Hosts = () => {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [applyTeamTag, setApplyTeamTag] = useState(true);
+  const [bulkApplyTeamTag, setBulkApplyTeamTag] = useState(true);
   const [hosts, setHosts] = useState<Host[]>([]);
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Host | null>(null);
   const [editHost, setEditHost] = useState<Host | null>(null);
@@ -191,6 +197,7 @@ export const Hosts = () => {
         template,
         proxyid: proxyid || undefined,
         group_ids: groupIds.length ? groupIds : undefined,
+        apply_team_tag: applyTeamTag,
       });
       showToast("Host added successfully.", "success");
       setHostname("");
@@ -353,7 +360,7 @@ export const Hosts = () => {
     if (!uploadFile) return;
     setUploading(true);
     try {
-      const res = await api.bulkCreateHosts(uploadFile);
+      const res = await api.bulkCreateHosts(uploadFile, bulkApplyTeamTag);
       if (res.failed_count > 0) {
         const failLines = (res.failed as { hostname?: string; reason?: string }[])
           .map((f) =>
@@ -387,7 +394,17 @@ export const Hosts = () => {
     setUploadFile(file);
   };
 
-  const rows = useMemo(() => hosts.map((h) => ({ id: h.hostid, ...h })), [hosts]);
+  const filteredHosts = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return hosts;
+    return hosts.filter((h) => {
+      if (h.host.toLowerCase().includes(q)) return true;
+      if ((h.name ?? "").toLowerCase().includes(q)) return true;
+      return (h.interfaces ?? []).some((i) => i.ip.toLowerCase().includes(q));
+    });
+  }, [hosts, search]);
+
+  const rows = useMemo(() => filteredHosts.map((h) => ({ id: h.hostid, ...h })), [filteredHosts]);
 
   const headerSx = useMemo(
     () => ({
@@ -790,13 +807,28 @@ export const Hosts = () => {
             py: 1.5,
             display: "flex",
             alignItems: "center",
+            gap: 1.5,
             borderBottom: "1px solid",
             borderColor: "divider",
           }}
         >
-          <Typography variant="subtitle2" sx={{ fontWeight: 700, flex: 1 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>
             Host inventory
           </Typography>
+          <TextField
+            size="small"
+            placeholder="Search by name or IP…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            sx={{ flex: 1 }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ fontSize: 18, color: "text.disabled" }} />
+                </InputAdornment>
+              ),
+            }}
+          />
           <Tooltip title="Refresh">
             <IconButton size="small" onClick={() => void reload()}>
               <RefreshIcon sx={{ fontSize: 17 }} />
@@ -869,6 +901,8 @@ export const Hosts = () => {
         groupIds={groupIds}
         setGroupIds={setGroupIds}
         hostGroups={hostGroups}
+        applyTeamTag={applyTeamTag}
+        setApplyTeamTag={setApplyTeamTag}
         onCreate={onCreate}
       />
 
@@ -878,6 +912,8 @@ export const Hosts = () => {
         dragActive={dragActive}
         setDragActive={setDragActive}
         pickUploadFile={pickUploadFile}
+        applyTeamTag={bulkApplyTeamTag}
+        setApplyTeamTag={setBulkApplyTeamTag}
         onBulkUpload={onBulkUpload}
       />
 

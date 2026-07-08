@@ -11,10 +11,12 @@ import {
   Chip,
   Divider,
   FormControl,
+  FormControlLabel,
   InputLabel,
   MenuItem,
   Select,
   Stack,
+  Switch,
   TextField,
   Typography,
 } from "@mui/material";
@@ -34,6 +36,8 @@ export const AddHostAccordion = ({
   groupIds,
   setGroupIds,
   hostGroups,
+  applyTeamTag,
+  setApplyTeamTag,
   onCreate,
 }: {
   hostname: string;
@@ -49,6 +53,8 @@ export const AddHostAccordion = ({
   groupIds: string[];
   setGroupIds: (v: string[]) => void;
   hostGroups: Array<{ groupid: string; name: string }>;
+  applyTeamTag: boolean;
+  setApplyTeamTag: (v: boolean) => void;
   onCreate: () => void;
 }) => (
   <Accordion
@@ -158,6 +164,16 @@ export const AddHostAccordion = ({
             </Select>
           </FormControl>
         )}
+        <FormControlLabel
+          control={
+            <Switch checked={applyTeamTag} onChange={(_, v) => setApplyTeamTag(v)} size="small" />
+          }
+          label={
+            <Typography variant="body2" color="text.secondary">
+              Tag with my team
+            </Typography>
+          }
+        />
         <Box>
           <Button
             variant="contained"

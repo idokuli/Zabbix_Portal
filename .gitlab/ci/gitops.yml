@@ -38,7 +38,7 @@ yamllint:
     - echo "── yamllint passed."
   rules:
     - if: $CI_COMMIT_TAG
-    - if: $FORCE_BUILD == "1"
+    - if: $FORCE_APPS
 
 # ── Helm lint (charts now live in the GitOps repo — lint is a separate step there)
 # Kept here as a lightweight sanity check if HELM_CHANGED is set and HELM_IMAGE
@@ -62,7 +62,7 @@ helm:lint:
       echo "you add chart linting to the GitOps repo's own pipeline."
   rules:
     - if: $CI_COMMIT_TAG
-    - if: $FORCE_BUILD == "1"
+    - if: $FORCE_APPS
 
 # =============================================================================
 # push-image-tags — update environments/<env>/values.yaml in GitOps repo
@@ -94,21 +94,18 @@ push-image-tags:
       fail() { echo "[$(_ts)] ERR $*" >&2; exit 1; }
 
       # ── Skip if nothing changed ──────────────────────────────────────────
-      if [ "$BACKEND_CHANGED" != "1" ] && [ "$FRONTEND_CHANGED" != "1" ]; then
-        log "Backend and frontend both unchanged — no image tags to update."
+      if [ -z "$CHANGED_APPS" ]; then
+        log "No apps changed — no image tags to update."
         exit 0
       fi
 
       IMAGE_TAG="${CI_COMMIT_TAG:-$CI_COMMIT_SHORT_SHA}"
       [ -n "$IMAGE_TAG" ] || fail "Cannot determine image tag — CI_COMMIT_TAG and CI_COMMIT_SHORT_SHA are both empty."
 
-      log "Image tag       : $IMAGE_TAG"
-      log "Backend changed : $BACKEND_CHANGED"
-      log "Frontend changed: $FRONTEND_CHANGED"
+      log "Image tag    : $IMAGE_TAG"
+      log "Changed apps : $CHANGED_APPS"
 
       # ── Clone GitOps repo (HTTPS + token auth) ───────────────────────────
-      # Embed the token in the remote URL so git push authenticates without
-      # storing credentials on disk. The token is never printed.
       REPO_HOST="$(printf '%s' "$GITOPS_REPO_URL" | sed 's|https://||')"
       git clone "https://gitlab-ci-token:${GITOPS_TOKEN}@${REPO_HOST}" gitops-repo
       cd gitops-repo
@@ -117,11 +114,11 @@ push-image-tags:
       git config user.name  "GitLab CI"
 
       # ── Update image tags in all environment values files ─────────────────
-      # Uses sed to replace the tag line immediately after the image: block.
-      # The pattern targets only lines with "# MANAGED BY CI" to be safe.
+      # Targets only the line for the specific app using "# MANAGED BY CI:<app>"
+      # so that an unchanged app's tag is never overwritten.
       update_tag() {
         local file="$1"
-        local service="$2"   # backend or frontend
+        local app="$2"
         local tag="$3"
 
         if [ ! -f "$file" ]; then
@@ -129,16 +126,23 @@ push-image-tags:
           return
         fi
 
-        # Replace:  tag: "<old>"   # MANAGED BY CI
-        # With:     tag: "<new>"   # MANAGED BY CI
-        sed -i "s|tag: \"[^\"]*\"   # MANAGED BY CI|tag: \"$tag\"   # MANAGED BY CI|g" "$file"
-        log "  Updated $service tag → $tag in $file"
+        if ! grep -q "# MANAGED BY CI:${app}" "$file"; then
+          fail "No '# MANAGED BY CI:${app}' marker found in ${file} — cannot update tag."
+        fi
+
+        sed -i "s|tag: \"[^\"]*\"   # MANAGED BY CI:${app}|tag: \"${tag}\"   # MANAGED BY CI:${app}|g" "$file"
+
+        if ! grep -q "tag: \"${tag}\"   # MANAGED BY CI:${app}" "$file"; then
+          fail "Failed to update ${app} tag in ${file} — the marker line doesn't match the expected format 'tag: \"...\"   # MANAGED BY CI:${app}' (exactly 3 spaces before '#', no space after the colon). Actual line: $(grep "MANAGED BY CI:${app}" "$file")"
+        fi
+
+        log "  Updated ${app} tag → ${tag} in ${file}"
       }
 
-      for ENV in staging production dr; do
-        VALUES="helm-charts/overwatch/values-${ENV}.yaml"
-        [ "$BACKEND_CHANGED"  = "1" ] && update_tag "$VALUES" backend  "$IMAGE_TAG"
-        [ "$FRONTEND_CHANGED" = "1" ] && update_tag "$VALUES" frontend "$IMAGE_TAG"
+      for APP_NAME in $(echo "$CHANGED_APPS" | tr ',' ' '); do
+        for ENV in staging production dr; do
+          update_tag "helm-charts/overwatch/values-${ENV}.yaml" "$APP_NAME" "$IMAGE_TAG"
+        done
       done
 
       # ── Commit and push ───────────────────────────────────────────────────
@@ -149,16 +153,12 @@ push-image-tags:
         exit 0
       fi
 
-      CHANGED_SERVICES=""
-      [ "$BACKEND_CHANGED"  = "1" ] && CHANGED_SERVICES="${CHANGED_SERVICES}backend "
-      [ "$FRONTEND_CHANGED" = "1" ] && CHANGED_SERVICES="${CHANGED_SERVICES}frontend"
-
-      git commit -m "chore: update image tags to $IMAGE_TAG [${CHANGED_SERVICES}]
+      git commit -m "chore: update image tags to $IMAGE_TAG [$CHANGED_APPS]
 
       Source pipeline: $CI_PIPELINE_URL
       Commit:          $CI_COMMIT_SHORT_SHA
       Tag:             $IMAGE_TAG
-      Changed:         ${CHANGED_SERVICES}"
+      Changed:         $CHANGED_APPS"
 
       git push origin main
       ok "Image tags pushed to GitOps repo. ArgoCD will sync staging automatically."
@@ -166,7 +166,7 @@ push-image-tags:
 
   rules:
     - if: $CI_COMMIT_TAG
-    - if: $FORCE_BUILD == "1"
+    - if: $FORCE_APPS
 
 # =============================================================================
 # argocd:bootstrap — create/update ArgoCD Application via the ArgoCD CLI.
@@ -245,7 +245,7 @@ argocd:bootstrap:staging:
     - *bootstrap_script
   rules:
     - if: $CI_COMMIT_TAG
-    - if: $FORCE_BUILD == "1"
+    - if: $FORCE_APPS
 
 argocd:bootstrap:production:
   extends: .bootstrap_base
@@ -258,7 +258,7 @@ argocd:bootstrap:production:
   rules:
     - if: $CI_COMMIT_TAG
       when: manual
-    - if: $FORCE_BUILD == "1"
+    - if: $FORCE_APPS
       when: manual
 
 argocd:bootstrap:dr:
@@ -272,5 +272,5 @@ argocd:bootstrap:dr:
   rules:
     - if: $CI_COMMIT_TAG
       when: manual
-    - if: $FORCE_BUILD == "1"
+    - if: $FORCE_APPS
       when: manual

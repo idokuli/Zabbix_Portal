@@ -1,6 +1,6 @@
 import time as _time
-from api.deps import zabbix_err
-from fastapi import APIRouter, Depends, HTTPException, Query
+from api.deps import zabbix_call
+from fastapi import APIRouter, Depends, Query
 from Auth import get_current_user, require_admin
 from api.managers import report_bot
 
@@ -14,14 +14,12 @@ def reports_top_triggers(
     hours: int = Query(24, ge=1, le=720),
     _user=Depends(get_current_user),
 ):
-    try:
+    with zabbix_call(status=502):
         return {
             "triggers": report_bot.get_top_triggers(
                 limit=limit, severity_min=severity_min, hours=hours
             )
         }
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=zabbix_err(e))
 
 
 @router.get("/reports/audit-log")
@@ -31,10 +29,8 @@ def reports_audit_log(
     _user=Depends(require_admin),
 ):
     time_from = int(_time.time()) - hours * 3600
-    try:
+    with zabbix_call(status=502):
         return {"entries": report_bot.get_audit_log(limit=limit, time_from=time_from)}
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=zabbix_err(e))
 
 
 @router.get("/reports/action-log")
@@ -44,10 +40,8 @@ def reports_action_log(
     _user=Depends(get_current_user),
 ):
     time_from = int(_time.time()) - hours * 3600
-    try:
+    with zabbix_call(status=502):
         return {"entries": report_bot.get_action_log(limit=limit, time_from=time_from)}
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=zabbix_err(e))
 
 
 @router.get("/reports/availability")
@@ -56,10 +50,8 @@ def reports_availability(
     groupid: str | None = Query(None),
     _user=Depends(get_current_user),
 ):
-    try:
+    with zabbix_call(status=502):
         return {"hosts": report_bot.get_availability(hours=hours, groupid=groupid)}
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=zabbix_err(e))
 
 
 @router.get("/reports/notifications")
@@ -68,11 +60,9 @@ def reports_notifications(
     limit: int = Query(500, ge=1, le=1000),
     _user=Depends(get_current_user),
 ):
-    try:
+    with zabbix_call(status=502):
         return {
             "notifications": report_bot.get_notification_history(
                 hours=hours, limit=limit
             )
         }
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=zabbix_err(e))

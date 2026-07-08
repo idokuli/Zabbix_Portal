@@ -1,5 +1,4 @@
 "use client";
-import { generateId } from "../../app/utils";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import CloseIcon from "@mui/icons-material/Close";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
@@ -21,7 +20,6 @@ import {
   IconButton,
   InputLabel,
   MenuItem,
-  Select,
   Stack,
   Tab,
   Table,
@@ -40,6 +38,8 @@ import { api } from "../../app/api";
 import type { TemplateItem } from "../../app/api/types";
 import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
+import { generateId } from "../../app/utils";
+import { SearchableSelect } from "../../components/SearchableSelect";
 import { ConfirmDelete, type DcTemplate, type TemplateGroup } from "./shared";
 
 type TemplateDetail = {
@@ -449,7 +449,7 @@ export const TemplatesTab = ({
               />
               <FormControl size="small" fullWidth>
                 <InputLabel>Template groups *</InputLabel>
-                <Select
+                <SearchableSelect
                   multiple
                   label="Template groups *"
                   value={form.group_ids}
@@ -472,11 +472,11 @@ export const TemplatesTab = ({
                       {g.name}
                     </MenuItem>
                   ))}
-                </Select>
+                </SearchableSelect>
               </FormControl>
               <FormControl size="small" fullWidth>
                 <InputLabel>Linked templates</InputLabel>
-                <Select
+                <SearchableSelect
                   multiple
                   label="Linked templates"
                   value={form.template_ids}
@@ -499,7 +499,7 @@ export const TemplatesTab = ({
                       {t.name}
                     </MenuItem>
                   ))}
-                </Select>
+                </SearchableSelect>
               </FormControl>
               <TextField
                 size="small"
@@ -766,7 +766,7 @@ export const TemplatesTab = ({
                     />
                     <FormControl size="small" fullWidth>
                       <InputLabel>Template groups</InputLabel>
-                      <Select
+                      <SearchableSelect
                         multiple
                         label="Template groups"
                         value={editForm.group_ids}
@@ -794,11 +794,11 @@ export const TemplatesTab = ({
                             {g.name}
                           </MenuItem>
                         ))}
-                      </Select>
+                      </SearchableSelect>
                     </FormControl>
                     <FormControl size="small" fullWidth>
                       <InputLabel>Linked templates</InputLabel>
-                      <Select
+                      <SearchableSelect
                         multiple
                         label="Linked templates"
                         value={editForm.template_ids}
@@ -831,7 +831,7 @@ export const TemplatesTab = ({
                               {tpl.name}
                             </MenuItem>
                           ))}
-                      </Select>
+                      </SearchableSelect>
                     </FormControl>
                     <TextField
                       size="small"

@@ -24,10 +24,7 @@ import type { ProxyConfig } from "../../app/api";
 
 export { ConfirmDelete } from "../../app/components/ConfirmDelete";
 
-export const fmtTs = (ts: number) =>
-  ts
-    ? new Date(ts * 1000).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })
-    : "—";
+export { fmtTs } from "../../app/utils";
 
 // ── Proxies ───────────────────────────────────────────────────────────
 

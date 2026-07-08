@@ -1,5 +1,4 @@
 "use client";
-import { generateId } from "../../app/utils";
 import AddIcon from "@mui/icons-material/Add";
 import {
   Box,
@@ -16,6 +15,7 @@ import {
 } from "@mui/material";
 import { useEffect, useState } from "react";
 import type { Host, HostTag } from "../../app/api";
+import { generateId } from "../../app/utils";
 
 type EditTag = { _key: string; tag: string; value: string };
 

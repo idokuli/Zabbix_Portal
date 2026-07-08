@@ -8,7 +8,9 @@ import {
   Box,
   Button,
   Divider,
+  FormControlLabel,
   Stack,
+  Switch,
   Typography,
 } from "@mui/material";
 
@@ -18,6 +20,8 @@ export const BulkImportAccordion = ({
   dragActive,
   setDragActive,
   pickUploadFile,
+  applyTeamTag,
+  setApplyTeamTag,
   onBulkUpload,
 }: {
   uploadFile: File | null;
@@ -25,6 +29,8 @@ export const BulkImportAccordion = ({
   dragActive: boolean;
   setDragActive: (v: boolean) => void;
   pickUploadFile: (file: File | null) => void;
+  applyTeamTag: boolean;
+  setApplyTeamTag: (v: boolean) => void;
   onBulkUpload: () => void;
 }) => (
   <Accordion
@@ -97,6 +103,16 @@ export const BulkImportAccordion = ({
             }}
           />
         </Box>
+        <FormControlLabel
+          control={
+            <Switch checked={applyTeamTag} onChange={(_, v) => setApplyTeamTag(v)} size="small" />
+          }
+          label={
+            <Typography variant="body2" color="text.secondary">
+              Tag with my team
+            </Typography>
+          }
+        />
         <Stack direction="row" spacing={2} alignItems="center">
           <Button variant="outlined" size="small" component="label" htmlFor="bulk-upload-input">
             Choose file

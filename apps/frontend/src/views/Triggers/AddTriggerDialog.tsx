@@ -18,6 +18,7 @@ import {
   Typography,
 } from "@mui/material";
 import type { Host } from "../../app/api";
+import { SearchableSelect } from "../../components/SearchableSelect";
 import { SEVERITY_CONFIG, operators } from "./shared";
 
 type FormHostItem = {
@@ -95,18 +96,22 @@ export const AddTriggerDialog = ({
       <Stack spacing={2} sx={{ mt: 1 }}>
         <FormControl size="small" fullWidth required>
           <InputLabel>Host</InputLabel>
-          <Select value={formHost} label="Host" onChange={(e) => setFormHost(e.target.value)}>
+          <SearchableSelect
+            value={formHost}
+            label="Host"
+            onChange={(e) => setFormHost(e.target.value)}
+          >
             {hosts.map((h) => (
               <MenuItem key={h.hostid} value={h.host}>
                 {h.host}
               </MenuItem>
             ))}
-          </Select>
+          </SearchableSelect>
         </FormControl>
 
         <FormControl size="small" fullWidth required disabled={!formHost || formHostItemsLoading}>
           <InputLabel>Item</InputLabel>
-          <Select
+          <SearchableSelect
             value={formItemKey}
             label="Item"
             onChange={(e) => {
@@ -136,7 +141,7 @@ export const AddTriggerDialog = ({
                 </MenuItem>
               ))
             )}
-          </Select>
+          </SearchableSelect>
         </FormControl>
 
         <TextField

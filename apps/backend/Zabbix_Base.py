@@ -29,7 +29,7 @@ def zabbix_err(e: Exception) -> str:
 
 
 class Zabbix_Base:
-    def __init__(self):
+    def __init__(self) -> None:
         self._cache: dict[str, tuple[float, Any]] = {}
         self._cache_lock = threading.Lock()
         dotenv_path = Path(__file__).resolve().parent / ".env"
@@ -93,7 +93,8 @@ class Zabbix_Base:
                 if resp.status_code == 200 and "jsonrpc" in resp.text:
                     logger.info("Zabbix API found at: %s", api_url)
                     return api_url
-            except Exception:
+            except Exception as exc:
+                logger.debug("Zabbix API probe failed for %s: %s", api_url, exc)
                 continue
         logger.warning("Could not probe Zabbix API — falling back to %s", candidates[0])
         return candidates[0]

@@ -3,7 +3,14 @@
 from pydantic import BaseModel
 
 
-class ItemRequest(BaseModel):
+class TeamTaggableRequest(BaseModel):
+    """Base for item requests that get an automatic 'team' tag on creation.
+    Set apply_team_tag=False to skip tagging this particular item."""
+
+    apply_team_tag: bool = True
+
+
+class ItemRequest(TeamTaggableRequest):
     hostname: str
     item_name: str
     item_key: str
@@ -29,7 +36,7 @@ class HttpQueryField(BaseModel):
     value: str = ""
 
 
-class HttpItemRequest(BaseModel):
+class HttpItemRequest(TeamTaggableRequest):
     hostname: str
     item_name: str
     url: str
@@ -43,7 +50,7 @@ class HttpItemRequest(BaseModel):
     posts: str = ""
     post_type: int = 0  # 0=Raw 2=JSON 3=XML
     retrieve_mode: int = 0  # 0=body 1=headers 2=body+headers
-    value_type: int = 3  # 3=integer (code), 0=float (time), 4=text (body)
+    value_type: int = 4  # 0=float (response time), 4=text (response body)
     team_name: str = ""
     headers: str = ""  # newline-separated "Name: Value" custom request headers
     query_fields: list[HttpQueryField] = []
@@ -73,7 +80,7 @@ class HttpItemRequest(BaseModel):
     description: str = ""
 
 
-class ServiceItemRequest(BaseModel):
+class ServiceItemRequest(TeamTaggableRequest):
     hostname: str
     service_type: str  # icmp_ping|icmp_loss|icmp_time|http|https|ssh|smtp|ftp|tcp_port
     port: int | None = None
@@ -85,7 +92,7 @@ class ServiceItemRequest(BaseModel):
     description: str = ""
 
 
-class WindowsServiceItemRequest(BaseModel):
+class WindowsServiceItemRequest(TeamTaggableRequest):
     hostname: str
     service_name: str  # Windows service name (not display name), e.g. "wuauserv"
     item_name: str = ""
@@ -98,7 +105,7 @@ class WindowsServiceItemRequest(BaseModel):
     description: str = ""
 
 
-class ProcessItemRequest(BaseModel):
+class ProcessItemRequest(TeamTaggableRequest):
     hostname: str
     process_name: str
     run_as_user: str = ""  # filter by the OS user running the process
@@ -114,7 +121,7 @@ class ProcessItemRequest(BaseModel):
     description: str = ""
 
 
-class FileWatchRequest(BaseModel):
+class FileWatchRequest(TeamTaggableRequest):
     hostname: str
     file_path: str
     check_type: str = "checksum"  # checksum | mtime | size | exists | folder_latest
@@ -132,7 +139,7 @@ class FileWatchRequest(BaseModel):
     description: str = ""
 
 
-class ScriptItemRequest(BaseModel):
+class ScriptItemRequest(TeamTaggableRequest):
     hostname: str
     script_type: str = "bash"  # bash | powershell
     script_mode: str = "command"  # command | file
@@ -150,7 +157,7 @@ class ScriptItemRequest(BaseModel):
     timeout: str = ""  # per-item timeout override (Zabbix 7.x+)
 
 
-class BulkItemRequest(BaseModel):
+class BulkItemRequest(TeamTaggableRequest):
     hostnames: list[str]
     item_type: str = "agent"  # agent | http | service | script
     item_name: str = ""
@@ -186,7 +193,7 @@ class BulkItemRequest(BaseModel):
     team_name: str = ""
 
 
-class DbOdbcRequest(BaseModel):
+class DbOdbcRequest(TeamTaggableRequest):
     hostname: str
     dsn: str
     sql_query: str
@@ -203,7 +210,7 @@ class DbOdbcRequest(BaseModel):
     timeout: str = ""
 
 
-class DbAgent2Request(BaseModel):
+class DbAgent2Request(TeamTaggableRequest):
     hostname: str
     engine: str
     conn_string: str
@@ -213,7 +220,7 @@ class DbAgent2Request(BaseModel):
     value_type: int | None = None
 
 
-class SnmpItemRequest(BaseModel):
+class SnmpItemRequest(TeamTaggableRequest):
     hostname: str
     item_name: str
     item_key: str = ""
@@ -236,7 +243,7 @@ class SnmpItemRequest(BaseModel):
     status: int = 0
 
 
-class SnmpTrapRequest(BaseModel):
+class SnmpTrapRequest(TeamTaggableRequest):
     hostname: str
     item_name: str
     item_key: str = "snmptrap.fallback"
@@ -247,7 +254,7 @@ class SnmpTrapRequest(BaseModel):
     status: int = 0
 
 
-class InternalItemRequest(BaseModel):
+class InternalItemRequest(TeamTaggableRequest):
     hostname: str
     item_name: str
     item_key: str
@@ -260,7 +267,7 @@ class InternalItemRequest(BaseModel):
     status: int = 0
 
 
-class TrapperItemRequest(BaseModel):
+class TrapperItemRequest(TeamTaggableRequest):
     hostname: str
     item_name: str
     item_key: str
@@ -272,7 +279,7 @@ class TrapperItemRequest(BaseModel):
     status: int = 0
 
 
-class ExternalItemRequest(BaseModel):
+class ExternalItemRequest(TeamTaggableRequest):
     hostname: str
     item_name: str
     item_key: str
@@ -285,7 +292,7 @@ class ExternalItemRequest(BaseModel):
     status: int = 0
 
 
-class IpmiItemRequest(BaseModel):
+class IpmiItemRequest(TeamTaggableRequest):
     hostname: str
     item_name: str = ""
     ipmi_sensor: str
@@ -299,7 +306,7 @@ class IpmiItemRequest(BaseModel):
     status: int = 0
 
 
-class SshItemRequest(BaseModel):
+class SshItemRequest(TeamTaggableRequest):
     hostname: str
     item_name: str
     params: str
@@ -319,7 +326,7 @@ class SshItemRequest(BaseModel):
     timeout: str = ""
 
 
-class TelnetItemRequest(BaseModel):
+class TelnetItemRequest(TeamTaggableRequest):
     hostname: str
     item_name: str
     params: str
@@ -335,7 +342,7 @@ class TelnetItemRequest(BaseModel):
     status: int = 0
 
 
-class JmxItemRequest(BaseModel):
+class JmxItemRequest(TeamTaggableRequest):
     hostname: str
     item_name: str
     item_key: str
@@ -351,7 +358,7 @@ class JmxItemRequest(BaseModel):
     status: int = 0
 
 
-class CalculatedItemRequest(BaseModel):
+class CalculatedItemRequest(TeamTaggableRequest):
     hostname: str
     item_name: str
     item_key: str
@@ -365,7 +372,7 @@ class CalculatedItemRequest(BaseModel):
     status: int = 0
 
 
-class DependentItemRequest(BaseModel):
+class DependentItemRequest(TeamTaggableRequest):
     hostname: str
     item_name: str
     item_key: str
@@ -382,7 +389,7 @@ class ScriptParamEntry(BaseModel):
     value: str = ""
 
 
-class ZabbixScriptItemRequest(BaseModel):
+class ZabbixScriptItemRequest(TeamTaggableRequest):
     hostname: str
     item_name: str
     item_key: str
@@ -398,7 +405,7 @@ class ZabbixScriptItemRequest(BaseModel):
     timeout: str = ""
 
 
-class BrowserItemRequest(BaseModel):
+class BrowserItemRequest(TeamTaggableRequest):
     hostname: str
     item_name: str
     item_key: str

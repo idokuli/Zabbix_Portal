@@ -1,5 +1,4 @@
 import { Login } from "@/views/Login";
 
-export default function LoginPage() {
-  return <Login />;
-}
+const LoginPage = () => <Login />;
+export default LoginPage;

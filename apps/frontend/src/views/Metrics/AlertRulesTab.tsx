@@ -48,6 +48,10 @@ import {
 } from "./AlertRuleDialog";
 import { getRuleSounds } from "./shared";
 
+const LS_SOUND_PRESET = "alertSoundPreset";
+const LS_RULE_SOUNDS = "alertRuleSounds";
+const DEFAULT_PRESET = "beep";
+
 export const AlertRulesTab = () => {
   const tick = useRefreshTick();
   const [rules, setRules] = useState<AlertRule[]>([]);
@@ -72,19 +76,19 @@ export const AlertRulesTab = () => {
   }, []);
 
   const [globalPreset, setGlobalPreset] = useState(
-    () => localStorage.getItem("alertSoundPreset") ?? "beep",
+    () => localStorage.getItem(LS_SOUND_PRESET) ?? DEFAULT_PRESET,
   );
   useEffect(() => {
     const onPresetChange = () =>
-      setGlobalPreset(localStorage.getItem("alertSoundPreset") ?? "beep");
-    window.addEventListener("alertSoundPresetChanged", onPresetChange);
-    return () => window.removeEventListener("alertSoundPresetChanged", onPresetChange);
+      setGlobalPreset(localStorage.getItem(LS_SOUND_PRESET) ?? DEFAULT_PRESET);
+    window.addEventListener(`${LS_SOUND_PRESET}Changed`, onPresetChange);
+    return () => window.removeEventListener(`${LS_SOUND_PRESET}Changed`, onPresetChange);
   }, []);
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
-      if (e.key === "alertRuleSounds") setRuleSoundsState(getRuleSounds());
-      if (e.key === "alertSoundPreset")
-        setGlobalPreset(localStorage.getItem("alertSoundPreset") ?? "beep");
+      if (e.key === LS_RULE_SOUNDS) setRuleSoundsState(getRuleSounds());
+      if (e.key === LS_SOUND_PRESET)
+        setGlobalPreset(localStorage.getItem(LS_SOUND_PRESET) ?? DEFAULT_PRESET);
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
@@ -102,7 +106,7 @@ export const AlertRulesTab = () => {
   const handleSoundPreview = (previewKey: string, soundKey: string) => {
     if (soundKey === "none") return;
     const effectiveKey =
-      soundKey === "default" ? (localStorage.getItem("alertSoundPreset") ?? "beep") : soundKey;
+      soundKey === "default" ? (localStorage.getItem(LS_SOUND_PRESET) ?? DEFAULT_PRESET) : soundKey;
     if (effectiveKey === "none") return;
     const stopCurrent = () => {
       if (previewCtxRef.current) {
@@ -253,7 +257,7 @@ export const AlertRulesTab = () => {
       await api.deleteAlertRule(id);
       const updated = getRuleSounds();
       delete updated[id];
-      localStorage.setItem("alertRuleSounds", JSON.stringify(updated));
+      localStorage.setItem(LS_RULE_SOUNDS, JSON.stringify(updated));
       setRuleSoundsState({ ...updated });
       loadRules();
     } catch (e) {

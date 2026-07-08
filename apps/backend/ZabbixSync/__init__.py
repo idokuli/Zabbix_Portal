@@ -19,7 +19,7 @@ class ZabbixSync(
 ):
     """Bidirectional sync: portal users/teams/hosts ↔ Zabbix users/groups/host-groups."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         # Detect API version once to pick correct field names.
         # Zabbix <6 : username field = 'alias', user type set via 'type'
@@ -52,8 +52,11 @@ class ZabbixSync(
                     self._rights_field = "rights"
                     self._select_hg_param = "selectGroups"
                     self._host_hg_key = "groups"
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "ZabbixSync: could not detect API version — defaulting to 6.x field names: %s",
+                    exc,
+                )
             if self._zabbix_major >= 6:
                 self._roleids = self._fetch_roleids()
         logger.info(

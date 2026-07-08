@@ -29,6 +29,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
+import { SearchableSelect } from "../../components/SearchableSelect";
 import { ConfirmDelete, type HostGroup, type Maintenance, SectionHeader, fmtTs } from "./shared";
 
 export const MaintenanceTab = ({
@@ -258,7 +259,7 @@ export const MaintenanceTab = ({
             </Stack>
             <FormControl size="small" fullWidth>
               <InputLabel>Host groups</InputLabel>
-              <Select
+              <SearchableSelect
                 multiple
                 label="Host groups"
                 value={form.groupids}
@@ -279,7 +280,7 @@ export const MaintenanceTab = ({
                     {g.name}
                   </MenuItem>
                 ))}
-              </Select>
+              </SearchableSelect>
             </FormControl>
             <TextField
               size="small"

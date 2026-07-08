@@ -13,6 +13,7 @@ export const itemsApi = {
     description?: string;
     status?: number;
     timeout?: string;
+    apply_team_tag?: boolean;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items", {
       method: "POST",
@@ -186,6 +187,7 @@ export const itemsApi = {
     history?: string;
     trends?: string;
     description?: string;
+    apply_team_tag?: boolean;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items/http", {
       method: "POST",
@@ -283,6 +285,7 @@ export const itemsApi = {
     description?: string;
     status?: number;
     timeout?: string;
+    apply_team_tag?: boolean;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items/script", {
       method: "POST",
@@ -596,6 +599,7 @@ export const itemsApi = {
     script_mode?: string;
     script?: string;
     file_arg?: string;
+    apply_team_tag?: boolean;
   }) =>
     apiFetch<{
       message: string;

@@ -29,6 +29,7 @@ import {
   InlineItemsList,
   MultiHostSelect,
   type PanelProps,
+  TeamTagSwitch,
   TimeoutSelector,
   useCommonItemState,
 } from "./shared";
@@ -79,6 +80,7 @@ export const AgentItemPanel = ({
           history: common.history,
           trends: common.trends,
           description: common.description || undefined,
+          apply_team_tag: common.applyTeamTag,
         });
         setBulkResults(result.results);
         showToast(result.message, result.results.some((r) => r.error) ? "error" : "success");
@@ -95,6 +97,7 @@ export const AgentItemPanel = ({
           description: common.description || undefined,
           status: common.enabled ? 0 : 1,
           timeout: common.timeoutMode === "override" ? common.timeout : undefined,
+          apply_team_tag: common.applyTeamTag,
         });
         showToast("Item added successfully.", "success");
         setItemName("");
@@ -333,6 +336,7 @@ export const AgentItemPanel = ({
         onValueChange={common.setTimeout}
       />
       <EnabledSwitch value={common.enabled} onChange={common.setEnabled} />
+      <TeamTagSwitch value={common.applyTeamTag} onChange={common.setApplyTeamTag} />
 
       {bulkResults.length > 0 && <BulkResults results={bulkResults} label="Bulk item add" />}
 

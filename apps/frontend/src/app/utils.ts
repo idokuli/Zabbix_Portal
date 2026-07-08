@@ -1,3 +1,11 @@
+export const fmtTs = (ts: number): string =>
+  ts
+    ? new Date(ts * 1000).toLocaleString("en-US", {
+        dateStyle: "short",
+        timeStyle: "short",
+      })
+    : "—";
+
 // crypto.randomUUID() requires a secure context (HTTPS / localhost).
 // This fallback works on plain HTTP too.
 export const generateId = (): string => {

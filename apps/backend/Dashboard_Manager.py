@@ -10,8 +10,15 @@ from Zabbix_Base import Zabbix_Base
 logger = logging.getLogger(__name__)
 
 
+def _safe_float(val: object) -> float | None:
+    try:
+        return float(str(val))
+    except (ValueError, TypeError):
+        return None
+
+
 class Dashboard_Manager(Zabbix_Base):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._web_session: _req.Session | None = None
         self._base_web_url: str = self._resolve_base_web_url()
@@ -120,6 +127,41 @@ class Dashboard_Manager(Zabbix_Base):
 
     # ── Chart.js data for a graph ─────────────────────────────────────
 
+    def _fetch_series_points(
+        self,
+        itemid: str,
+        vtype: int,
+        time_from: int,
+        time_till: int,
+        minutes: int,
+    ) -> list[dict]:
+        if minutes > 1440:
+            raw = self.zapi.trend.get(
+                itemids=[itemid],
+                time_from=time_from,
+                time_till=time_till,
+                output=["clock", "value_avg"],
+                sortfield="clock",
+                sortorder="ASC",
+            )
+            return [
+                {"clock": int(r["clock"]), "value": float(r["value_avg"])} for r in raw
+            ]
+        raw = self.zapi.history.get(
+            itemids=[itemid],
+            history=vtype,
+            time_from=time_from,
+            time_till=time_till,
+            output=["clock", "value"],
+            sortfield="clock",
+            sortorder="DESC",
+            limit=5000,
+        )
+        return [
+            {"clock": int(r["clock"]), "value": float(r["value"])}
+            for r in reversed(raw)
+        ]
+
     def get_graph_data(self, graphid: str, minutes: int = 360) -> dict:
         """Return history series for every numeric item in a graph."""
         if not self.zapi:
@@ -160,37 +202,9 @@ class Dashboard_Manager(Zabbix_Base):
                 if vtype not in (0, 3):
                     continue
                 try:
-                    if minutes > 1440:
-                        # Long range: hourly trend aggregates are accurate and fast.
-                        raw = self.zapi.trend.get(
-                            itemids=[gi["itemid"]],
-                            time_from=time_from,
-                            time_till=time_till,
-                            output=["clock", "value_avg"],
-                            sortfield="clock",
-                            sortorder="ASC",
-                        )
-                        points = [
-                            {"clock": int(r["clock"]), "value": float(r["value_avg"])}
-                            for r in raw
-                        ]
-                    else:
-                        # Short range: raw history DESC so limit always keeps the
-                        # most recent points; reverse to restore chronological order.
-                        raw = self.zapi.history.get(
-                            itemids=[gi["itemid"]],
-                            history=vtype,
-                            time_from=time_from,
-                            time_till=time_till,
-                            output=["clock", "value"],
-                            sortfield="clock",
-                            sortorder="DESC",
-                            limit=5000,
-                        )
-                        points = [
-                            {"clock": int(r["clock"]), "value": float(r["value"])}
-                            for r in reversed(raw)
-                        ]
+                    points = self._fetch_series_points(
+                        gi["itemid"], vtype, time_from, time_till, minutes
+                    )
                 except Exception as exc:
                     logger.error(
                         "history.get failed for item %s: %r", gi["itemid"], exc
@@ -256,27 +270,23 @@ class Dashboard_Manager(Zabbix_Base):
                 entry: dict = {"hostid": hid, "hostname": host["host"]}
 
                 if cpu_map.get(hid):
-                    try:
-                        entry["cpu_util"] = round(float(cpu_map[hid]), 1)
-                    except (ValueError, TypeError):
-                        pass
+                    v = _safe_float(cpu_map[hid])
+                    if v is not None:
+                        entry["cpu_util"] = round(v, 1)
 
                 if mem_map.get(hid):
-                    try:
-                        entry["mem_util"] = round(float(mem_map[hid]), 1)
-                    except (ValueError, TypeError):
-                        pass
+                    v = _safe_float(mem_map[hid])
+                    if v is not None:
+                        entry["mem_util"] = round(v, 1)
                 elif mem_avail_map.get(hid):
-                    try:
-                        entry["mem_util"] = round(100 - float(mem_avail_map[hid]), 1)
-                    except (ValueError, TypeError):
-                        pass
+                    v = _safe_float(mem_avail_map[hid])
+                    if v is not None:
+                        entry["mem_util"] = round(100 - v, 1)
 
                 if disk_map.get(hid):
-                    try:
-                        entry["disk_util"] = round(float(disk_map[hid]), 1)
-                    except (ValueError, TypeError):
-                        pass
+                    v = _safe_float(disk_map[hid])
+                    if v is not None:
+                        entry["disk_util"] = round(v, 1)
 
                 result.append(entry)
             return result

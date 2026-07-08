@@ -1,5 +1,4 @@
 import { Users } from "../../views/Users";
 
-export default function UsersPage() {
-  return <Users />;
-}
+const UsersPage = () => <Users />;
+export default UsersPage;

@@ -2,25 +2,25 @@
 # =============================================================================
 # Change detection — runs once per pipeline, in the .pre stage.
 # =============================================================================
-# Determines which apps changed BETWEEN THE PREVIOUS TAG AND THIS ONE so that
-# only the modified apps are rebuilt and re-deployed.
+# Auto-discovers every directory under apps/ and emits one dotenv variable per
+# app: <APPNAME_UPPER>_CHANGED=1 when that app has changed files.
+# Also emits CHANGED_APPS as a comma-separated list for downstream jobs.
 #
-# This pipeline runs only on tag pushes (see common.yml .rules_release), so
-# the comparison base is always the most recent ancestor tag — never HEAD~1
-# or a branch SHA.
+# On a tag push:  diffs changed files between the previous tag and this one.
+# With FORCE_APPS: overrides detection — builds only the listed apps (or "all").
 #
 # Outputs (consumed by python.yml, node.yml, gitops.yml):
-#   BACKEND_CHANGED   = "1" if anything under apps/backend/ changed
-#   FRONTEND_CHANGED  = "1" if anything under apps/frontend/ or root JS config changed
+#   BACKEND_CHANGED   = "1" if apps/backend/ changed (or forced)
+#   FRONTEND_CHANGED  = "1" if apps/frontend/ changed (or forced)
+#   CHANGED_APPS      = comma-separated list of changed app names (e.g. "backend,frontend")
 #   PREV_TAG          = the tag we diffed against (empty on first-ever release)
 #
-# Note: HELM_CHANGED is no longer emitted — Helm charts now live in the
-# separate GitOps repo (zabbix-portal-gitops) and are managed there.
+# Adding a new app: create apps/<newapp>/ — detect picks it up automatically.
 # =============================================================================
 
 detect:
   extends: .base
-  image: $GIT_IMAGE  # pinned — mutable :latest breaks reproducibility
+  image: $GIT_IMAGE
   stage: .pre
   variables:
     GIT_DEPTH: 0   # full history needed to find ancestor tags
@@ -28,36 +28,69 @@ detect:
     - |
       set -e
 
-      # The most recent annotated/lightweight tag that is an ancestor of this
-      # one — i.e. the previous release. May be empty on the first tag ever.
-      PREV_TAG=$(git describe --tags --abbrev=0 "${CI_COMMIT_TAG}^" 2>/dev/null || echo "")
-
-      echo "── Tag diff base ─────────────────────────────────────"
-      echo "Current tag : $CI_COMMIT_TAG"
-      echo "Previous tag: ${PREV_TAG:-<none>}"
-      echo "──────────────────────────────────────────────────────"
-
-      BACKEND_CHANGED=0
-      FRONTEND_CHANGED=0
-
+      PREV_TAG=""
       if [ -n "$CI_COMMIT_TAG" ]; then
-        # Tag push = release: always build and deploy both apps.
-        echo "→ Tag push: marking all apps as changed."
-        BACKEND_CHANGED=1
-        FRONTEND_CHANGED=1
-      elif [ -n "$FORCE_BUILD" ] && [ "$FORCE_BUILD" != "0" ]; then
-        echo "→ FORCE_BUILD=1: marking all apps as changed."
-        BACKEND_CHANGED=1
-        FRONTEND_CHANGED=1
+        PREV_TAG=$(git describe --tags --abbrev=0 "${CI_COMMIT_TAG}^" 2>/dev/null || echo "")
       fi
 
-      {
-        echo "BACKEND_CHANGED=$BACKEND_CHANGED"
-        echo "FRONTEND_CHANGED=$FRONTEND_CHANGED"
-        echo "PREV_TAG=$PREV_TAG"
-      } > detect.env
+      echo "── Detection parameters ──────────────────────────────"
+      echo "Current tag : ${CI_COMMIT_TAG:-<branch run>}"
+      echo "Previous tag: ${PREV_TAG:-<none>}"
+      echo "FORCE_APPS  : ${FORCE_APPS:-<none — using file diff>}"
+      echo "──────────────────────────────────────────────────────"
 
-      echo "── Detection result ──────────────────────────────────"
+      # Returns 0 (true) if the app name is in FORCE_APPS or FORCE_APPS=all
+      is_forced() {
+        [ -z "$FORCE_APPS" ] && return 1
+        [ "$FORCE_APPS" = "all" ] && return 0
+        echo ",$FORCE_APPS," | grep -q ",${1},"
+      }
+
+      > detect.env
+      CHANGED_APPS=""
+
+      echo "── Per-app results ───────────────────────────────────"
+
+      for APP_DIR in apps/*/; do
+        [ -d "$APP_DIR" ] || continue
+        APP_NAME=$(basename "$APP_DIR")
+        APP_KEY=$(echo "$APP_NAME" | tr '[:lower:]-' '[:upper:]_')
+        CHANGED=0
+        REASON=""
+
+        if is_forced "$APP_NAME"; then
+          CHANGED=1
+          REASON="forced via FORCE_APPS"
+        elif [ -n "$CI_COMMIT_TAG" ] && [ -z "$PREV_TAG" ]; then
+          CHANGED=1
+          REASON="first tag — no previous release to diff against"
+        elif [ -n "$CI_COMMIT_TAG" ] && [ -n "$PREV_TAG" ]; then
+          if git diff --name-only "$PREV_TAG" "$CI_COMMIT_TAG" | grep -q "^${APP_DIR}"; then
+            CHANGED=1
+            REASON="files changed since $PREV_TAG"
+          else
+            # Extra check: root JS config files rebuild the frontend
+            if [ "$APP_NAME" = "frontend" ]; then
+              if git diff --name-only "$PREV_TAG" "$CI_COMMIT_TAG" | \
+                 grep -qE "^(package\.json|package-lock\.json|biome\.json|\.npmrc)$"; then
+                CHANGED=1
+                REASON="root JS config changed since $PREV_TAG"
+              fi
+            fi
+            [ "$CHANGED" = "0" ] && REASON="unchanged since $PREV_TAG"
+          fi
+        fi
+
+        echo "  $APP_NAME: ${APP_KEY}_CHANGED=$CHANGED  ($REASON)"
+        echo "${APP_KEY}_CHANGED=$CHANGED" >> detect.env
+        [ "$CHANGED" = "1" ] && CHANGED_APPS="${CHANGED_APPS:+$CHANGED_APPS,}$APP_NAME"
+      done
+
+      echo "PREV_TAG=$PREV_TAG" >> detect.env
+      echo "CHANGED_APPS=$CHANGED_APPS" >> detect.env
+
+      echo "──────────────────────────────────────────────────────"
+      echo "── detect.env ────────────────────────────────────────"
       cat detect.env
       echo "──────────────────────────────────────────────────────"
   artifacts:
@@ -66,7 +99,7 @@ detect:
     expire_in: 1 hour
   rules:
     - if: $CI_COMMIT_TAG
-    - if: $FORCE_BUILD == "1"  # allow manual force-deploy from any branch
+    - if: $FORCE_APPS  # non-empty: manual force from any branch
 
 # ── Variable validation ───────────────────────────────────────────────────────
 # Prints all pipeline variables at the start of every run so you can verify
@@ -88,7 +121,7 @@ validate:variables:
       echo "── Project ───────────────────────────────────────────"
       echo "  PROJECT_NAME         = $PROJECT_NAME"
       echo "  CI_COMMIT_TAG        = $CI_COMMIT_TAG"
-      echo "  FORCE_BUILD          = $FORCE_BUILD"
+      echo "  FORCE_APPS           = ${FORCE_APPS:-<empty — auto-detect>}"
       echo "  SHARED_RUNNERS_TAG   = $SHARED_RUNNERS_TAG"
 
       echo ""
@@ -136,3 +169,4 @@ validate:variables:
       [ "$MISSING" = "0" ] || exit 1
   rules:
     - if: $CI_COMMIT_TAG
+    - if: $FORCE_APPS

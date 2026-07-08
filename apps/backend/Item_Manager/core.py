@@ -17,6 +17,13 @@ class CoreItemsMixin:
         _invalidate: Callable[[str], None]
         _cached: Callable[..., Any]
 
+    def _pick_interface(self, interfaces: list[dict], iface_type: str) -> dict:
+        """Prefer a host interface of the given Zabbix type (1=agent, 2=SNMP, 3=IPMI,
+        4=JMX); fall back to the first interface if the host has none of that type."""
+        return next(
+            (i for i in interfaces if str(i.get("type")) == iface_type), interfaces[0]
+        )
+
     def add_item(
         self,
         hostname,
@@ -52,7 +59,9 @@ class CoreItemsMixin:
             interfaces = self.zapi.hostinterface.get(hostids=host_id)
             if not interfaces:
                 return None, f"No interfaces found for host '{hostname}'."
-            interface_id = interfaces[0]["interfaceid"]
+            # Prefer the Zabbix agent interface (type 1) — these items are type=0
+            # (Zabbix agent) and Zabbix rejects them on a non-agent interface.
+            interface_id = self._pick_interface(interfaces, "1")["interfaceid"]
 
             kwargs: dict = dict(
                 name=item_name,
@@ -255,10 +264,17 @@ class CoreItemsMixin:
         )
         return result[:limit]
 
+    # Zabbix item types 0 (Zabbix agent, passive) and 7 (Zabbix agent, active) —
+    # the only types this UI's Agent item panel creates (see add_item(), type=0).
+    _AGENT_ITEM_TYPES = {"0", "7"}
+
     def get_all_item_keys(self) -> list[dict]:
-        """Return all item keys defined in Zabbix templates, grouped by template name.
-        Also includes delay, units, history, trends, description so the UI can
-        pre-fill the add-item form when the user selects a known template key.
+        """Return Zabbix-agent-type item keys defined in Zabbix templates, grouped
+        by template name. Also includes delay, units, history, trends, description
+        so the UI can pre-fill the add-item form when the user selects a known
+        template key. Only used by the Agent item panel, so results are restricted
+        to agent-type template items (type 0/7) — SNMP/HTTP/trapper/etc. keys from
+        other item types aren't valid for the agent items this endpoint feeds.
         """
         if not self.zapi:
             return []
@@ -280,12 +296,15 @@ class CoreItemsMixin:
                     "history",
                     "trends",
                     "description",
+                    "type",
                 ],
                 hostids=template_ids,
             )
             seen_keys: set[str] = set()
             result = []
             for item in items:
+                if str(item.get("type")) not in self._AGENT_ITEM_TYPES:
+                    continue
                 key = item["key_"]
                 if key in seen_keys:
                     continue

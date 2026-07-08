@@ -1,5 +1,5 @@
-from api.deps import zabbix_err
-from fastapi import APIRouter, Depends, HTTPException, Query
+from api.deps import zabbix_call
+from fastapi import APIRouter, Depends, Query
 from Auth import get_current_user, require_admin, require_operator
 from api.managers import services_bot
 from api.schemas import (
@@ -19,35 +19,29 @@ def list_services(parentid: str | None = Query(None), _user=Depends(get_current_
 
 @router.post("/services")
 def create_service(body: ServiceCreateRequest, _user=Depends(require_admin)):
-    try:
+    with zabbix_call():
         sid = services_bot.create_service(
             body.name, body.algorithm, body.sortorder, body.weight, body.description
         )
         return {"serviceid": sid}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=zabbix_err(e))
 
 
 @router.put("/services/{serviceid}")
 def update_service(
     serviceid: str, body: ServiceUpdateRequest, _user=Depends(require_admin)
 ):
-    try:
+    with zabbix_call():
         services_bot.update_service(
             serviceid, body.name, body.algorithm, body.description
         )
         return {"ok": True}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=zabbix_err(e))
 
 
 @router.delete("/services/{serviceid}")
 def delete_service(serviceid: str, _user=Depends(require_admin)):
-    try:
+    with zabbix_call():
         services_bot.delete_service(serviceid)
         return {"ok": True}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=zabbix_err(e))
 
 
 @router.get("/sla")
@@ -57,7 +51,7 @@ def list_slas(_user=Depends(get_current_user)):
 
 @router.post("/sla")
 def create_sla(body: SlaCreateRequest, _user=Depends(require_admin)):
-    try:
+    with zabbix_call():
         sid = services_bot.create_sla(
             body.name,
             body.slo,
@@ -67,17 +61,13 @@ def create_sla(body: SlaCreateRequest, _user=Depends(require_admin)):
             body.service_tags,
         )
         return {"slaid": sid}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=zabbix_err(e))
 
 
 @router.delete("/sla/{slaid}")
 def delete_sla(slaid: str, _user=Depends(require_admin)):
-    try:
+    with zabbix_call():
         services_bot.delete_sla(slaid)
         return {"ok": True}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=zabbix_err(e))
 
 
 @router.get("/sla/{slaid}/report")
@@ -98,18 +88,14 @@ def list_health_monitors(
 def create_health_monitor(
     body: HealthMonitorCreateRequest, _user=Depends(require_operator)
 ):
-    try:
+    with zabbix_call():
         return services_bot.add_health_monitor(
             body.hostid, body.name, body.url, body.expected_contains, body.process_name
         )
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=zabbix_err(e))
 
 
 @router.delete("/health-monitors/{itemid}")
 def delete_health_monitor(itemid: str, _user=Depends(require_operator)):
-    try:
+    with zabbix_call():
         services_bot.delete_health_monitor(itemid)
         return {"ok": True}
-    except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=zabbix_err(e))

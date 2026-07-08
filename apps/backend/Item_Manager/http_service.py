@@ -11,10 +11,15 @@ logger = logging.getLogger(__name__)
 
 
 class HttpServiceItemsMixin:
-    """Mixed into Item_Manager. Assumes `self.zapi` from Zabbix_Base."""
+    """Mixed into Item_Manager. Assumes `self.zapi` from Zabbix_Base.
+    Calls self._pick_interface, which lives in CoreItemsMixin — resolved via the
+    final Item_Manager class's MRO at runtime.
+    """
 
     if TYPE_CHECKING:
         zapi: "ZabbixAPI | None"
+
+        def _pick_interface(self, interfaces: list[dict], iface_type: str) -> dict: ...
 
         def add_trigger(
             self,
@@ -63,7 +68,7 @@ class HttpServiceItemsMixin:
         follow_redirects: bool = True,
         posts: str = "",
         post_type: int = 0,  # 0=Raw 2=JSON 3=XML
-        value_type: int = 3,  # 3=integer (response code), 0=float (time), 4=text (body)
+        value_type: int = 4,  # 0=float (response time), 4=text (response body)
         retrieve_mode: int = 0,  # 0=body 1=headers 2=body+headers
         team_name: str = "",
         authtype: int = 0,  # 0=None, 1=Basic, 2=NTLM
@@ -293,7 +298,7 @@ class HttpServiceItemsMixin:
             interfaces = self.zapi.hostinterface.get(hostids=host_id)
             if not interfaces:
                 return None, f"No interfaces found for host '{hostname}'."
-            interface_id = interfaces[0]["interfaceid"]
+            interface_id = self._pick_interface(interfaces, "1")["interfaceid"]
 
             # Build proc.num key — trailing empty params are omitted
             parts = [process_name, run_as_user, state, cmdline_regex]
@@ -381,7 +386,7 @@ class HttpServiceItemsMixin:
             interfaces = self.zapi.hostinterface.get(hostids=host_id)
             if not interfaces:
                 return None, f"No interfaces found for host '{hostname}'."
-            interface_id = interfaces[0]["interfaceid"]
+            interface_id = self._pick_interface(interfaces, "1")["interfaceid"]
 
             item_key = f"service.info[{service_name},state]"
             if not item_name:

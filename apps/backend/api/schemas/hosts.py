@@ -9,6 +9,7 @@ class HostRequest(BaseModel):
     template: str | None = "Linux by Zabbix agent"
     proxyid: str | None = None  # optional — "0" or "" means direct (no proxy)
     group_ids: list[str] = []  # Zabbix host group IDs; defaults to group "2" if empty
+    apply_team_tag: bool = True  # tag + hostgroup the host with the creator's team
 
 
 class HostUpdateRequest(BaseModel):

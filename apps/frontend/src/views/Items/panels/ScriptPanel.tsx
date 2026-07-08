@@ -23,6 +23,7 @@ import {
   InlineItemsList,
   MultiHostSelect,
   type PanelProps,
+  TeamTagSwitch,
   TimeoutSelector,
   useCommonItemState,
 } from "./shared";
@@ -58,6 +59,7 @@ export const ScriptPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Panel
           file_arg: scriptFileArg || undefined,
           item_name: scriptItemName || undefined,
           value_type: scriptValueType,
+          apply_team_tag: common.applyTeamTag,
         });
         setBulkResults(result.results);
         showToast(result.message, result.results.some((r) => r.error) ? "error" : "success");
@@ -77,6 +79,7 @@ export const ScriptPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Panel
           description: common.description || undefined,
           status: common.enabled ? 0 : 1,
           timeout: common.timeoutMode === "override" ? common.timeout : undefined,
+          apply_team_tag: common.applyTeamTag,
         });
         showToast("Item added successfully.", "success");
         setScriptContent("");
@@ -242,6 +245,7 @@ export const ScriptPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Panel
         onValueChange={common.setTimeout}
       />
       <EnabledSwitch value={common.enabled} onChange={common.setEnabled} />
+      <TeamTagSwitch value={common.applyTeamTag} onChange={common.setApplyTeamTag} />
 
       {bulkResults.length > 0 && <BulkResults results={bulkResults} label="Bulk item add" />}
       <Box>

@@ -19,14 +19,13 @@ import {
   TableRow,
   Typography,
 } from "@mui/material";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { api } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
-import { useRefreshTick } from "../../app/context/RefreshContext";
 import { TimeBar } from "./shared";
+import { useReportLoader } from "./useReportLoader";
 
 export const AvailabilityTab = () => {
-  const tick = useRefreshTick();
   const [hours, setHours] = useState(24);
   const [data, setData] = useState<
     Array<{
@@ -46,19 +45,14 @@ export const AvailabilityTab = () => {
       api
         .getAvailability({ hours })
         .then((r) => setData(r.hosts))
-        .catch(() => {})
+        .catch((err: unknown) => {
+          console.error("Failed to load availability data:", err);
+        })
         .finally(() => setLoading(false));
     },
     [hours],
   );
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
-  useEffect(() => {
-    if (tick > 0) void load(true);
-  }, [tick]);
+  useReportLoader(load);
 
   return (
     <Stack spacing={2}>

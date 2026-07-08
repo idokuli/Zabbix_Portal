@@ -1,5 +1,4 @@
 "use client";
-import { generateId } from "../../../app/utils";
 import ClearIcon from "@mui/icons-material/Clear";
 import {
   Autocomplete,
@@ -21,6 +20,7 @@ import {
 import { useEffect, useState } from "react";
 import type { Host } from "../../../app/api";
 import { api } from "../../../app/api";
+import { generateId } from "../../../app/utils";
 import { SearchableSelect } from "../../../components/SearchableSelect";
 
 export type CustomInterval = {
@@ -334,6 +334,16 @@ export const EnabledSwitch = ({
   />
 );
 
+export const TeamTagSwitch = ({
+  value,
+  onChange,
+}: { value: boolean; onChange: (v: boolean) => void }) => (
+  <FormControlLabel
+    control={<Switch checked={value} onChange={(_, v) => onChange(v)} size="small" />}
+    label={<Typography variant="body2">Tag with my team</Typography>}
+  />
+);
+
 export const useCommonItemState = () => {
   const [delay, setDelay] = useState("1m");
   const [units, setUnits] = useState("");
@@ -341,6 +351,7 @@ export const useCommonItemState = () => {
   const [trends, setTrends] = useState("365d");
   const [description, setDescription] = useState("");
   const [enabled, setEnabled] = useState(true);
+  const [applyTeamTag, setApplyTeamTag] = useState(true);
   const [timeoutMode, setTimeoutMode] = useState<"global" | "override">("global");
   const [timeout, setTimeout] = useState("3s");
   const [customIntervals, setCustomIntervals] = useState<CustomInterval[]>([]);
@@ -359,6 +370,7 @@ export const useCommonItemState = () => {
     setTrends("365d");
     setDescription("");
     setEnabled(true);
+    setApplyTeamTag(true);
     setTimeoutMode("global");
     setTimeout("3s");
     setCustomIntervals([]);
@@ -377,6 +389,8 @@ export const useCommonItemState = () => {
     setDescription,
     enabled,
     setEnabled,
+    applyTeamTag,
+    setApplyTeamTag,
     timeoutMode,
     setTimeoutMode,
     timeout,

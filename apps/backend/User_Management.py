@@ -397,6 +397,9 @@ def list_users(team_id: int | None = None) -> list[dict]:
 
 
 def update_user_profile(user_id: int, roles: list[str], team_id: int | None) -> bool:
+    """Update roles and home team. Setting team_id also grants membership in that
+    team — otherwise the user keeps the old team's host visibility even after their
+    home team changes, since that's resolved from user_team_memberships, not team_id."""
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -405,6 +408,12 @@ def update_user_profile(user_id: int, roles: list[str], team_id: int | None) -> 
                 (roles, team_id, user_id),
             )
             updated = cur.rowcount > 0
+            if updated and team_id is not None:
+                cur.execute(
+                    """INSERT INTO user_team_memberships (user_id, team_id)
+                       VALUES (%s, %s) ON CONFLICT DO NOTHING""",
+                    (user_id, team_id),
+                )
         conn.commit()
         return updated
     except Exception as exc:
@@ -447,25 +456,26 @@ def set_team_roles(team_id: int, roles: list[str]) -> bool:
 
 def get_effective_roles(user_id: int, personal_roles: list[str]) -> list[str]:
     """Return union of a user's personal roles and all roles granted by their teams."""
-    conn = get_conn()
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT DISTINCT unnest(t.roles) AS role
-                FROM user_team_memberships utm
-                JOIN teams t ON t.id = utm.team_id
-                WHERE utm.user_id = %s AND array_length(t.roles, 1) > 0
-                """,
-                (user_id,),
-            )
-            team_roles = [r["role"] for r in cur.fetchall()]
-        return list(set(personal_roles + team_roles))
+        conn = get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT DISTINCT unnest(t.roles) AS role
+                    FROM user_team_memberships utm
+                    JOIN teams t ON t.id = utm.team_id
+                    WHERE utm.user_id = %s AND array_length(t.roles, 1) > 0
+                    """,
+                    (user_id,),
+                )
+                team_roles = [r["role"] for r in cur.fetchall()]
+            return list(set(personal_roles + team_roles))
+        finally:
+            conn.close()
     except Exception as exc:
         logger.debug("get_effective_roles failed: %s", exc)
         return personal_roles
-    finally:
-        conn.close()
 
 
 def get_team_hostnames(team_id: int) -> set[str]:

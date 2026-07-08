@@ -1,4 +1,5 @@
 import logging
+import time
 from Database import get_conn
 from Zabbix_Base import Zabbix_Base
 
@@ -324,9 +325,7 @@ class Alert_Manager(Zabbix_Base):
                     )
                     svc_map = {}
 
-                import time as _time
-
-                now = _time.time()
+                now = time.time()
                 for rule in service_rules:
                     svc = svc_map.get(rule["item_id"])
                     if not svc:

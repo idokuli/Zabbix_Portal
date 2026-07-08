@@ -11,3 +11,6 @@ bcrypt
 python-jose[cryptography]
 slowapi
 ldap3
+pytest
+pytest-cov
+httpx

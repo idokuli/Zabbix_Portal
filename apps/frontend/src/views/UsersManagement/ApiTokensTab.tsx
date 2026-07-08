@@ -32,6 +32,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
+import { fmtTs } from "../../app/utils";
 import { ConfirmDelete } from "./shared";
 
 // ── API Tokens ────────────────────────────────────────────────────────
@@ -46,11 +47,6 @@ type ApiToken = {
   created_at: number;
   lastaccess: number;
 };
-
-const fmtTs = (ts: number) =>
-  ts
-    ? new Date(ts * 1000).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })
-    : "—";
 
 export const ApiTokensTab = ({
   showToast,

@@ -24,8 +24,8 @@ import {
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
-import type { StoredNotif } from "../../app/api/types";
 import { api } from "../../app/api";
+import type { StoredNotif } from "../../app/api/types";
 import { TabHeader } from "../../app/components/TabHeader";
 import { SeverityChip, formatAge } from "../Metrics/shared";
 

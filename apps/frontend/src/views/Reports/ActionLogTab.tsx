@@ -18,17 +18,16 @@ import {
   TableRow,
   Typography,
 } from "@mui/material";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { api } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
-import { useRefreshTick } from "../../app/context/RefreshContext";
 import { TimeBar, fmtTs } from "./shared";
+import { useReportLoader } from "./useReportLoader";
 
 const STATUS_COLORS: Record<number, string> = { 0: "#22C55E", 1: "#F59E0B", 2: "#EF4444" };
 const STATUS_LABELS: Record<number, string> = { 0: "Sent", 1: "In progress", 2: "Failed" };
 
 export const ActionLogTab = () => {
-  const tick = useRefreshTick();
   const [hours, setHours] = useState(24);
   const [data, setData] = useState<
     Array<{
@@ -50,19 +49,14 @@ export const ActionLogTab = () => {
       api
         .getActionLog({ limit: 200, hours })
         .then((r) => setData(r.entries))
-        .catch(() => {})
+        .catch((err: unknown) => {
+          console.error("Failed to load action log:", err);
+        })
         .finally(() => setLoading(false));
     },
     [hours],
   );
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
-  useEffect(() => {
-    if (tick > 0) void load(true);
-  }, [tick]);
+  useReportLoader(load);
 
   return (
     <Stack spacing={2}>

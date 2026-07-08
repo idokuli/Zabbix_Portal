@@ -1,5 +1,4 @@
 "use client";
-import { generateId } from "../../../app/utils";
 import ClearIcon from "@mui/icons-material/Clear";
 import {
   Box,
@@ -16,6 +15,7 @@ import {
 import { useState } from "react";
 import { api } from "../../../app/api";
 import type { Host } from "../../../app/api";
+import { generateId } from "../../../app/utils";
 import type { BulkResult } from "../shared";
 import { BulkResults, httpMethods } from "../shared";
 import {
@@ -26,6 +26,7 @@ import {
   InlineItemsList,
   MultiHostSelect,
   type PanelProps,
+  TeamTagSwitch,
   useCommonItemState,
 } from "./shared";
 
@@ -42,7 +43,7 @@ export const HttpItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
   const [postBody, setPostBody] = useState("");
   const [postBodyType, setPostBodyType] = useState(0);
   const [retrieveMode, setRetrieveMode] = useState(0);
-  const [valueType, setValueType] = useState(3);
+  const [valueType, setValueType] = useState(4);
   const [headers, setHeaders] = useState<{ _key: string; name: string; value: string }[]>([]);
   const [queryFields, setQueryFields] = useState<{ _key: string; name: string; value: string }[]>(
     [],
@@ -91,6 +92,7 @@ export const HttpItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
           follow_redirects: followRedirects,
           posts: postBody,
           value_type: valueType,
+          apply_team_tag: common.applyTeamTag,
         });
         setBulkResults(result.results);
         showToast(result.message, result.results.some((r) => r.error) ? "error" : "success");
@@ -130,6 +132,7 @@ export const HttpItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
           history: common.history,
           trends: common.trends,
           description: common.description || undefined,
+          apply_team_tag: common.applyTeamTag,
         });
         showToast("Item added successfully.", "success");
         setItemName("");
@@ -262,14 +265,9 @@ export const HttpItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
           onChange={(e) => setValueType(Number(e.target.value))}
           fullWidth
           helperText={
-            valueType === 3
-              ? "Stores HTTP response code (e.g. 200)"
-              : valueType === 0
-                ? "Stores response time in seconds"
-                : "Stores full response body text"
+            valueType === 0 ? "Stores response time in seconds" : "Stores full response body text"
           }
         >
-          <MenuItem value={3}>Integer — response code</MenuItem>
           <MenuItem value={0}>Float — response time (s)</MenuItem>
           <MenuItem value={4}>Text — response body</MenuItem>
         </TextField>
@@ -299,16 +297,14 @@ export const HttpItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
         />
       </Stack>
 
-      {valueType === 3 && (
-        <TextField
-          size="small"
-          label="Expected status codes"
-          value={statusCodes}
-          onChange={(e) => setStatusCodes(e.target.value)}
-          placeholder="200"
-          helperText="Comma-separated, e.g. 200,201,301"
-        />
-      )}
+      <TextField
+        size="small"
+        label="Required status codes"
+        value={statusCodes}
+        onChange={(e) => setStatusCodes(e.target.value)}
+        placeholder="200"
+        helperText="Comma-separated, e.g. 200,201,301. The item becomes unsupported if Zabbix gets a different code — alert on that state to catch bad responses."
+      />
 
       <Stack direction="row" spacing={2} flexWrap="wrap">
         <FormControlLabel
@@ -545,6 +541,7 @@ export const HttpItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
           label={<Typography variant="body2">Enable trapping</Typography>}
         />
         <EnabledSwitch value={enabled} onChange={setEnabled} />
+        <TeamTagSwitch value={common.applyTeamTag} onChange={common.setApplyTeamTag} />
       </Stack>
 
       <Divider />

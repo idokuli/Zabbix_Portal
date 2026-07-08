@@ -12,15 +12,17 @@ export const hostsApi = {
     template?: string;
     proxyid?: string;
     group_ids?: string[];
+    apply_team_tag?: boolean;
   }) =>
     apiFetch<{ message: string; hostid: string }>("/hosts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     }),
-  bulkCreateHosts: (file: File) => {
+  bulkCreateHosts: (file: File, applyTeamTag = true) => {
     const body = new FormData();
     body.append("file", file);
+    body.append("apply_team_tag", String(applyTeamTag));
     return apiFetch<{
       message: string;
       total_rows: number;

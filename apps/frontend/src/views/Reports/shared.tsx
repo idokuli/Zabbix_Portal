@@ -1,10 +1,7 @@
 "use client";
 import { Box, Button } from "@mui/material";
 
-export const fmtTs = (ts: number) =>
-  ts
-    ? new Date(ts * 1000).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })
-    : "—";
+export { fmtTs } from "../../app/utils";
 
 export const TIME_OPTS = [
   { label: "1h", hours: 1 },

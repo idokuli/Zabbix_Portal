@@ -55,7 +55,7 @@ class BulkItemsMixin:
                     verify_peer=item_config.get("verify_peer", True),
                     follow_redirects=item_config.get("follow_redirects", True),
                     posts=item_config.get("posts", ""),
-                    value_type=item_config.get("value_type", 3),
+                    value_type=item_config.get("value_type", 4),
                     team_name=item_config.get("team_name", ""),
                     authtype=item_config.get("authtype", 0),
                     username=item_config.get("username", ""),

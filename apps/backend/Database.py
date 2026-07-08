@@ -13,10 +13,11 @@ logger = logging.getLogger(__name__)
 dotenv_path = Path(__file__).resolve().parent / ".env"
 load_dotenv(dotenv_path=dotenv_path, override=False)
 
-_DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres:postgres@localhost:5432/overwatch",
-)
+_DATABASE_URL = os.getenv("DATABASE_URL")
+if not _DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL environment variable must be set before starting the server."
+    )
 
 _pool: psycopg2.pool.ThreadedConnectionPool | None = None
 
@@ -39,8 +40,8 @@ class _PooledConn:
         try:
             if not self._conn.closed:
                 self._conn.rollback()  # ensure clean state before returning
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Connection rollback on return to pool failed: %s", exc)
         self._pool.putconn(self._conn)
 
 

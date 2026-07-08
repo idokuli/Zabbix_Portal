@@ -1,12 +1,12 @@
 import logging
 from io import BytesIO
 import pandas as pd
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 import User_Management as um
 from Auth import get_current_user, require_admin, require_operator
-from api.deps import live_team_id, team_hostname_filter
+from api.deps import live_team_id, resolve_team, team_hostname_filter, team_tag
 from api.managers import host_bot
 from api.deps import zabbix_call
 from api.schemas import (
@@ -30,7 +30,7 @@ def get_all_hosts(current_user: dict = Depends(get_current_user)):
     team_id = live_team_id(current_user)
     if not team_id:
         return {"count": 0, "hosts": []}
-    team_name = um.get_team_name(team_id)
+    team_name = resolve_team(current_user)
     assigned = um.get_team_hostnames(team_id)
 
     # A host is visible if the DB assignment OR the Zabbix team tag matches
@@ -97,7 +97,7 @@ def create_host(data: HostRequest, current_user: dict = Depends(require_operator
         raise HTTPException(status_code=400, detail=err or "Failed to create host.")
     team_id = live_team_id(current_user)
     if team_id:
-        team_name = um.get_team_name(team_id)
+        team_name = team_tag(current_user, data.apply_team_tag)
         if not um.assign_host(team_id, data.hostname):
             logger.warning(
                 "assign_host failed for %r team_id=%s", data.hostname, team_id
@@ -117,6 +117,7 @@ def create_host(data: HostRequest, current_user: dict = Depends(require_operator
 )
 async def bulk_create_hosts(
     file: UploadFile = File(...),
+    apply_team_tag: bool = Form(True),
     current_user: dict = Depends(require_operator),
 ):
     """Creates multiple hosts from a CSV/XLSX file with columns: hostname, ip, template(optional)."""
@@ -159,7 +160,7 @@ async def bulk_create_hosts(
 
     default_template = "Linux by Zabbix agent"
     team_id = live_team_id(current_user)
-    team_name = um.get_team_name(team_id) if team_id else None
+    team_name = team_tag(current_user, apply_team_tag) if team_id else None
 
     def _process() -> tuple[list[dict], list[dict]]:
         created: list[dict] = []
@@ -291,7 +292,7 @@ def delete_host(hostname: str, current_user: dict = Depends(require_operator)):
         # Check ownership via DB assignment OR Zabbix team tag
         in_db = hostname in um.get_team_hostnames(team_id)
         if not in_db:
-            team_name = um.get_team_name(team_id)
+            team_name = resolve_team(current_user)
             in_zabbix = team_name and host_bot.get_host_team(hostname) == team_name
             if not in_zabbix:
                 raise HTTPException(

@@ -22,11 +22,11 @@ import {
   TableRow,
   Typography,
 } from "@mui/material";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { api } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
-import { useRefreshTick } from "../../app/context/RefreshContext";
 import { TimeBar, fmtTs } from "./shared";
+import { useReportLoader } from "./useReportLoader";
 
 const SEV_COLORS: Record<number, string> = {
   5: "#B71C1C",
@@ -38,7 +38,6 @@ const SEV_COLORS: Record<number, string> = {
 };
 
 export const TopTriggersTab = () => {
-  const tick = useRefreshTick();
   const [hours, setHours] = useState(24);
   const [severityMin, setSeverityMin] = useState(0);
   const [data, setData] = useState<
@@ -60,19 +59,14 @@ export const TopTriggersTab = () => {
       api
         .getTopTriggers({ limit: 100, severity_min: severityMin, hours })
         .then((r) => setData(r.triggers))
-        .catch(() => {})
+        .catch((err: unknown) => {
+          console.error("Failed to load top triggers:", err);
+        })
         .finally(() => setLoading(false));
     },
     [hours, severityMin],
   );
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
-  useEffect(() => {
-    if (tick > 0) void load(true);
-  }, [tick]);
+  useReportLoader(load);
 
   return (
     <Stack spacing={2}>

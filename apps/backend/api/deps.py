@@ -1,5 +1,6 @@
 """Shared FastAPI dependencies and route helpers."""
 
+import logging
 from contextlib import contextmanager
 from typing import Generator
 
@@ -8,11 +9,14 @@ from Database import get_conn
 from fastapi import HTTPException
 from Zabbix_Base import zabbix_err  # re-exported for route imports
 
+logger = logging.getLogger(__name__)
+
 __all__ = [
     "zabbix_err",
     "live_team_id",
     "team_hostname_filter",
     "resolve_team",
+    "team_tag",
     "zabbix_call",
 ]
 
@@ -23,7 +27,8 @@ def live_team_id(current_user: dict) -> int | None:
         user_id = int(current_user.get("sub", 0))
         live = um.get_user_by_id(user_id) if user_id else None
         return (live.get("team_id") if live else None) or current_user.get("team_id")
-    except Exception:
+    except Exception as exc:
+        logger.debug("live_team_id DB lookup failed, falling back to JWT: %s", exc)
         return current_user.get("team_id")
 
 
@@ -31,6 +36,12 @@ def resolve_team(current_user: dict) -> str:
     """Resolve the caller's team name, or empty string for root/teamless users."""
     team_id = live_team_id(current_user)
     return (um.get_team_name(team_id) if team_id else "") or ""
+
+
+def team_tag(current_user: dict, apply_team_tag: bool) -> str:
+    """Resolve the caller's team name for auto-tagging newly created objects,
+    unless the caller opted out via apply_team_tag=False."""
+    return resolve_team(current_user) if apply_team_tag else ""
 
 
 def team_hostname_filter(current_user: dict) -> set[str] | None:

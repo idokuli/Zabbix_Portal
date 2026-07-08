@@ -57,10 +57,7 @@ export type DiscoveryRule = {
   check_count: number;
 };
 
-export const fmtTs = (ts: number) =>
-  ts
-    ? new Date(ts * 1000).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })
-    : "—";
+export { fmtTs } from "../../app/utils";
 
 export const StatusChip = ({
   status,
