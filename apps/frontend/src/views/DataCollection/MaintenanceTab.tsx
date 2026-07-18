@@ -57,7 +57,9 @@ export const MaintenanceTab = ({
 
   const load = useCallback(
     async (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       try {
         const [mr, gr] = await Promise.all([api.listMaintenances(), api.listHostGroups()]);
         setItems(mr.maintenances);
@@ -77,7 +79,9 @@ export const MaintenanceTab = ({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
   useEffect(() => {
-    if (tick > 0) void load(true);
+    if (tick > 0) {
+      void load(true);
+    }
   }, [tick]);
 
   const onSave = async () => {
@@ -104,7 +108,9 @@ export const MaintenanceTab = ({
   };
 
   const onDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget) {
+      return;
+    }
     try {
       await api.deleteMaintenance(deleteTarget.maintenanceid);
       showToast("Maintenance deleted.", "success");

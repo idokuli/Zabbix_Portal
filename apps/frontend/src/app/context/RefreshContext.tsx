@@ -18,7 +18,9 @@ export const RefreshProvider = ({ children }: PropsWithChildren) => {
   }, []);
 
   useEffect(() => {
-    if (intervalSec <= 0) return;
+    if (intervalSec <= 0) {
+      return;
+    }
     const id = setInterval(() => setTick((t) => t + 1), intervalSec * 1000);
     return () => clearInterval(id);
   }, [intervalSec]);

@@ -56,7 +56,7 @@ export const SlaTab = ({
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Sla | null>(null);
   const [reportSla, setReportSla] = useState<Sla | null>(null);
-  const [reportData, setReportData] = useState<Array<Record<string, unknown>>>([]);
+  const [reportData, setReportData] = useState<Record<string, unknown>[]>([]);
   const [reportLoading, setReportLoading] = useState(false);
   const [form, setForm] = useState({
     name: "",
@@ -68,7 +68,9 @@ export const SlaTab = ({
 
   const load = useCallback(
     async (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       try {
         const r = await api.listSlas();
         setItems(r.slas);
@@ -86,7 +88,9 @@ export const SlaTab = ({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
   useEffect(() => {
-    if (tick > 0) void load(true);
+    if (tick > 0) {
+      void load(true);
+    }
   }, [tick]);
 
   const onSave = async () => {
@@ -118,7 +122,9 @@ export const SlaTab = ({
   };
 
   const onDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget) {
+      return;
+    }
     try {
       await api.deleteSla(deleteTarget.slaid);
       showToast("SLA deleted.", "success");
@@ -197,7 +203,7 @@ export const SlaTab = ({
                       variant="body2"
                       sx={{
                         fontWeight: 700,
-                        color: s.slo >= 99.9 ? "#22C55E" : s.slo >= 99 ? "#F59E0B" : "#EF4444",
+                        color: s.slo >= 99.9 ? "#2EA043" : s.slo >= 99 ? "#DBA243" : "#E45959",
                       }}
                     >
                       {s.slo}%

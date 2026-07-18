@@ -181,9 +181,7 @@ def test_push_host_to_team_host_not_found(sync):
 
 def test_push_host_to_team_already_member_skips_update(sync):
     sync._get_or_create_hostgroup = MagicMock(return_value="10")
-    sync.zapi.host.get.return_value = [
-        {"hostid": "1", "hostgroups": [{"groupid": "10"}]}
-    ]
+    sync.zapi.host.get.return_value = [{"hostid": "1", "hostgroups": [{"groupid": "10"}]}]
     sync.push_host_to_team("myhost", "TeamA")
     sync.zapi.host.update.assert_not_called()
 

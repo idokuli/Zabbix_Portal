@@ -40,7 +40,7 @@ class RolesMixin:
             ]
         except Exception as e:
             logger.exception("list_roles failed")
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def create_role(
         self,
@@ -74,7 +74,7 @@ class RolesMixin:
             result = self.zapi.role.create(**params)
             return result["roleids"][0]
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def update_role(self, roleid: str, name: str) -> bool:
         if not self.zapi:
@@ -83,7 +83,7 @@ class RolesMixin:
             self.zapi.role.update(roleid=roleid, name=name)
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def delete_role(self, roleid: str) -> bool:
         if not self.zapi:
@@ -92,4 +92,4 @@ class RolesMixin:
             self.zapi.role.delete([roleid])
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e

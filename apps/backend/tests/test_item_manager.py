@@ -151,6 +151,7 @@ def test_list_all_items_zapi_none(mgr):
 
 
 def test_get_all_item_keys(mgr):
+    mgr.zapi.host.get.return_value = [{"hostid": "10"}]
     mgr.zapi.template.get.return_value = [{"templateid": "99", "name": "Linux"}]
     mgr.zapi.item.get.return_value = [
         {
@@ -163,15 +164,17 @@ def test_get_all_item_keys(mgr):
             "history": "90d",
             "trends": "365d",
             "description": "",
+            "type": "0",
         }
     ]
-    result = mgr.get_all_item_keys()
-    keys = (
-        [item["key_"] for item in result]
-        if result and isinstance(result[0], dict)
-        else result
-    )
+    result = mgr.get_all_item_keys("myhost")
+    keys = [item["key_"] for item in result] if result and isinstance(result[0], dict) else result
     assert "system.cpu.load" in keys or any("system.cpu.load" in str(r) for r in result)
+
+
+def test_get_all_item_keys_host_not_found(mgr):
+    mgr.zapi.host.get.return_value = []
+    assert mgr.get_all_item_keys("missinghost") == []
 
 
 # ── list_template_items ───────────────────────────────────────────────────────
@@ -188,9 +191,7 @@ def test_list_template_items(mgr):
 
 def test_add_item_to_template_success(mgr):
     mgr.zapi.item.create.return_value = {"itemids": ["42"]}
-    item_id, err = mgr.add_item_to_template(
-        "99", "CPU", "system.cpu.load", type_=0, value_type=3
-    )
+    item_id, err = mgr.add_item_to_template("99", "CPU", "system.cpu.load", type_=0, value_type=3)
     assert item_id == "42"
     assert err is None
 
@@ -274,9 +275,7 @@ def test_add_snmp_item_uses_first_iface_if_no_snmp(mgr):
     mgr.zapi.host.get.return_value = [{"hostid": "10"}]
     mgr.zapi.hostinterface.get.return_value = [{"interfaceid": "9", "type": "1"}]
     mgr.zapi.item.create.return_value = {"itemids": ["31"]}
-    item_id, err = mgr.add_snmp_item(
-        "h1", "SNMP", "snmp.key", "1.3.6.1.2.1.1.1.0", value_type=4
-    )
+    item_id, err = mgr.add_snmp_item("h1", "SNMP", "snmp.key", "1.3.6.1.2.1.1.1.0", value_type=4)
     assert item_id == "31"
 
 
@@ -389,7 +388,7 @@ def test_add_jmx_item_success(mgr):
 
 
 def test_add_trigger_success(mgr):
-    # Signature: add_trigger(hostname, item_key, trigger_name, threshold, operator, priority)
+    # add_trigger takes hostname, item_key, trigger_name, threshold, operator, priority (in that order)
     mgr.zapi.host.get.return_value = [{"hostid": "10"}]
     mgr.zapi.trigger.create.return_value = {"triggerids": ["100"]}
     trigger_id, err = mgr.add_trigger("h1", "system.cpu.load", "High CPU", "90", ">", 4)
@@ -502,9 +501,7 @@ def test_bulk_add_items_success(mgr):
 def test_add_string_trigger_success(mgr):
     mgr.zapi.host.get.return_value = [{"hostid": "10"}]
     mgr.zapi.trigger.create.return_value = {"triggerids": ["200"]}
-    trigger_id, err = mgr.add_string_trigger(
-        "h1", "log[app.log]", "Error found", "ERROR"
-    )
+    trigger_id, err = mgr.add_string_trigger("h1", "log[app.log]", "Error found", "ERROR")
     assert trigger_id == "200"
     assert err is None
 
@@ -525,9 +522,7 @@ def test_add_string_trigger_zapi_none(mgr):
 def test_add_string_trigger_notlike(mgr):
     mgr.zapi.host.get.return_value = [{"hostid": "10"}]
     mgr.zapi.trigger.create.return_value = {"triggerids": ["201"]}
-    trigger_id, err = mgr.add_string_trigger(
-        "h1", "log[f]", "No OK", "OK", match_type="notlike"
-    )
+    trigger_id, err = mgr.add_string_trigger("h1", "log[f]", "No OK", "OK", match_type="notlike")
     assert trigger_id == "201"
 
 
@@ -543,9 +538,7 @@ def test_add_string_trigger_classic_syntax(mgr):
 
 
 def test_get_trigger_hostname_found(mgr):
-    mgr.zapi.trigger.get.return_value = [
-        {"triggerid": "1", "hosts": [{"host": "server1"}]}
-    ]
+    mgr.zapi.trigger.get.return_value = [{"triggerid": "1", "hosts": [{"host": "server1"}]}]
     result = mgr.get_trigger_hostname("1")
     assert result == "server1"
 
@@ -574,9 +567,7 @@ def test_get_trigger_hostname_error(mgr):
 def test_add_change_trigger_success(mgr):
     mgr.zapi.host.get.return_value = [{"hostid": "10"}]
     mgr.zapi.trigger.create.return_value = {"triggerids": ["300"]}
-    trigger_id, err = mgr.add_change_trigger(
-        "h1", "system.hostname", "Hostname changed"
-    )
+    trigger_id, err = mgr.add_change_trigger("h1", "system.hostname", "Hostname changed")
     assert trigger_id == "300"
     assert err is None
 
@@ -608,9 +599,7 @@ def test_add_change_trigger_classic_syntax(mgr):
 def test_add_file_age_trigger_success(mgr):
     mgr.zapi.host.get.return_value = [{"hostid": "10"}]
     mgr.zapi.trigger.create.return_value = {"triggerids": ["400"]}
-    trigger_id, err = mgr.add_file_age_trigger(
-        "h1", "/var/log/app.log", "File stale", 60
-    )
+    trigger_id, err = mgr.add_file_age_trigger("h1", "/var/log/app.log", "File stale", 60)
     assert trigger_id == "400"
     assert err is None
 
@@ -740,9 +729,7 @@ def test_add_external_item_zapi_none(mgr):
 def test_add_calculated_item_ok(mgr):
     _mock_host(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["103"]}
-    item_id, err = mgr.add_calculated_item(
-        "h1", "Calc", "calc.key", "avg(//cpu.load,1m)"
-    )
+    item_id, err = mgr.add_calculated_item("h1", "Calc", "calc.key", "avg(//cpu.load,1m)")
     assert item_id == "103"
     assert err is None
 
@@ -912,7 +899,5 @@ def test_add_db_agent2_item_host_not_found(mgr):
 
 def test_add_db_agent2_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_db_agent2_item(
-        "h1", "MySQL", "k", "mysql", "SELECT 1", "localhost"
-    )
+    item_id, err = mgr.add_db_agent2_item("h1", "MySQL", "k", "mysql", "SELECT 1", "localhost")
     assert item_id is None

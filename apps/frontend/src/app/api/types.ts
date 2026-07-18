@@ -29,14 +29,16 @@ export type MetricWidgetConfig = {
   lineColor?: string;
 };
 
+export type DashboardScope = "user" | "team" | "all";
+
 export type DashboardLayoutData = {
   widgets: WidgetConfig[];
-  scope: "user" | "team";
+  scope: DashboardScope;
 };
 
 export type MetricLayoutData = {
   widgets: MetricWidgetConfig[];
-  scope: "user" | "team";
+  scope: DashboardScope;
 };
 
 export type DashboardPageKind = "dashboard" | "metrics";
@@ -45,6 +47,8 @@ export type DashboardPage = {
   page: string;
   name: string;
   is_default: boolean;
+  team_id?: number;
+  team_name?: string;
 };
 
 export type ProxyConfig = {

@@ -5,6 +5,7 @@ import type { Chart as ChartJS } from "chart.js";
 import { useEffect, useRef, useState } from "react";
 import { Line } from "react-chartjs-2";
 import { type AlertEvent, type GraphData, type Problem, api } from "../../app/api";
+import { formatSizeValue, isByteUnit } from "../../app/utils";
 import { PERIOD_OPTIONS, formatRangeTime, formatTimestamp } from "./shared";
 
 // Kibana/Elastic-inspired palette — vibrant on dark backgrounds
@@ -39,6 +40,405 @@ const ALERT_SEV_LABELS: Record<number, string> = {
 
 type GradientCtx = {
   chart: { ctx: CanvasRenderingContext2D; chartArea?: { top: number; bottom: number } };
+};
+
+type DashEventItem = {
+  x: number;
+  y: number;
+  color: string;
+  sevLabel: string;
+  actualValue: number;
+};
+
+type DashProblemItem = { x: number; y: number; color: string; sevLabel: string; name: string };
+
+const fmtVal = (v: number | null, units: string): string => {
+  if (v === null) {
+    return "—";
+  }
+  if (isByteUnit(units)) {
+    return formatSizeValue(v, units);
+  }
+  const abs = Math.abs(v);
+  const u = units && units !== "%" ? ` ${units}` : "";
+  if (abs >= 1_000_000) {
+    return `${(v / 1_000_000).toFixed(2)}M${u}`;
+  }
+  if (abs >= 1_000) {
+    return `${(v / 1_000).toFixed(1)}K${u}`;
+  }
+  return `${v % 1 === 0 ? v : v.toFixed(2)}${u}`;
+};
+
+// Map alert events to nearest data point per series using clock proximity.
+// Clock-keyed so results stay accurate after scale format changes.
+const buildEventItems = (
+  data: GraphData,
+  alertEvents: AlertEvent[],
+  rangeFrom: number,
+  nowSec: number,
+): DashEventItem[] => {
+  const clockMap = new Map<number, DashEventItem & { severity: number }>();
+  for (const e of alertEvents) {
+    if (!data.series.some((s) => s.itemid === e.item_id)) {
+      continue;
+    }
+    if (e.fired_at < rangeFrom || e.fired_at > nowSec) {
+      continue;
+    }
+    const matchingSeries = data.series.find((s) => s.itemid === e.item_id);
+    if (!matchingSeries || matchingSeries.points.length === 0) {
+      continue;
+    }
+    const nearest = matchingSeries.points.reduce((best, p) =>
+      Math.abs(p.clock - e.fired_at) < Math.abs(best.clock - e.fired_at) ? p : best,
+    );
+    const existing = clockMap.get(nearest.clock);
+    if (!existing || e.severity > existing.severity) {
+      clockMap.set(nearest.clock, {
+        x: e.fired_at,
+        y: nearest.value,
+        color: ALERT_SEV_COLORS[e.severity] ?? "#F44336",
+        sevLabel: ALERT_SEV_LABELS[e.severity] ?? "Alert",
+        actualValue: e.actual_value,
+        severity: e.severity,
+      });
+    }
+  }
+  return [...clockMap.values()];
+};
+
+// Native Zabbix problems aren't tied to a single item, so anchor them to
+// the graph's primary (first) series — matched by clock proximity.
+const buildProblemItems = (
+  data: GraphData,
+  problems: Problem[],
+  rangeFrom: number,
+  nowSec: number,
+): DashProblemItem[] => {
+  const primarySeries = data.series[0];
+  if (!primarySeries || primarySeries.points.length === 0) {
+    return [];
+  }
+  const clockMap = new Map<number, DashProblemItem & { severity: number }>();
+  for (const p of problems) {
+    if (p.clock < rangeFrom || p.clock > nowSec) {
+      continue;
+    }
+    const nearest = primarySeries.points.reduce((best, pt) =>
+      Math.abs(pt.clock - p.clock) < Math.abs(best.clock - p.clock) ? pt : best,
+    );
+    const existing = clockMap.get(nearest.clock);
+    if (!existing || p.severity > existing.severity) {
+      clockMap.set(nearest.clock, {
+        x: p.clock,
+        y: nearest.value,
+        color: ALERT_SEV_COLORS[p.severity] ?? "#F44336",
+        sevLabel: p.severity_name,
+        name: p.name,
+        severity: p.severity,
+      });
+    }
+  }
+  return [...clockMap.values()];
+};
+
+const formatDashTooltipTitle = (items: { raw: unknown }[], minutes: number): string => {
+  const raw = items[0]?.raw as { x: number } | undefined;
+  if (!raw) {
+    return "";
+  }
+  const d = new Date(raw.x * 1000);
+  if (minutes >= 1440) {
+    return d.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+  }
+  return d.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+};
+
+const computeSeriesStats = (series: GraphData["series"]) =>
+  series.map((s) => {
+    const vals = s.points.map((p) => p.value);
+    if (vals.length === 0) {
+      return { last: null, min: null, avg: null, max: null, units: s.units };
+    }
+    const min = Math.min(...vals);
+    const max = Math.max(...vals);
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const last = vals[vals.length - 1];
+    return { last, min, avg, max, units: s.units || "" };
+  });
+
+const NoDashDataFallback = ({
+  minutes,
+  chartBg,
+  onPeriodChange,
+}: {
+  minutes: number;
+  chartBg: string;
+  onPeriodChange?: (delta: number) => void;
+}) => {
+  const currentIdx = PERIOD_OPTIONS.findIndex((o) => o.minutes === minutes);
+  const largerOptions = currentIdx >= 0 ? PERIOD_OPTIONS.slice(currentIdx + 1) : [];
+  return (
+    <Box
+      sx={{
+        height: "100%",
+        bgcolor: chartBg,
+        borderRadius: 1.5,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 1.5,
+        p: 3,
+      }}
+    >
+      <Typography sx={{ fontSize: "0.85rem", fontWeight: 600, color: "text.secondary" }}>
+        No data in the last {PERIOD_OPTIONS[currentIdx]?.label ?? `${minutes} min`}
+      </Typography>
+      <Typography
+        sx={{ fontSize: "0.75rem", color: "text.disabled", textAlign: "center", maxWidth: 240 }}
+      >
+        No recordings in this window. Try a wider range to find when data was last collected.
+      </Typography>
+      {largerOptions.length > 0 && onPeriodChange && (
+        <Box
+          sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", justifyContent: "center", mt: 0.5 }}
+        >
+          {largerOptions.map((opt, i) => (
+            <Chip
+              key={opt.label}
+              label={opt.label}
+              size="small"
+              clickable
+              variant="outlined"
+              color="primary"
+              onClick={() => onPeriodChange(i + 1)}
+              sx={{ fontSize: "0.72rem" }}
+            />
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+};
+
+const buildDashChartDatasets = ({
+  series,
+  lineColor,
+  sparsePoints,
+  eventItems,
+  problemItems,
+}: {
+  series: GraphData["series"];
+  lineColor: string | undefined;
+  sparsePoints: boolean;
+  eventItems: DashEventItem[];
+  problemItems: DashProblemItem[];
+}) => [
+  ...series.map((s, idx) => {
+    const color = idx === 0 && lineColor ? lineColor : CHART_COLORS[idx % CHART_COLORS.length];
+    const pts = s.points.map((p) => ({ x: p.clock, y: p.value }));
+    return {
+      label: s.name,
+      data: pts,
+      borderColor: color,
+      backgroundColor: (context: GradientCtx) => {
+        const { ctx: c, chartArea } = context.chart;
+        if (!chartArea) {
+          return `${color}30`;
+        }
+        const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+        g.addColorStop(0, `${color}70`);
+        g.addColorStop(0.55, `${color}25`);
+        g.addColorStop(1, `${color}00`);
+        return g;
+      },
+      borderWidth: sparsePoints ? 2.5 : 2,
+      pointRadius: sparsePoints ? 4 : 0,
+      pointBackgroundColor: color,
+      pointBorderColor: "#fff",
+      pointBorderWidth: sparsePoints ? 1.5 : 0,
+      pointHoverRadius: sparsePoints ? 6 : 5,
+      pointHoverBackgroundColor: color,
+      pointHoverBorderColor: "#fff",
+      pointHoverBorderWidth: 2,
+      tension: 0.3,
+      fill: true,
+      spanGaps: true,
+    };
+  }),
+  ...(eventItems.length > 0
+    ? [
+        {
+          label: "Alert fired",
+          data: eventItems,
+          borderColor: "transparent",
+          backgroundColor: "transparent",
+          pointStyle: "circle" as const,
+          pointRadius: 8,
+          pointHoverRadius: 10,
+          pointBackgroundColor: eventItems.map((e) => e.color),
+          pointBorderColor: "#fff",
+          pointBorderWidth: 2,
+          showLine: false,
+          fill: false,
+          spanGaps: false,
+        },
+      ]
+    : []),
+  ...(problemItems.length > 0
+    ? [
+        {
+          label: "Problem",
+          data: problemItems,
+          borderColor: "transparent",
+          backgroundColor: "transparent",
+          pointStyle: "triangle" as const,
+          pointRadius: 8,
+          pointHoverRadius: 10,
+          pointBackgroundColor: problemItems.map((p) => p.color),
+          pointBorderColor: "#fff",
+          pointBorderWidth: 2,
+          showLine: false,
+          fill: false,
+          spanGaps: false,
+        },
+      ]
+    : []),
+];
+
+type SeriesStat = {
+  last: number | null;
+  min: number | null;
+  avg: number | null;
+  max: number | null;
+  units: string;
+};
+
+const SeriesStatRow = ({
+  series,
+  stat,
+  color,
+  multiSeries,
+}: {
+  series: GraphData["series"][number];
+  stat: SeriesStat;
+  color: string;
+  multiSeries: boolean;
+}) => (
+  <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flex: 1, minWidth: 0 }}>
+    <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: color, flexShrink: 0 }} />
+    {multiSeries && (
+      <Typography
+        noWrap
+        sx={{ fontSize: "0.68rem", color: "text.secondary", minWidth: 0, flexShrink: 1 }}
+      >
+        {series.name}
+      </Typography>
+    )}
+    {(["Last", "Min", "Avg", "Max"] as const).map((label, i) => {
+      const val = [stat.last, stat.min, stat.avg, stat.max][i];
+      return (
+        <Box key={label} sx={{ display: "flex", alignItems: "baseline", gap: 0.4 }}>
+          <Typography
+            sx={{
+              fontSize: "0.62rem",
+              color: "text.disabled",
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+            }}
+          >
+            {label}
+          </Typography>
+          <Typography
+            sx={{
+              fontSize: "0.75rem",
+              fontWeight: 600,
+              color: label === "Last" ? color : "text.primary",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {fmtVal(val ?? null, stat.units)}
+          </Typography>
+        </Box>
+      );
+    })}
+  </Box>
+);
+
+const SeriesStatsBar = ({
+  series,
+  seriesStats,
+  rangeFrom,
+  nowSec,
+  isDark,
+}: {
+  series: GraphData["series"];
+  seriesStats: SeriesStat[];
+  rangeFrom: number;
+  nowSec: number;
+  isDark: boolean;
+}) => (
+  <Box
+    sx={{
+      borderTop: "1px solid",
+      borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)",
+      px: 1.5,
+      py: 0.75,
+      display: "flex",
+      flexDirection: "column",
+      gap: 0.5,
+    }}
+  >
+    <Typography sx={{ fontSize: "0.65rem", color: "text.disabled", letterSpacing: "0.02em" }}>
+      {formatRangeTime(rangeFrom)} → {formatRangeTime(nowSec)}
+    </Typography>
+    {series.map((s, idx) => (
+      <SeriesStatRow
+        key={s.itemid}
+        series={s}
+        stat={seriesStats[idx] as SeriesStat}
+        color={CHART_COLORS[idx % CHART_COLORS.length] as string}
+        multiSeries={series.length > 1}
+      />
+    ))}
+  </Box>
+);
+
+const formatDashTooltipLabel = (
+  ctx: { dataset: { label?: string }; raw: unknown; parsed: { y: number | null } },
+  eventItems: DashEventItem[],
+  problemItems: DashProblemItem[],
+  unitsLabel: string,
+): string => {
+  const v = ctx.parsed.y;
+  if (v === null) {
+    return "";
+  }
+  const raw = ctx.raw as { x: number };
+  if (ctx.dataset.label === "Alert fired") {
+    const item = eventItems.find((e) => e.x === raw.x);
+    return item ? ` ⚠ ${item.sevLabel}: ${fmtVal(item.actualValue, unitsLabel)}` : "";
+  }
+  if (ctx.dataset.label === "Problem") {
+    const item = problemItems.find((p) => p.x === raw.x);
+    return item ? ` ⛔ ${item.sevLabel}: ${item.name}` : "";
+  }
+  const label = ctx.dataset.label ? `${ctx.dataset.label}: ` : "";
+  return `${label}${fmtVal(v, unitsLabel)}`;
 };
 
 // Renders a Chart.js line chart from graph history data
@@ -108,7 +508,9 @@ export const ChartJsGraph = ({
           if (isNewGraph) {
             setError(true);
             setLoading(false);
-          } else setRefreshing(false);
+          } else {
+            setRefreshing(false);
+          }
         }
       });
 
@@ -123,7 +525,9 @@ export const ChartJsGraph = ({
           }
         })
         .catch(() => {
-          if (!cancelled) setRefreshing(false);
+          if (!cancelled) {
+            setRefreshing(false);
+          }
         });
     }, 10_000);
 
@@ -139,10 +543,11 @@ export const ChartJsGraph = ({
     chartRef.current?.resetZoom();
   }, [minutes]);
 
-  if (loading)
+  if (loading) {
     return <Skeleton variant="rectangular" width="100%" height="100%" sx={{ borderRadius: 1 }} />;
+  }
 
-  if (error)
+  if (error) {
     return (
       <Box
         sx={{
@@ -160,217 +565,38 @@ export const ChartJsGraph = ({
         </Typography>
       </Box>
     );
+  }
 
   const noRecordings =
     !data || data.series.length === 0 || data.series.every((s) => s.points.length === 0);
 
   if (noRecordings) {
-    const currentIdx = PERIOD_OPTIONS.findIndex((o) => o.minutes === minutes);
-    const largerOptions = currentIdx >= 0 ? PERIOD_OPTIONS.slice(currentIdx + 1) : [];
     return (
-      <Box
-        sx={{
-          height: "100%",
-          bgcolor: chartBg,
-          borderRadius: 1.5,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 1.5,
-          p: 3,
-        }}
-      >
-        <Typography sx={{ fontSize: "0.85rem", fontWeight: 600, color: "text.secondary" }}>
-          No data in the last {PERIOD_OPTIONS[currentIdx]?.label ?? `${minutes} min`}
-        </Typography>
-        <Typography
-          sx={{ fontSize: "0.75rem", color: "text.disabled", textAlign: "center", maxWidth: 240 }}
-        >
-          No recordings in this window. Try a wider range to find when data was last collected.
-        </Typography>
-        {largerOptions.length > 0 && onPeriodChange && (
-          <Box
-            sx={{ display: "flex", gap: 0.75, flexWrap: "wrap", justifyContent: "center", mt: 0.5 }}
-          >
-            {largerOptions.map((opt, i) => (
-              <Chip
-                key={opt.label}
-                label={opt.label}
-                size="small"
-                clickable
-                variant="outlined"
-                color="primary"
-                onClick={() => onPeriodChange(i + 1)}
-                sx={{ fontSize: "0.72rem" }}
-              />
-            ))}
-          </Box>
-        )}
-      </Box>
+      <NoDashDataFallback minutes={minutes} chartBg={chartBg} onPeriodChange={onPeriodChange} />
     );
   }
   const nowSec = Math.floor(Date.now() / 1000);
   const rangeFrom = nowSec - minutes * 60;
 
   // Compute per-series stats (last, min, avg, max)
-  const seriesStats = data.series.map((s) => {
-    const vals = s.points.map((p) => p.value);
-    if (vals.length === 0) return { last: null, min: null, avg: null, max: null, units: s.units };
-    const min = Math.min(...vals);
-    const max = Math.max(...vals);
-    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-    const last = vals[vals.length - 1];
-    return { last, min, avg, max, units: s.units || "" };
-  });
-
-  const fmtVal = (v: number | null, units: string): string => {
-    if (v === null) return "—";
-    const abs = Math.abs(v);
-    const u = units && units !== "%" ? ` ${units}` : "";
-    if (abs >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M${u}`;
-    if (abs >= 1_000) return `${(v / 1_000).toFixed(1)}K${u}`;
-    return `${v % 1 === 0 ? v : v.toFixed(2)}${u}`;
-  };
+  const seriesStats = computeSeriesStats(data.series);
 
   const unitsLabel = seriesStats[0]?.units || "";
 
   const maxPoints = Math.max(...data.series.map((s) => s.points.length), 0);
   const sparsePoints = maxPoints <= 20;
 
-  // Map alert events to nearest data point per series using clock proximity.
-  // Clock-keyed so results stay accurate after scale format changes.
-  type DashEventItem = {
-    x: number;
-    y: number;
-    color: string;
-    sevLabel: string;
-    actualValue: number;
-  };
-  const eventItems: DashEventItem[] = (() => {
-    if (noRecordings) return [];
-    const clockMap = new Map<number, DashEventItem>();
-    for (const e of alertEvents) {
-      if (!data.series.some((s) => s.itemid === e.item_id)) continue;
-      if (e.fired_at < rangeFrom || e.fired_at > nowSec) continue;
-      const matchingSeries = data.series.find((s) => s.itemid === e.item_id);
-      if (!matchingSeries || matchingSeries.points.length === 0) continue;
-      const nearest = matchingSeries.points.reduce((best, p) =>
-        Math.abs(p.clock - e.fired_at) < Math.abs(best.clock - e.fired_at) ? p : best,
-      );
-      const existing = clockMap.get(nearest.clock);
-      if (!existing || e.severity > (existing as DashEventItem & { severity: number }).severity) {
-        clockMap.set(nearest.clock, {
-          x: e.fired_at,
-          y: nearest.value,
-          color: ALERT_SEV_COLORS[e.severity] ?? "#F44336",
-          sevLabel: ALERT_SEV_LABELS[e.severity] ?? "Alert",
-          actualValue: e.actual_value,
-        });
-      }
-    }
-    return [...clockMap.values()];
-  })();
-
-  // Native Zabbix problems aren't tied to a single item, so anchor them to
-  // the graph's primary (first) series — matched by clock proximity.
-  type DashProblemItem = { x: number; y: number; color: string; sevLabel: string; name: string };
-  const problemItems: DashProblemItem[] = (() => {
-    if (noRecordings) return [];
-    const primarySeries = data.series[0];
-    if (!primarySeries || primarySeries.points.length === 0) return [];
-    const clockMap = new Map<number, DashProblemItem & { severity: number }>();
-    for (const p of problems) {
-      if (p.clock < rangeFrom || p.clock > nowSec) continue;
-      const nearest = primarySeries.points.reduce((best, pt) =>
-        Math.abs(pt.clock - p.clock) < Math.abs(best.clock - p.clock) ? pt : best,
-      );
-      const existing = clockMap.get(nearest.clock);
-      if (!existing || p.severity > existing.severity) {
-        clockMap.set(nearest.clock, {
-          x: p.clock,
-          y: nearest.value,
-          color: ALERT_SEV_COLORS[p.severity] ?? "#F44336",
-          sevLabel: p.severity_name,
-          name: p.name,
-          severity: p.severity,
-        });
-      }
-    }
-    return [...clockMap.values()];
-  })();
+  const eventItems = buildEventItems(data, alertEvents, rangeFrom, nowSec);
+  const problemItems = buildProblemItems(data, problems, rangeFrom, nowSec);
 
   const chartData = {
-    datasets: [
-      ...data.series.map((s, idx) => {
-        const color = idx === 0 && lineColor ? lineColor : CHART_COLORS[idx % CHART_COLORS.length];
-        const pts = s.points.map((p) => ({ x: p.clock, y: p.value }));
-        return {
-          label: s.name,
-          data: pts,
-          borderColor: color,
-          backgroundColor: (context: GradientCtx) => {
-            const { ctx: c, chartArea } = context.chart;
-            if (!chartArea) return `${color}30`;
-            const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-            g.addColorStop(0, `${color}70`);
-            g.addColorStop(0.55, `${color}25`);
-            g.addColorStop(1, `${color}00`);
-            return g;
-          },
-          borderWidth: sparsePoints ? 2.5 : 2,
-          pointRadius: sparsePoints ? 4 : 0,
-          pointBackgroundColor: color,
-          pointBorderColor: "#fff",
-          pointBorderWidth: sparsePoints ? 1.5 : 0,
-          pointHoverRadius: sparsePoints ? 6 : 5,
-          pointHoverBackgroundColor: color,
-          pointHoverBorderColor: "#fff",
-          pointHoverBorderWidth: 2,
-          tension: 0.3,
-          fill: true,
-          spanGaps: true,
-        };
-      }),
-      ...(eventItems.length > 0
-        ? [
-            {
-              label: "Alert fired",
-              data: eventItems,
-              borderColor: "transparent",
-              backgroundColor: "transparent",
-              pointStyle: "circle" as const,
-              pointRadius: 8,
-              pointHoverRadius: 10,
-              pointBackgroundColor: eventItems.map((e) => e.color),
-              pointBorderColor: "#fff",
-              pointBorderWidth: 2,
-              showLine: false,
-              fill: false,
-              spanGaps: false,
-            },
-          ]
-        : []),
-      ...(problemItems.length > 0
-        ? [
-            {
-              label: "Problem",
-              data: problemItems,
-              borderColor: "transparent",
-              backgroundColor: "transparent",
-              pointStyle: "triangle" as const,
-              pointRadius: 8,
-              pointHoverRadius: 10,
-              pointBackgroundColor: problemItems.map((p) => p.color),
-              pointBorderColor: "#fff",
-              pointBorderWidth: 2,
-              showLine: false,
-              fill: false,
-              spanGaps: false,
-            },
-          ]
-        : []),
-    ],
+    datasets: buildDashChartDatasets({
+      series: data.series,
+      lineColor,
+      sparsePoints,
+      eventItems,
+      problemItems,
+    }),
   };
 
   const chartOptions = {
@@ -386,7 +612,9 @@ export const ChartJsGraph = ({
           pinch: { enabled: true },
           mode: "x" as const,
           onZoomComplete: ({ chart }: { chart: ChartJS }) => {
-            if (!onPeriodChange) return;
+            if (!onPeriodChange) {
+              return;
+            }
             const xScale = chart.scales.x;
             const visibleMinutes = (xScale.max - xScale.min) / 60;
             const currentIdx = PERIOD_OPTIONS.findIndex((o) => o.minutes === minutes);
@@ -418,48 +646,12 @@ export const ChartJsGraph = ({
         cornerRadius: 5,
         displayColors: data.series.length > 1,
         callbacks: {
-          title: (items: { raw: unknown }[]) => {
-            const raw = items[0]?.raw as { x: number } | undefined;
-            if (!raw) return "";
-            const d = new Date(raw.x * 1000);
-            if (minutes >= 1440) {
-              return d.toLocaleString("en-US", {
-                month: "short",
-                day: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit",
-                hour12: false,
-              });
-            }
-            return d.toLocaleTimeString("en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-              second: "2-digit",
-              hour12: false,
-            });
-          },
+          title: (items: { raw: unknown }[]) => formatDashTooltipTitle(items, minutes),
           label: (ctx: {
             dataset: { label?: string };
             raw: unknown;
             parsed: { y: number | null };
-          }) => {
-            const v = ctx.parsed.y;
-            if (v === null) return "";
-            const raw = ctx.raw as { x: number };
-            if (ctx.dataset.label === "Alert fired") {
-              const item = eventItems.find((e) => e.x === raw.x);
-              if (!item) return "";
-              return ` ⚠ ${item.sevLabel}: ${fmtVal(item.actualValue, unitsLabel)}`;
-            }
-            if (ctx.dataset.label === "Problem") {
-              const item = problemItems.find((p) => p.x === raw.x);
-              if (!item) return "";
-              return ` ⛔ ${item.sevLabel}: ${item.name}`;
-            }
-            const label = ctx.dataset.label ? `${ctx.dataset.label}: ` : "";
-            return `${label}${fmtVal(v, unitsLabel)}`;
-          },
+          }) => formatDashTooltipLabel(ctx, eventItems, problemItems, unitsLabel),
         },
       },
     },
@@ -550,70 +742,13 @@ export const ChartJsGraph = ({
       </Box>
 
       {/* Stats bar — time range + Last / Min / Avg / Max per series */}
-      <Box
-        sx={{
-          borderTop: "1px solid",
-          borderColor: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)",
-          px: 1.5,
-          py: 0.75,
-          display: "flex",
-          flexDirection: "column",
-          gap: 0.5,
-        }}
-      >
-        <Typography sx={{ fontSize: "0.65rem", color: "text.disabled", letterSpacing: "0.02em" }}>
-          {formatRangeTime(rangeFrom)} → {formatRangeTime(nowSec)}
-        </Typography>
-        {data.series.map((s, idx) => {
-          const st = seriesStats[idx];
-          const color = CHART_COLORS[idx % CHART_COLORS.length];
-          return (
-            <Box
-              key={s.itemid}
-              sx={{ display: "flex", alignItems: "center", gap: 1.5, flex: 1, minWidth: 0 }}
-            >
-              <Box
-                sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: color, flexShrink: 0 }}
-              />
-              {data.series.length > 1 && (
-                <Typography
-                  noWrap
-                  sx={{ fontSize: "0.68rem", color: "text.secondary", minWidth: 0, flexShrink: 1 }}
-                >
-                  {s.name}
-                </Typography>
-              )}
-              {(["Last", "Min", "Avg", "Max"] as const).map((label, i) => {
-                const val = [st.last, st.min, st.avg, st.max][i];
-                return (
-                  <Box key={label} sx={{ display: "flex", alignItems: "baseline", gap: 0.4 }}>
-                    <Typography
-                      sx={{
-                        fontSize: "0.62rem",
-                        color: "text.disabled",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.04em",
-                      }}
-                    >
-                      {label}
-                    </Typography>
-                    <Typography
-                      sx={{
-                        fontSize: "0.75rem",
-                        fontWeight: 600,
-                        color: label === "Last" ? color : "text.primary",
-                        fontVariantNumeric: "tabular-nums",
-                      }}
-                    >
-                      {fmtVal(val, st.units)}
-                    </Typography>
-                  </Box>
-                );
-              })}
-            </Box>
-          );
-        })}
-      </Box>
+      <SeriesStatsBar
+        series={data.series}
+        seriesStats={seriesStats}
+        rangeFrom={rangeFrom}
+        nowSec={nowSec}
+        isDark={isDark}
+      />
     </Box>
   );
 };

@@ -69,7 +69,7 @@ class Actions_Manager(Zabbix_Base):
             ]
         except Exception as e:
             logger.exception("list_actions failed")
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def create_action(self, name: str, eventsource: int, esc_period: str = "1h") -> str:
         if not self.zapi:
@@ -85,7 +85,7 @@ class Actions_Manager(Zabbix_Base):
             )
             return result["actionids"][0]
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def delete_action(self, actionid: str) -> bool:
         if not self.zapi:
@@ -94,7 +94,7 @@ class Actions_Manager(Zabbix_Base):
             self.zapi.action.delete([actionid])
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def toggle_action(self, actionid: str, status: int) -> bool:
         if not self.zapi:
@@ -103,7 +103,7 @@ class Actions_Manager(Zabbix_Base):
             self.zapi.action.update(actionid=actionid, status=status)
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     # ── Media Types ────────────────────────────────────────────────────
 
@@ -120,9 +120,7 @@ class Actions_Manager(Zabbix_Base):
                         "mediatypeid": m["mediatypeid"],
                         "name": m["name"],
                         "type": int(m["type"]),
-                        "type_label": MEDIATYPE_TYPES.get(
-                            int(m["type"]), f"Type {m['type']}"
-                        ),
+                        "type_label": MEDIATYPE_TYPES.get(int(m["type"]), f"Type {m['type']}"),
                         "status": int(m["status"]),
                         "description": m.get("description", ""),
                     }
@@ -132,7 +130,7 @@ class Actions_Manager(Zabbix_Base):
             )
         except Exception as e:
             logger.exception("list_media_types failed")
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def create_media_type(
         self,
@@ -169,7 +167,7 @@ class Actions_Manager(Zabbix_Base):
             result = self.zapi.mediatype.create(**params)
             return result["mediatypeids"][0]
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def update_media_type(
         self,
@@ -205,7 +203,7 @@ class Actions_Manager(Zabbix_Base):
             self.zapi.mediatype.update(**params)
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def delete_media_type(self, mediatypeid: str) -> bool:
         if not self.zapi:
@@ -214,7 +212,7 @@ class Actions_Manager(Zabbix_Base):
             self.zapi.mediatype.delete([mediatypeid])
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def toggle_media_type(self, mediatypeid: str, status: int) -> bool:
         if not self.zapi:
@@ -223,7 +221,7 @@ class Actions_Manager(Zabbix_Base):
             self.zapi.mediatype.update(mediatypeid=mediatypeid, status=status)
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     # ── Scripts ────────────────────────────────────────────────────────
 
@@ -253,9 +251,7 @@ class Actions_Manager(Zabbix_Base):
                         int(s.get("execute_on", 1)), "Server"
                     ),
                     "scope": int(s.get("scope", 2)),
-                    "scope_label": SCRIPT_SCOPE.get(
-                        int(s.get("scope", 2)), "Manual host"
-                    ),
+                    "scope_label": SCRIPT_SCOPE.get(int(s.get("scope", 2)), "Manual host"),
                     "description": s.get("description", ""),
                     "groupid": s.get("groupid", "0"),
                 }
@@ -263,7 +259,7 @@ class Actions_Manager(Zabbix_Base):
             ]
         except Exception as e:
             logger.exception("list_scripts failed")
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def create_script(
         self,
@@ -285,7 +281,7 @@ class Actions_Manager(Zabbix_Base):
             )
             return result["scriptids"][0]
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def delete_script(self, scriptid: str) -> bool:
         if not self.zapi:
@@ -294,4 +290,4 @@ class Actions_Manager(Zabbix_Base):
             self.zapi.script.delete([scriptid])
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e

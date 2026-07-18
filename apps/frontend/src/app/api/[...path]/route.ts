@@ -20,7 +20,9 @@ const proxy = async (request: NextRequest, { params }: { params: Promise<{ path:
 
   if (!headers.get("authorization")) {
     const cookieToken = request.cookies.get(TOKEN_COOKIE)?.value;
-    if (cookieToken) headers.set("authorization", `Bearer ${cookieToken}`);
+    if (cookieToken) {
+      headers.set("authorization", `Bearer ${cookieToken}`);
+    }
   }
 
   let response: Response;

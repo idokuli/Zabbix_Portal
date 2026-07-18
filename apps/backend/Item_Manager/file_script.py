@@ -1,7 +1,8 @@
 """File-watch agent items (vfs.file.* keys) and system.run[] script items."""
 
 import logging
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
+from collections.abc import Callable
 
 if TYPE_CHECKING:
     from zabbix_utils import ZabbixAPI

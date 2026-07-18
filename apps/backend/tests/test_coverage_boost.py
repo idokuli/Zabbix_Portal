@@ -270,9 +270,7 @@ def test_get_queue_overview_zabbix7_returns_error_message(zadmin):
 
 def test_get_queue_overview_returns_enriched_items(zadmin):
     zadmin._zabbix_version = (6, 4)
-    zadmin.zapi.queue.get.return_value = [
-        {"itemid": "1", "nextcheck": "1700010000", "delay": "60"}
-    ]
+    zadmin.zapi.queue.get.return_value = [{"itemid": "1", "nextcheck": "1700010000", "delay": "60"}]
     zadmin.zapi.item.get.return_value = [
         {"itemid": "1", "name": "CPU", "hosts": [{"host": "srv01"}]}
     ]

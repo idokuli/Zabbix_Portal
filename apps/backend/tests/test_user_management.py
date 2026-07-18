@@ -727,9 +727,7 @@ def test_seed_root_existing_users_syncs_password(mc):
     cur.fetchone.return_value = {"cnt": 5}
     with (
         _patch(conn),
-        patch.dict(
-            os.environ, {"ADMIN_USERNAME": "Admin", "ADMIN_PASSWORD": "newsecret"}
-        ),
+        patch.dict(os.environ, {"ADMIN_USERNAME": "Admin", "ADMIN_PASSWORD": "newsecret"}),
         patch("Auth.hash_password", return_value="newhash"),
     ):
         um.seed_root()
@@ -870,9 +868,7 @@ def test_rename_dashboard_page_ok(mc):
     conn, cur = mc
     cur.rowcount = 1
     with _patch(conn):
-        result = um.rename_dashboard_page(
-            "user", 1, "dashboard", "dashboard-abc", "New Name"
-        )
+        result = um.rename_dashboard_page("user", 1, "dashboard", "dashboard-abc", "New Name")
     assert result is True
     conn.commit.assert_called_once()
     conn.close.assert_called_once()
@@ -931,9 +927,7 @@ def test_save_notification_history_ok(mc):
     import User_Management as um
 
     conn, cur = mc
-    entries = [
-        {"id": "e1", "hostname": "h1", "severity": 3, "name": "alert", "clock": 1000}
-    ]
+    entries = [{"id": "e1", "hostname": "h1", "severity": 3, "name": "alert", "clock": 1000}]
     with _patch(conn):
         um.save_notification_history(1, entries)
     conn.commit.assert_called_once()
@@ -955,9 +949,7 @@ def test_save_notification_history_error(mc):
 
     conn, cur = mc
     cur.execute.side_effect = Exception("db error")
-    entries = [
-        {"id": "e1", "hostname": "h1", "severity": 3, "name": "alert", "clock": 1000}
-    ]
+    entries = [{"id": "e1", "hostname": "h1", "severity": 3, "name": "alert", "clock": 1000}]
     with _patch(conn):
         um.save_notification_history(1, entries)  # must not raise
     conn.rollback.assert_called_once()

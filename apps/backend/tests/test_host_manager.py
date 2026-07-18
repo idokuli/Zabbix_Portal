@@ -226,9 +226,7 @@ def test_update_host_updates_ip(mgr):
     mgr.zapi.host.get.return_value = [
         {
             "hostid": "10",
-            "interfaces": [
-                {"interfaceid": "5", "type": "1", "main": "1", "ip": "1.2.3.4"}
-            ],
+            "interfaces": [{"interfaceid": "5", "type": "1", "main": "1", "ip": "1.2.3.4"}],
         }
     ]
     ok, err = mgr.update_host("myhost", ip="5.6.7.8")
@@ -248,18 +246,14 @@ def test_tag_host_adds_tag(mgr):
 
 
 def test_tag_host_already_tagged(mgr):
-    mgr.zapi.host.get.return_value = [
-        {"hostid": "1", "tags": [{"tag": "team", "value": "myteam"}]}
-    ]
+    mgr.zapi.host.get.return_value = [{"hostid": "1", "tags": [{"tag": "team", "value": "myteam"}]}]
     result = mgr.tag_host("h1", "myteam")
     assert result is True
     mgr.zapi.host.update.assert_not_called()
 
 
 def test_untag_host_removes_tag(mgr):
-    mgr.zapi.host.get.return_value = [
-        {"hostid": "1", "tags": [{"tag": "team", "value": "myteam"}]}
-    ]
+    mgr.zapi.host.get.return_value = [{"hostid": "1", "tags": [{"tag": "team", "value": "myteam"}]}]
     result = mgr.untag_host("h1", "myteam")
     assert result is True
     call_kwargs = mgr.zapi.host.update.call_args[1]
@@ -270,9 +264,7 @@ def test_untag_host_removes_tag(mgr):
 
 
 def test_get_host_team_returns_team(mgr):
-    mgr.zapi.host.get.return_value = [
-        {"hostid": "1", "tags": [{"tag": "team", "value": "ops"}]}
-    ]
+    mgr.zapi.host.get.return_value = [{"hostid": "1", "tags": [{"tag": "team", "value": "ops"}]}]
     result = mgr.get_host_team("h1")
     assert result == "ops"
 
@@ -293,18 +285,14 @@ def test_get_host_team_not_found(mgr):
 
 
 def test_link_template_success(mgr):
-    mgr.zapi.host.get.return_value = [
-        {"hostid": "1", "parentTemplates": [{"templateid": "10"}]}
-    ]
+    mgr.zapi.host.get.return_value = [{"hostid": "1", "parentTemplates": [{"templateid": "10"}]}]
     ok, err = mgr.link_template("h1", "20")
     assert ok is True
     assert err is None
 
 
 def test_link_template_already_linked(mgr):
-    mgr.zapi.host.get.return_value = [
-        {"hostid": "1", "parentTemplates": [{"templateid": "10"}]}
-    ]
+    mgr.zapi.host.get.return_value = [{"hostid": "1", "parentTemplates": [{"templateid": "10"}]}]
     ok, err = mgr.link_template("h1", "10")
     assert ok is True
     mgr.zapi.host.update.assert_not_called()

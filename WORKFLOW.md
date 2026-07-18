@@ -141,13 +141,13 @@ Workflow: branch off `main` → develop → lint/typecheck locally → open MR �
 The pipeline is modular. `.gitlab-ci.yml` declares stages and includes five files:
 
 ```yaml
-stages: [.pre, lint, build, promote]
+stages: [.pre, lint, build, promote, bootstrap]
 include:
   - .gitlab/ci/common.yml    # reusable job templates (runner tag, Kaniko base image)
   - .gitlab/ci/detect.yml    # change detection + variable validation
   - .gitlab/ci/python.yml    # backend jobs
   - .gitlab/ci/node.yml      # frontend jobs
-  - .gitlab/ci/gitops.yml    # yamllint, helm lint, push-image-tags
+  - .gitlab/ci/gitops.yml    # yamllint, helm lint, push-image-tags, argocd:bootstrap:*
 ```
 
 ### Pipeline overview
@@ -158,13 +158,15 @@ flowchart TD
     Pre --> Lint["**lint**\nyamllint · ruff · mypy · biome · tsc · helm lint"]
     Lint --> Build["**build**\nKaniko build + push images to Artifactory"]
     Build --> Promote["**promote** — push-image-tags\nclone GitOps repo → update image tags → commit + push"]
-    Promote --> ArgoStaging["ArgoCD auto-syncs staging"]
-    Promote --> ArgoProd["ArgoCD shows OutOfSync\n→ operator clicks Sync for prod/DR"]
+    Promote --> BootstrapStaging["**bootstrap** — argocd:bootstrap:staging\nupserts Application via ArgoCD API (automatic)"]
+    Promote --> BootstrapProd["**bootstrap** — argocd:bootstrap:production / :dr\nupserts Application via ArgoCD API (manual gate)"]
+    BootstrapStaging --> ArgoStaging["ArgoCD auto-syncs staging"]
+    BootstrapProd --> ArgoProd["ArgoCD shows OutOfSync\n→ job output reminds operator to sync manually"]
 ```
 
-After `push-image-tags` commits updated tags to the GitOps repo, ArgoCD takes over:
-- **Staging** — syncs automatically (automated syncPolicy).
-- **Production / DR** — show OutOfSync in the ArgoCD UI; an operator triggers the sync manually.
+After `push-image-tags` commits updated tags to the GitOps repo, each `argocd:bootstrap:<env>` job upserts that environment's ArgoCD `Application` object via the ArgoCD REST API (`POST /api/v1/applications?upsert=true`) — this only applies the Application's definition, it does **not** itself trigger a sync. What happens next depends on that Application's `syncPolicy`:
+- **Staging** — `argocd:bootstrap:staging` runs automatically, and its Application has an automated `syncPolicy`, so ArgoCD syncs on its own. The job output prints a confirmation that no further action is needed.
+- **Production / DR** — `argocd:bootstrap:production` / `argocd:bootstrap:dr` are manual GitLab jobs (`when: manual`), and even after they run, the Application stays **OutOfSync** — these manifests have no automated `syncPolicy`. The job output prints a `⚠️ REMINDER` with the exact `argocd app sync <app-name>` command (and a note that the ArgoCD UI Sync button works too), since the upsert alone never deploys anything.
 
 ### 4.1 Stage `.pre` — change detection + validation (`detect.yml`)
 
@@ -209,6 +211,18 @@ Kaniko layer caching is enabled (`--cache=true --cache-ttl=1440h`).
 `push-image-tags` clones the `zabbix-portal-gitops` repo (via `GITOPS_DEPLOY_KEY`), updates the `tag:` line in `environments/{staging,production,dr}/values.yaml` for each changed app, then commits and pushes back. The commit message references the pipeline URL, commit SHA, and changed apps.
 
 Only changed apps get a new tag — unchanged apps stay pinned to whatever was already in the values file. If neither app changed, the job exits cleanly with no commit.
+
+### 4.5 Stage `bootstrap` — upsert the ArgoCD Application (`argocd:bootstrap:*`)
+
+Three jobs — `argocd:bootstrap:staging`, `:production`, `:dr` — each clone the GitOps repo, convert that environment's `argocd/application-<env>.yaml` manifest to JSON with `yq`, and `POST` it to `https://$ARGOCD_SERVER/api/v1/applications?upsert=true`. This call only creates/updates the ArgoCD `Application` object itself (source repo, target revision, sync policy) — it is **not** a sync trigger.
+
+| Job | Runs | `AUTO_SYNC` | Job output on success |
+| --- | --- | --- | --- |
+| `argocd:bootstrap:staging` | automatically, every tag | `"true"` | Confirms the environment auto-syncs — no action needed. |
+| `argocd:bootstrap:production` | manual (`when: manual`) | `"false"` | Prints a `⚠️ REMINDER` block: the upsert didn't deploy anything, and gives the `argocd app sync <app-name>` command (app name read from the manifest) plus the ArgoCD UI alternative. |
+| `argocd:bootstrap:dr` | manual (`when: manual`) | `"false"` | Same reminder as production. |
+
+The reminder exists because it's easy to assume triggering the GitLab job is the deploy step for prod/DR — it isn't. Actually rolling out the new image still requires a separate, deliberate sync in ArgoCD (CLI or UI) after the job runs.
 
 ---
 
@@ -261,6 +275,7 @@ sequenceDiagram
 
 - Helm charts live in `zabbix-portal-gitops/helm-charts/`. ArgoCD renders them at sync time using each environment's `values.yaml`.
 - **Staging** syncs automatically when values change. **Production and DR** show OutOfSync in the ArgoCD UI until an operator triggers a manual sync.
+- Before any of this, the `argocd:bootstrap:<env>` job (see §4.5) must upsert that environment's `Application` object in ArgoCD — this only registers/updates the Application's definition, it never syncs by itself. For production/DR the job's output prints a reminder with the exact `argocd app sync <app-name>` command, since it's easy to mistake "I ran the GitLab job" for "I deployed it."
 - Rollback: in ArgoCD, sync the application to a previous Git revision, or update the tag in `values.yaml` back to the old version and push.
 
 ---
@@ -279,15 +294,19 @@ flowchart TD
     F --> G["lint: frontend:lint + frontend:typecheck"]
     G --> H["build: frontend:docker:build\npush :v1.4.0"]
     H --> I["promote: push-image-tags to GitOps repo"]
-    I --> J["ArgoCD auto-syncs staging"]
+    I --> Ib["bootstrap: argocd:bootstrap:staging\n(automatic upsert)"]
+    Ib --> J["ArgoCD auto-syncs staging"]
     J --> K["QA: validate staging"]
-    K --> L["▶ ArgoCD: manual sync production"]
-    L --> M["▶ ArgoCD: manual sync DR"]
+    K --> L1["▶ bootstrap: argocd:bootstrap:production\n(manual upsert → prints ⚠ sync reminder)"]
+    L1 --> L["▶ ArgoCD: manual sync production"]
+    L --> M1["▶ bootstrap: argocd:bootstrap:dr\n(manual upsert → prints ⚠ sync reminder)"]
+    M1 --> M["▶ ArgoCD: manual sync DR"]
 ```
 
 Key invariants:
 
 - **Only changed apps rebuild.** If only `apps/frontend/` changed, backend jobs are skipped entirely.
 - **Unchanged apps keep their deployed tag.** `push-image-tags` only writes tags for apps that changed.
+- **The bootstrap job never syncs by itself.** For production/DR it only upserts the ArgoCD `Application` object and reminds the operator, in the job output, to run the actual sync separately.
 - **Production never auto-updates.** Each promotion requires a manual sync click in ArgoCD.
 - **Rollback is always available.** Sync ArgoCD to a previous Git revision, or pin the old tag in the GitOps repo. See `RELEASING.md`.

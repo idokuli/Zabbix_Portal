@@ -16,6 +16,33 @@ class SnmpItemsMixin:
     if TYPE_CHECKING:
         zapi: "ZabbixAPI | None"
 
+    @staticmethod
+    def _snmpv3_kwargs(
+        securityname: str,
+        securitylevel: int,
+        authprotocol: int,
+        authpassphrase: str,
+        privprotocol: int,
+        privpassphrase: str,
+        contextname: str,
+    ) -> dict:
+        """Build the snmpv3_* item fields, following Zabbix's rule that auth/priv
+        fields are only sent when the security level requires them (0=noAuthNoPriv,
+        1=authNoPriv, 2=authPriv)."""
+        kwargs: dict = {
+            "snmpv3_securityname": securityname,
+            "snmpv3_securitylevel": securitylevel,
+        }
+        if securitylevel >= 1:
+            kwargs["snmpv3_authprotocol"] = authprotocol
+            kwargs["snmpv3_authpassphrase"] = authpassphrase
+        if securitylevel == 2:
+            kwargs["snmpv3_privprotocol"] = privprotocol
+            kwargs["snmpv3_privpassphrase"] = privpassphrase
+        if contextname:
+            kwargs["snmpv3_contextname"] = contextname
+        return kwargs
+
     def add_snmp_item(
         self,
         hostname: str,
@@ -46,17 +73,13 @@ class SnmpItemsMixin:
         if not snmp_oid:
             return None, "SNMP OID is required."
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found."
             host_id = host_data[0]["hostid"]
             # Look for SNMP interface (type 2)
             interfaces = self.zapi.hostinterface.get(hostids=host_id)
-            snmp_iface = next(
-                (i for i in interfaces if str(i.get("type")) == "2"), None
-            )
+            snmp_iface = next((i for i in interfaces if str(i.get("type")) == "2"), None)
             if not snmp_iface:
                 snmp_iface = interfaces[0] if interfaces else None
             if not snmp_iface:
@@ -83,16 +106,17 @@ class SnmpItemsMixin:
             if snmp_version in (1, 2):
                 kwargs["snmp_community"] = snmp_community or "public"
             if snmp_version == 3:
-                kwargs["snmpv3_securityname"] = snmpv3_securityname
-                kwargs["snmpv3_securitylevel"] = snmpv3_securitylevel
-                if snmpv3_securitylevel >= 1:
-                    kwargs["snmpv3_authprotocol"] = snmpv3_authprotocol
-                    kwargs["snmpv3_authpassphrase"] = snmpv3_authpassphrase
-                if snmpv3_securitylevel == 2:
-                    kwargs["snmpv3_privprotocol"] = snmpv3_privprotocol
-                    kwargs["snmpv3_privpassphrase"] = snmpv3_privpassphrase
-                if snmpv3_contextname:
-                    kwargs["snmpv3_contextname"] = snmpv3_contextname
+                kwargs.update(
+                    self._snmpv3_kwargs(
+                        snmpv3_securityname,
+                        snmpv3_securitylevel,
+                        snmpv3_authprotocol,
+                        snmpv3_authpassphrase,
+                        snmpv3_privprotocol,
+                        snmpv3_privpassphrase,
+                        snmpv3_contextname,
+                    )
+                )
             if units:
                 kwargs["units"] = units
             if description:
@@ -110,7 +134,7 @@ class SnmpItemsMixin:
             )
             return item_id, None
         except Exception as e:
-            logger.error("add_snmp_item(%r) failed: %r", hostname, e)
+            logger.exception("add_snmp_item(%r) failed", hostname)
             return None, zabbix_err(e)
 
     def add_snmp_trap_item(
@@ -129,16 +153,14 @@ class SnmpItemsMixin:
         if not self.zapi:
             return None, "Zabbix API not connected."
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found."
             host_id = host_data[0]["hostid"]
             interfaces = self.zapi.hostinterface.get(hostids=host_id)
-            snmp_iface = next(
-                (i for i in interfaces if str(i.get("type")) == "2"), None
-            ) or (interfaces[0] if interfaces else None)
+            snmp_iface = next((i for i in interfaces if str(i.get("type")) == "2"), None) or (
+                interfaces[0] if interfaces else None
+            )
             if not snmp_iface:
                 return None, f"No interface found for host '{hostname}'."
             kwargs: dict = dict(
@@ -158,10 +180,8 @@ class SnmpItemsMixin:
                 kwargs["tags"] = [{"tag": "team", "value": team_name}]
             result = self.zapi.item.create(**kwargs)
             item_id = result["itemids"][0]
-            logger.info(
-                "SNMP trap item %r added to %r (ID: %s).", item_name, hostname, item_id
-            )
+            logger.info("SNMP trap item %r added to %r (ID: %s).", item_name, hostname, item_id)
             return item_id, None
         except Exception as e:
-            logger.error("add_snmp_trap_item(%r) failed: %r", hostname, e)
+            logger.exception("add_snmp_trap_item(%r) failed", hostname)
             return None, zabbix_err(e)

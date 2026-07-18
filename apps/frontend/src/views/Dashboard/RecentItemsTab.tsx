@@ -19,6 +19,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { type RecentItem, api } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
+import { formatSizeValue } from "../../app/utils";
 import { formatLastSeen } from "./shared";
 
 const VALUE_TYPE_LABELS: Record<string, string> = {
@@ -143,9 +144,7 @@ export const RecentItemsTab = () => {
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2" sx={{ fontSize: "0.8rem", fontWeight: 500 }}>
-                      {item.lastvalue
-                        ? `${item.lastvalue}${item.units ? ` ${item.units}` : ""}`
-                        : "—"}
+                      {item.lastvalue ? formatSizeValue(item.lastvalue, item.units || "") : "—"}
                     </Typography>
                   </TableCell>
                   <TableCell>

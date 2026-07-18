@@ -1,5 +1,7 @@
 import { fmtTs, generateId } from "../app/utils";
 
+const YEAR_23_RE = /23/;
+
 describe("fmtTs", () => {
   it("returns a non-empty string for a unix timestamp", () => {
     const result = fmtTs(1700000000);
@@ -15,7 +17,7 @@ describe("fmtTs", () => {
   it("includes year in formatted output", () => {
     // 1700000000 = Nov 2023; en-US short format shows 2-digit year ("23")
     const result = fmtTs(1700000000);
-    expect(result).toMatch(/23/);
+    expect(result).toMatch(YEAR_23_RE);
   });
 });
 

@@ -29,8 +29,11 @@ export const useFavorites = (storageKey: string) => {
     (id: string) => {
       setFavs((prev) => {
         const next = new Set(prev);
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
+        if (next.has(id)) {
+          next.delete(id);
+        } else {
+          next.add(id);
+        }
         write(storageKey, next);
         return next;
       });

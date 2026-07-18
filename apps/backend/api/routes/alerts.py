@@ -8,25 +8,17 @@ import User_Management as um
 router = APIRouter(tags=["Alerts"])
 
 
-@router.get(
-    "/alerts/rules", tags=["Alerts"], summary="List alert rules for current user"
-)
+@router.get("/alerts/rules", tags=["Alerts"], summary="List alert rules for current user")
 def list_alert_rules(current_user: dict = Depends(get_current_user)):
     return {"rules": alert_bot.get_rules(int(current_user["sub"]))}
 
 
-@router.post(
-    "/alerts/rules", tags=["Alerts"], summary="Create alert rule", status_code=201
-)
-def create_alert_rule(
-    data: AlertRuleCreate, current_user: dict = Depends(get_current_user)
-):
+@router.post("/alerts/rules", tags=["Alerts"], summary="Create alert rule", status_code=201)
+def create_alert_rule(data: AlertRuleCreate, current_user: dict = Depends(get_current_user)):
     if not (0 <= data.severity <= 5):
         raise HTTPException(status_code=400, detail="severity must be 0–5")
     if data.rule_type not in ("item", "service"):
-        raise HTTPException(
-            status_code=400, detail="rule_type must be 'item' or 'service'"
-        )
+        raise HTTPException(status_code=400, detail="rule_type must be 'item' or 'service'")
 
     if data.rule_type == "item":
         if not data.item_id or not data.item_name or not data.hostname:
@@ -40,9 +32,7 @@ def create_alert_rule(
                 detail="operator must be >, <, >=, <=, contains, or !contains",
             )
         if data.operator not in ("contains", "!contains") and data.threshold is None:
-            raise HTTPException(
-                status_code=400, detail="threshold required for numeric item rules"
-            )
+            raise HTTPException(status_code=400, detail="threshold required for numeric item rules")
         result = alert_bot.create_rule(
             int(current_user["sub"]),
             data.item_id,
@@ -124,9 +114,7 @@ def toggle_alert_rule(rule_id: int, current_user: dict = Depends(get_current_use
     return {"enabled": result}
 
 
-@router.get(
-    "/alerts/events", tags=["Alerts"], summary="Recent alert events for current user"
-)
+@router.get("/alerts/events", tags=["Alerts"], summary="Recent alert events for current user")
 def get_alert_events(
     limit: int = 200,
     current_user: dict = Depends(get_current_user),
@@ -165,6 +153,4 @@ def save_notification_history(
     entries: list[NotifHistoryEntry],
     current_user: dict = Depends(get_current_user),
 ):
-    um.save_notification_history(
-        int(current_user["sub"]), [e.model_dump() for e in entries]
-    )
+    um.save_notification_history(int(current_user["sub"]), [e.model_dump() for e in entries])

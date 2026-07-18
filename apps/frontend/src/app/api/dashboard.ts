@@ -4,6 +4,7 @@ import type {
   DashboardLayoutData,
   DashboardPage,
   DashboardPageKind,
+  DashboardScope,
   GraphData,
   HostMetrics,
   MetricLayoutData,
@@ -26,23 +27,31 @@ export const dashboardApi = {
   getHostsMetrics: () => apiFetch<{ hosts: HostMetrics[] }>("/dashboard/hosts/metrics"),
   getRecentItems: (limit = 30) =>
     apiFetch<{ items: RecentItem[] }>(`/dashboard/items/recent?limit=${limit}`),
-  getDashboardLayout: (scope: "user" | "team" = "user", page = "dashboard") =>
-    apiFetch<DashboardLayoutData>(`/dashboard/layout?scope=${scope}&page=${page}`),
+  getDashboardLayout: (scope: DashboardScope = "user", page = "dashboard", teamId?: number) =>
+    apiFetch<DashboardLayoutData>(
+      `/dashboard/layout?scope=${scope}&page=${encodeURIComponent(page)}${
+        teamId !== undefined ? `&team_id=${teamId}` : ""
+      }`,
+    ),
   saveDashboardLayout: (scope: "user" | "team", widgets: WidgetConfig[], page = "dashboard") =>
     apiFetch<{ message: string }>(`/dashboard/layout?page=${page}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ scope, widgets }),
     }),
-  getMetricLayout: (scope: "user" | "team" = "user", page = "metrics") =>
-    apiFetch<MetricLayoutData>(`/dashboard/layout?scope=${scope}&page=${page}`),
+  getMetricLayout: (scope: DashboardScope = "user", page = "metrics", teamId?: number) =>
+    apiFetch<MetricLayoutData>(
+      `/dashboard/layout?scope=${scope}&page=${encodeURIComponent(page)}${
+        teamId !== undefined ? `&team_id=${teamId}` : ""
+      }`,
+    ),
   saveMetricLayout: (scope: "user" | "team", widgets: MetricWidgetConfig[], page = "metrics") =>
     apiFetch<{ message: string }>(`/dashboard/layout?page=${page}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ scope, widgets }),
     }),
-  listDashboardPages: (scope: "user" | "team", kind: DashboardPageKind) =>
+  listDashboardPages: (scope: DashboardScope, kind: DashboardPageKind) =>
     apiFetch<{ pages: DashboardPage[] }>(`/dashboard/pages?scope=${scope}&kind=${kind}`),
   createDashboardPage: (scope: "user" | "team", kind: DashboardPageKind, name: string) =>
     apiFetch<DashboardPage>("/dashboard/pages", {

@@ -25,10 +25,14 @@ export const ThemeModeProvider = ({ children }: PropsWithChildren) => {
 
   useEffect(() => {
     const savedMode = localStorage.getItem("theme-mode") as Mode | null;
-    if (savedMode === "light" || savedMode === "dark") setMode(savedMode);
+    if (savedMode === "light" || savedMode === "dark") {
+      setMode(savedMode);
+    }
 
     const savedDir = localStorage.getItem("theme-direction") as Direction | null;
-    if (savedDir === "ltr" || savedDir === "rtl") setDirectionState(savedDir);
+    if (savedDir === "ltr" || savedDir === "rtl") {
+      setDirectionState(savedDir);
+    }
   }, []);
 
   useEffect(() => {

@@ -36,17 +36,15 @@ class RemoteItemsMixin:
         if not self.zapi:
             return None, "Zabbix API not connected."
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found."
             host_id = host_data[0]["hostid"]
             interfaces = self.zapi.hostinterface.get(hostids=host_id)
             # Prefer IPMI interface (type 3), fall back to first
-            ipmi_iface = next(
-                (i for i in interfaces if str(i.get("type")) == "3"), None
-            ) or (interfaces[0] if interfaces else None)
+            ipmi_iface = next((i for i in interfaces if str(i.get("type")) == "3"), None) or (
+                interfaces[0] if interfaces else None
+            )
             if not ipmi_iface:
                 return None, f"No interface found for host '{hostname}'."
             if not item_key:
@@ -84,7 +82,7 @@ class RemoteItemsMixin:
             )
             return item_id, None
         except Exception as e:
-            logger.error("add_ipmi_item(%r) failed: %r", hostname, e)
+            logger.exception("add_ipmi_item(%r) failed", hostname)
             return None, zabbix_err(e)
 
     def add_ssh_item(
@@ -114,9 +112,7 @@ class RemoteItemsMixin:
         if not params.strip():
             return None, "SSH script/commands are required."
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found."
             host_id = host_data[0]["hostid"]
@@ -157,12 +153,10 @@ class RemoteItemsMixin:
                 kwargs["tags"] = [{"tag": "team", "value": team_name}]
             result = self.zapi.item.create(**kwargs)
             item_id = result["itemids"][0]
-            logger.info(
-                "SSH item %r added to %r (ID: %s).", item_name, hostname, item_id
-            )
+            logger.info("SSH item %r added to %r (ID: %s).", item_name, hostname, item_id)
             return item_id, None
         except Exception as e:
-            logger.error("add_ssh_item(%r) failed: %r", hostname, e)
+            logger.exception("add_ssh_item(%r) failed", hostname)
             return None, zabbix_err(e)
 
     def add_telnet_item(
@@ -188,9 +182,7 @@ class RemoteItemsMixin:
         if not params.strip():
             return None, "Telnet script/commands are required."
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found."
             host_id = host_data[0]["hostid"]
@@ -224,12 +216,10 @@ class RemoteItemsMixin:
                 kwargs["tags"] = [{"tag": "team", "value": team_name}]
             result = self.zapi.item.create(**kwargs)
             item_id = result["itemids"][0]
-            logger.info(
-                "Telnet item %r added to %r (ID: %s).", item_name, hostname, item_id
-            )
+            logger.info("Telnet item %r added to %r (ID: %s).", item_name, hostname, item_id)
             return item_id, None
         except Exception as e:
-            logger.error("add_telnet_item(%r) failed: %r", hostname, e)
+            logger.exception("add_telnet_item(%r) failed", hostname)
             return None, zabbix_err(e)
 
     def add_jmx_item(
@@ -258,17 +248,15 @@ class RemoteItemsMixin:
                 'JMX item key is required (e.g. jmx["java.lang:type=Memory","HeapMemoryUsage.used"]).',
             )
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found."
             host_id = host_data[0]["hostid"]
             interfaces = self.zapi.hostinterface.get(hostids=host_id)
             # Prefer JMX interface (type 4)
-            jmx_iface = next(
-                (i for i in interfaces if str(i.get("type")) == "4"), None
-            ) or (interfaces[0] if interfaces else None)
+            jmx_iface = next((i for i in interfaces if str(i.get("type")) == "4"), None) or (
+                interfaces[0] if interfaces else None
+            )
             if not jmx_iface:
                 return None, f"No interface found for host '{hostname}'."
             kwargs: dict = dict(
@@ -305,5 +293,5 @@ class RemoteItemsMixin:
             )
             return item_id, None
         except Exception as e:
-            logger.error("add_jmx_item(%r) failed: %r", hostname, e)
+            logger.exception("add_jmx_item(%r) failed", hostname)
             return None, zabbix_err(e)

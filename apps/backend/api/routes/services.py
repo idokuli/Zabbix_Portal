@@ -27,13 +27,9 @@ def create_service(body: ServiceCreateRequest, _user=Depends(require_admin)):
 
 
 @router.put("/services/{serviceid}")
-def update_service(
-    serviceid: str, body: ServiceUpdateRequest, _user=Depends(require_admin)
-):
+def update_service(serviceid: str, body: ServiceUpdateRequest, _user=Depends(require_admin)):
     with zabbix_call():
-        services_bot.update_service(
-            serviceid, body.name, body.algorithm, body.description
-        )
+        services_bot.update_service(serviceid, body.name, body.algorithm, body.description)
         return {"ok": True}
 
 
@@ -78,16 +74,12 @@ def get_sla_report(
 
 
 @router.get("/health-monitors")
-def list_health_monitors(
-    hostid: str | None = Query(None), _user=Depends(get_current_user)
-):
+def list_health_monitors(hostid: str | None = Query(None), _user=Depends(get_current_user)):
     return {"monitors": services_bot.list_health_monitors(hostid=hostid)}
 
 
 @router.post("/health-monitors")
-def create_health_monitor(
-    body: HealthMonitorCreateRequest, _user=Depends(require_operator)
-):
+def create_health_monitor(body: HealthMonitorCreateRequest, _user=Depends(require_operator)):
     with zabbix_call():
         return services_bot.add_health_monitor(
             body.hostid, body.name, body.url, body.expected_contains, body.process_name

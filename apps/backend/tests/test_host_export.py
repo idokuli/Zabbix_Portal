@@ -8,6 +8,7 @@ os.environ.setdefault("ZABBIX_URL", "http://fake-zabbix")
 os.environ.setdefault("ZABBIX_USER", "Admin")
 os.environ.setdefault("ZABBIX_PASS", "zabbix")
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -49,9 +50,7 @@ def _host(hostid="1", host="srv01", name="Server 01", status="0", proxyid="0"):
 
 
 def test_build_proxy_map_returns_dict(mgr):
-    mgr.zapi.proxy.get.return_value = [
-        {"proxyid": "5", "name": "proxy-eu", "host": "proxy-eu"}
-    ]
+    mgr.zapi.proxy.get.return_value = [{"proxyid": "5", "name": "proxy-eu", "host": "proxy-eu"}]
     result = mgr._build_proxy_map()
     assert result["5"] == "proxy-eu"
 
@@ -84,9 +83,7 @@ def test_fetch_export_rows_with_hostname_filter(mgr):
 
 def test_fetch_export_rows_with_proxy(mgr):
     mgr.zapi.host.get.return_value = [_host(proxyid="5")]
-    mgr.zapi.proxy.get.return_value = [
-        {"proxyid": "5", "name": "proxy-eu", "host": "proxy-eu"}
-    ]
+    mgr.zapi.proxy.get.return_value = [{"proxyid": "5", "name": "proxy-eu", "host": "proxy-eu"}]
     rows = mgr._fetch_export_rows()
     assert rows[0][7] == "proxy-eu"
 
@@ -195,9 +192,7 @@ def test_export_hosts_to_excel_writes_file(mgr, tmp_path):
     out_path = str(tmp_path / "out.xlsx")
     result = mgr.export_hosts_to_excel(file_path=out_path)
     assert result == out_path
-    import os
-
-    assert os.path.exists(out_path)
+    assert Path(out_path).exists()
 
 
 def test_export_hosts_to_excel_zapi_none_returns_none(mgr):

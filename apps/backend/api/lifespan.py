@@ -4,9 +4,11 @@ import asyncio
 import fcntl
 import logging
 import os
+import tempfile
 import threading
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import User_Management as um
 from Database import init_db, install_notify_triggers
@@ -49,8 +51,8 @@ def _alert_loop() -> None:
     while True:
         try:
             alert_bot.run_checks()
-        except Exception as exc:
-            logger.error("Alert checker error: %r", exc)
+        except Exception:
+            logger.exception("Alert checker error")
         time.sleep(_ALERT_CHECK_INTERVAL)
 
 
@@ -71,8 +73,8 @@ def _watchdog_loop() -> None:
                     new_thread = restart_fn()
                     if new_thread is not None:
                         entry[1] = new_thread
-                except Exception as exc:
-                    logger.error("Failed to restart thread %r: %r", name, exc)
+                except Exception:
+                    logger.exception("Failed to restart thread %r", name)
 
 
 def notify_sync_clients() -> None:
@@ -95,7 +97,7 @@ def _sync_tags() -> None:
         logger.warning("Tag sync failed (non-fatal): %r", exc)
 
 
-_BG_LOCK_PATH = "/tmp/overwatch_bg.lock"
+_BG_LOCK_PATH = str(Path(tempfile.gettempdir()) / "overwatch_bg.lock")
 _bg_lock_fd: int | None = None
 
 
@@ -108,7 +110,7 @@ def _acquire_bg_lock() -> bool:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         _bg_lock_fd = fd  # keep open for the lifetime of this process
         return True
-    except (OSError, IOError):
+    except OSError:
         return False
 
 
@@ -128,9 +130,7 @@ async def lifespan(app: FastAPI):
     # Other workers handle HTTP requests only.
     if _acquire_bg_lock():
         alert_t = _start_alert_thread()
-        logger.info(
-            "Alert checker started (%s s interval) [bg worker].", _ALERT_CHECK_INTERVAL
-        )
+        logger.info("Alert checker started (%s s interval) [bg worker].", _ALERT_CHECK_INTERVAL)
         sync_bot._on_sync = notify_sync_clients
         notify_t = sync_bot.start_realtime_sync()
         bg_t = sync_bot.start_background_sync()
@@ -141,12 +141,8 @@ async def lifespan(app: FastAPI):
             ]
         )
         if bg_t is not None:
-            _managed_threads.append(
-                ["zabbix-sync", bg_t, sync_bot.start_background_sync]
-            )
-        threading.Thread(
-            target=_watchdog_loop, daemon=True, name="thread-watchdog"
-        ).start()
+            _managed_threads.append(["zabbix-sync", bg_t, sync_bot.start_background_sync])
+        threading.Thread(target=_watchdog_loop, daemon=True, name="thread-watchdog").start()
         logger.info("Thread watchdog started.")
     else:
         logger.info("Background threads already running in another worker — skipping.")

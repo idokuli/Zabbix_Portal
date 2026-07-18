@@ -126,9 +126,7 @@ def test_get_sla_report_returns_list(mgr):
     mgr.zapi.sla.getsli.return_value = [
         {
             "slaid": "1",
-            "sli": [
-                {"period": {"dateFrom": 1700000000, "dateTo": 1700086400}, "sli": 99.9}
-            ],
+            "sli": [{"period": {"dateFrom": 1700000000, "dateTo": 1700086400}, "sli": 99.9}],
         }
     ]
     result = mgr.get_sla_report("1")

@@ -35,9 +35,7 @@ def delete_action(actionid: str, _user=Depends(require_admin)):
 
 
 @router.put("/actions/{actionid}/toggle")
-def toggle_action(
-    actionid: str, status: int = Body(..., embed=True), _user=Depends(require_admin)
-):
+def toggle_action(actionid: str, status: int = Body(..., embed=True), _user=Depends(require_admin)):
     with zabbix_call():
         actions_bot.toggle_action(actionid, status)
         return {"ok": True}
@@ -65,9 +63,7 @@ def create_media_type(body: MediaTypeCreateRequest, _user=Depends(require_admin)
 
 
 @router.put("/media-types/{mediatypeid}")
-def update_media_type(
-    mediatypeid: str, body: MediaTypeUpdateRequest, _user=Depends(require_admin)
-):
+def update_media_type(mediatypeid: str, body: MediaTypeUpdateRequest, _user=Depends(require_admin)):
     with zabbix_call():
         actions_bot.update_media_type(
             mediatypeid,

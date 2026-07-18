@@ -21,7 +21,9 @@ const FAKE_USER = { id: 1, username: "admin", roles: ["root"], team_id: 1 };
 
 const UserDisplay = () => {
   const { user, loading } = useAuth();
-  if (loading) return <span>loading</span>;
+  if (loading) {
+    return <span>loading</span>;
+  }
   return <span>{user ? user.username : "no-user"}</span>;
 };
 

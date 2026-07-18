@@ -58,7 +58,7 @@ export const BulkTriggerDialog = ({
   const [saving, setSaving] = useState(false);
   const [results, setResults] = useState<BulkResult[]>([]);
 
-  const isDisabled = saving || !selectedHosts.length || !triggerName || !itemKey || !threshold;
+  const isDisabled = saving || selectedHosts.length === 0 || !triggerName || !itemKey || !threshold;
 
   const handleClose = () => {
     setSelectedHosts([]);
@@ -91,7 +91,9 @@ export const BulkTriggerDialog = ({
       setResults(mapped);
       const hasErrors = mapped.some((r) => r.error);
       showToast(res.message, hasErrors ? "error" : "success");
-      if (!hasErrors) onSuccess();
+      if (!hasErrors) {
+        onSuccess();
+      }
     } catch (e) {
       showToast(e instanceof Error ? e.message : String(e), "error");
     } finally {

@@ -67,9 +67,8 @@ def test_list_graphs_team_filter():
 def test_get_graph_image_success():
     mock_bot = MagicMock()
     mock_bot.get_graph_image.return_value = b"\x89PNG"
-    with patch("api.routes.dashboard.dashboard_bot", mock_bot):
-        with TestClient(make_app()) as c:
-            r = c.get("/dashboard/graphs/1/image")
+    with patch("api.routes.dashboard.dashboard_bot", mock_bot), TestClient(make_app()) as c:
+        r = c.get("/dashboard/graphs/1/image")
     assert r.status_code == 200
     assert r.headers["content-type"] == "image/png"
 
@@ -77,25 +76,22 @@ def test_get_graph_image_success():
 def test_get_graph_image_unavailable():
     mock_bot = MagicMock()
     mock_bot.get_graph_image.return_value = None
-    with patch("api.routes.dashboard.dashboard_bot", mock_bot):
-        with TestClient(make_app()) as c:
-            r = c.get("/dashboard/graphs/1/image")
+    with patch("api.routes.dashboard.dashboard_bot", mock_bot), TestClient(make_app()) as c:
+        r = c.get("/dashboard/graphs/1/image")
     assert r.status_code == 503
 
 
 def test_get_graph_data_success():
     mock_bot = MagicMock()
     mock_bot.get_graph_data.return_value = {"labels": [], "datasets": []}
-    with patch("api.routes.dashboard.dashboard_bot", mock_bot):
-        with TestClient(make_app()) as c:
-            r = c.get("/dashboard/graphs/1/data?minutes=60")
+    with patch("api.routes.dashboard.dashboard_bot", mock_bot), TestClient(make_app()) as c:
+        r = c.get("/dashboard/graphs/1/data?minutes=60")
     assert r.status_code == 200
 
 
 def test_get_graph_data_bad_minutes():
-    with patch("api.routes.dashboard.dashboard_bot", MagicMock()):
-        with TestClient(make_app()) as c:
-            r = c.get("/dashboard/graphs/1/data?minutes=99999")
+    with patch("api.routes.dashboard.dashboard_bot", MagicMock()), TestClient(make_app()) as c:
+        r = c.get("/dashboard/graphs/1/data?minutes=99999")
     assert r.status_code == 400
 
 
@@ -155,9 +151,8 @@ def test_get_dashboard_layout_user():
 
 
 def test_save_dashboard_layout_bad_scope():
-    with patch("api.routes.dashboard.dashboard_bot", MagicMock()):
-        with TestClient(make_app()) as c:
-            r = c.put("/dashboard/layout", json={"scope": "bad", "widgets": []})
+    with patch("api.routes.dashboard.dashboard_bot", MagicMock()), TestClient(make_app()) as c:
+        r = c.put("/dashboard/layout", json={"scope": "bad", "widgets": []})
     assert r.status_code == 400
 
 
@@ -183,9 +178,8 @@ def test_list_dashboard_pages_user():
 
 
 def test_list_dashboard_pages_bad_kind():
-    with patch("api.routes.dashboard.dashboard_bot", MagicMock()):
-        with TestClient(make_app()) as c:
-            r = c.get("/dashboard/pages?kind=bad")
+    with patch("api.routes.dashboard.dashboard_bot", MagicMock()), TestClient(make_app()) as c:
+        r = c.get("/dashboard/pages?kind=bad")
     assert r.status_code == 400
 
 
@@ -205,19 +199,17 @@ def test_create_dashboard_page_success():
 
 
 def test_rename_default_dashboard_rejected():
-    with patch("api.routes.dashboard.dashboard_bot", MagicMock()):
-        with TestClient(make_app()) as c:
-            r = c.put(
-                "/dashboard/pages/dashboard",
-                json={"scope": "user", "name": "new name"},
-            )
+    with patch("api.routes.dashboard.dashboard_bot", MagicMock()), TestClient(make_app()) as c:
+        r = c.put(
+            "/dashboard/pages/dashboard",
+            json={"scope": "user", "name": "new name"},
+        )
     assert r.status_code == 400
 
 
 def test_delete_default_dashboard_rejected():
-    with patch("api.routes.dashboard.dashboard_bot", MagicMock()):
-        with TestClient(make_app()) as c:
-            r = c.delete("/dashboard/pages/dashboard")
+    with patch("api.routes.dashboard.dashboard_bot", MagicMock()), TestClient(make_app()) as c:
+        r = c.delete("/dashboard/pages/dashboard")
     assert r.status_code == 400
 
 
@@ -250,9 +242,7 @@ def test_save_dashboard_layout_team_success():
             with patch("api.routes.dashboard.um") as mock_um:
                 mock_um.save_dashboard_layout.return_value = True
                 with TestClient(make_app()) as c:
-                    r = c.put(
-                        "/dashboard/layout", json={"scope": "team", "widgets": []}
-                    )
+                    r = c.put("/dashboard/layout", json={"scope": "team", "widgets": []})
     assert r.status_code == 200
 
 
@@ -294,22 +284,20 @@ def test_list_dashboard_pages_team_no_team():
 
 
 def test_create_dashboard_page_bad_kind():
-    with patch("api.routes.dashboard.dashboard_bot", MagicMock()):
-        with TestClient(make_app()) as c:
-            r = c.post(
-                "/dashboard/pages",
-                json={"scope": "user", "kind": "bad", "name": "X"},
-            )
+    with patch("api.routes.dashboard.dashboard_bot", MagicMock()), TestClient(make_app()) as c:
+        r = c.post(
+            "/dashboard/pages",
+            json={"scope": "user", "kind": "bad", "name": "X"},
+        )
     assert r.status_code == 400
 
 
 def test_create_dashboard_page_empty_name():
-    with patch("api.routes.dashboard.dashboard_bot", MagicMock()):
-        with TestClient(make_app()) as c:
-            r = c.post(
-                "/dashboard/pages",
-                json={"scope": "user", "kind": "dashboard", "name": "  "},
-            )
+    with patch("api.routes.dashboard.dashboard_bot", MagicMock()), TestClient(make_app()) as c:
+        r = c.post(
+            "/dashboard/pages",
+            json={"scope": "user", "kind": "dashboard", "name": "  "},
+        )
     assert r.status_code == 400
 
 
@@ -384,7 +372,6 @@ def test_delete_dashboard_page_not_found():
 
 
 def test_delete_dashboard_page_bad_scope():
-    with patch("api.routes.dashboard.dashboard_bot", MagicMock()):
-        with TestClient(make_app()) as c:
-            r = c.delete("/dashboard/pages/my-dash?scope=bad")
+    with patch("api.routes.dashboard.dashboard_bot", MagicMock()), TestClient(make_app()) as c:
+        r = c.delete("/dashboard/pages/my-dash?scope=bad")
     assert r.status_code == 400

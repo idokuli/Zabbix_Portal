@@ -3,9 +3,15 @@ import { apiFetch } from "./fetch";
 export const reportsApi = {
   getTopTriggers: (params?: { limit?: number; severity_min?: number; hours?: number }) => {
     const q = new URLSearchParams();
-    if (params?.limit != null) q.set("limit", String(params.limit));
-    if (params?.severity_min != null) q.set("severity_min", String(params.severity_min));
-    if (params?.hours != null) q.set("hours", String(params.hours));
+    if (params?.limit != null) {
+      q.set("limit", String(params.limit));
+    }
+    if (params?.severity_min != null) {
+      q.set("severity_min", String(params.severity_min));
+    }
+    if (params?.hours != null) {
+      q.set("hours", String(params.hours));
+    }
     return apiFetch<{
       triggers: Array<{
         triggerid: string;
@@ -22,8 +28,12 @@ export const reportsApi = {
   },
   getAuditLog: (params?: { limit?: number; hours?: number }) => {
     const q = new URLSearchParams();
-    if (params?.limit != null) q.set("limit", String(params.limit));
-    if (params?.hours != null) q.set("hours", String(params.hours));
+    if (params?.limit != null) {
+      q.set("limit", String(params.limit));
+    }
+    if (params?.hours != null) {
+      q.set("hours", String(params.hours));
+    }
     return apiFetch<{
       entries: Array<{
         auditid: string;
@@ -41,8 +51,12 @@ export const reportsApi = {
   },
   getActionLog: (params?: { limit?: number; hours?: number }) => {
     const q = new URLSearchParams();
-    if (params?.limit) q.set("limit", String(params.limit));
-    if (params?.hours) q.set("hours", String(params.hours));
+    if (params?.limit) {
+      q.set("limit", String(params.limit));
+    }
+    if (params?.hours) {
+      q.set("hours", String(params.hours));
+    }
     return apiFetch<{
       entries: Array<{
         alertid: string;
@@ -63,8 +77,12 @@ export const reportsApi = {
   },
   getAvailability: (params?: { hours?: number; groupid?: string }) => {
     const q = new URLSearchParams();
-    if (params?.hours) q.set("hours", String(params.hours));
-    if (params?.groupid) q.set("groupid", params.groupid);
+    if (params?.hours) {
+      q.set("hours", String(params.hours));
+    }
+    if (params?.groupid) {
+      q.set("groupid", params.groupid);
+    }
     return apiFetch<{
       hosts: Array<{
         hostid: string;
@@ -77,8 +95,12 @@ export const reportsApi = {
   },
   getNotificationHistory: (params?: { hours?: number; limit?: number }) => {
     const q = new URLSearchParams();
-    if (params?.hours) q.set("hours", String(params.hours));
-    if (params?.limit) q.set("limit", String(params.limit));
+    if (params?.hours) {
+      q.set("hours", String(params.hours));
+    }
+    if (params?.limit) {
+      q.set("limit", String(params.limit));
+    }
     return apiFetch<{
       notifications: Array<{
         alertid: string;

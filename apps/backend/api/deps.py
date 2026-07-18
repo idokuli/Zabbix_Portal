@@ -2,7 +2,7 @@
 
 import logging
 from contextlib import contextmanager
-from typing import Generator
+from collections.abc import Generator
 
 import User_Management as um
 from Database import get_conn
@@ -18,7 +18,14 @@ __all__ = [
     "resolve_team",
     "team_tag",
     "zabbix_call",
+    "is_global_viewer",
 ]
+
+
+def is_global_viewer(current_user: dict) -> bool:
+    """True for roles that see data across every team (root, auditor)."""
+    roles = current_user.get("roles", [])
+    return any(r in roles for r in ("root", "auditor"))
 
 
 def live_team_id(current_user: dict) -> int | None:
@@ -49,8 +56,7 @@ def team_hostname_filter(current_user: dict) -> set[str] | None:
     Returns None for root/auditor (unrestricted).
     Returns an empty set when the user has no team memberships.
     """
-    roles = current_user.get("roles", [])
-    if any(r in roles for r in ("root", "auditor")):
+    if is_global_viewer(current_user):
         return None
     user_id = int(current_user.get("sub", 0) or 0)
     if not user_id:
@@ -76,4 +82,4 @@ def zabbix_call(status: int = 422) -> Generator[None, None, None]:
     try:
         yield
     except RuntimeError as e:
-        raise HTTPException(status_code=status, detail=zabbix_err(e))
+        raise HTTPException(status_code=status, detail=zabbix_err(e)) from e

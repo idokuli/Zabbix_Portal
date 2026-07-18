@@ -117,9 +117,7 @@ class Report_Manager(Zabbix_Base):
                     "triggerid": t["triggerid"],
                     "description": t["description"],
                     "priority": int(t["priority"]),
-                    "severity_label": PORTAL_SEVERITY.get(
-                        int(t["priority"]), "Unknown"
-                    ),
+                    "severity_label": PORTAL_SEVERITY.get(int(t["priority"]), "Unknown"),
                     "lastchange": int(t["lastchange"]),
                     "status": int(t["status"]),
                     "value": int(t["value"]),
@@ -130,7 +128,7 @@ class Report_Manager(Zabbix_Base):
             ]
         except Exception as e:
             logger.exception("get_top_triggers failed")
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     # ── Audit Log ──────────────────────────────────────────────────────
 
@@ -140,9 +138,7 @@ class Report_Manager(Zabbix_Base):
         if not self.zapi:
             return []
         try:
-            params: dict = dict(
-                output="extend", limit=limit, sortfield="clock", sortorder="DESC"
-            )
+            params: dict = dict(output="extend", limit=limit, sortfield="clock", sortorder="DESC")
             if time_from:
                 params["time_from"] = time_from
             if userid:
@@ -154,9 +150,7 @@ class Report_Manager(Zabbix_Base):
                     "userid": e.get("userid", ""),
                     "username": e.get("username", ""),
                     "clock": int(e.get("clock", 0)),
-                    "action": AUDIT_ACTIONS.get(
-                        int(e.get("action", 0)), str(e.get("action", ""))
-                    ),
+                    "action": AUDIT_ACTIONS.get(int(e.get("action", 0)), str(e.get("action", ""))),
                     "resourcetype": AUDIT_RESOURCES.get(
                         int(e.get("resourcetype", 0)), str(e.get("resourcetype", ""))
                     ),
@@ -169,19 +163,15 @@ class Report_Manager(Zabbix_Base):
             ]
         except Exception as e:
             logger.exception("get_audit_log failed")
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     # ── Action Log ────────────────────────────────────────────────────
 
-    def get_action_log(
-        self, limit: int = 200, time_from: int | None = None
-    ) -> list[dict]:
+    def get_action_log(self, limit: int = 200, time_from: int | None = None) -> list[dict]:
         if not self.zapi:
             return []
         try:
-            params: dict = dict(
-                output="extend", limit=limit, sortfield="clock", sortorder="DESC"
-            )
+            params: dict = dict(output="extend", limit=limit, sortfield="clock", sortorder="DESC")
             if time_from:
                 params["time_from"] = time_from
             alerts = self.zapi.alert.get(**params)
@@ -204,7 +194,7 @@ class Report_Manager(Zabbix_Base):
             ]
         except Exception as e:
             logger.exception("get_action_log failed")
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     # ── Notifications (Zabbix delivery history) ───────────────────────
 
@@ -246,9 +236,7 @@ class Report_Manager(Zabbix_Base):
             mtype_map: dict = {}
             if user_ids:
                 try:
-                    users = self.zapi.user.get(
-                        userids=user_ids, output=["userid", "username"]
-                    )
+                    users = self.zapi.user.get(userids=user_ids, output=["userid", "username"])
                     user_map = {u["userid"]: u["username"] for u in users}
                 except Exception as exc:
                     logger.debug("Failed to enrich notification user names: %s", exc)
@@ -259,9 +247,7 @@ class Report_Manager(Zabbix_Base):
                     )
                     mtype_map = {m["mediatypeid"]: m["name"] for m in mtypes}
                 except Exception as exc:
-                    logger.debug(
-                        "Failed to enrich notification media type names: %s", exc
-                    )
+                    logger.debug("Failed to enrich notification media type names: %s", exc)
             STATUS_LABELS = {0: "Not sent", 1: "Sent", 2: "Failed"}
             return [
                 {
@@ -270,9 +256,7 @@ class Report_Manager(Zabbix_Base):
                     "sendto": a.get("sendto", ""),
                     "subject": a.get("subject", ""),
                     "status": int(a.get("status", 0)),
-                    "status_label": STATUS_LABELS.get(
-                        int(a.get("status", 0)), "Unknown"
-                    ),
+                    "status_label": STATUS_LABELS.get(int(a.get("status", 0)), "Unknown"),
                     "error": a.get("error", ""),
                     "username": user_map.get(a.get("userid", ""), a.get("userid", "")),
                     "media_type": mtype_map.get(a.get("mediatypeid", ""), ""),
@@ -281,13 +265,11 @@ class Report_Manager(Zabbix_Base):
             ]
         except Exception as e:
             logger.exception("get_notification_history failed")
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     # ── Availability ───────────────────────────────────────────────────
 
-    def get_availability(
-        self, hours: int = 24, groupid: str | None = None
-    ) -> list[dict]:
+    def get_availability(self, hours: int = 24, groupid: str | None = None) -> list[dict]:
         """Per-host availability based on problems in the time window."""
         if not self.zapi:
             return []
@@ -331,14 +313,8 @@ class Report_Manager(Zabbix_Base):
                         }
                     host_down[hid]["problem_count"] += 1
                     start = int(p["clock"])
-                    end = (
-                        int(p["r_clock"])
-                        if p.get("r_clock") and int(p["r_clock"]) > 0
-                        else now
-                    )
-                    host_down[hid]["downtime_seconds"] += max(
-                        0, end - max(start, since)
-                    )
+                    end = int(p["r_clock"]) if p.get("r_clock") and int(p["r_clock"]) > 0 else now
+                    host_down[hid]["downtime_seconds"] += max(0, end - max(start, since))
 
             results = [
                 {
@@ -352,4 +328,4 @@ class Report_Manager(Zabbix_Base):
             return sorted(results, key=lambda x: x["availability_pct"])
         except Exception as e:
             logger.exception("get_availability failed")
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e

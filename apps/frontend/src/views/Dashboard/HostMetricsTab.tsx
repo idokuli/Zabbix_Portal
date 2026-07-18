@@ -49,19 +49,26 @@ ChartJS.register(
   ZoomPlugin,
 );
 const utilColor = (val: number): string => {
-  if (val >= 90) return "#F44336";
-  if (val >= 75) return "#FF5722";
-  if (val >= 50) return "#FFC107";
-  return "#22C55E";
+  if (val >= 90) {
+    return "#E45959";
+  }
+  if (val >= 75) {
+    return "#F58E45";
+  }
+  if (val >= 50) {
+    return "#DBA243";
+  }
+  return "#2EA043";
 };
 
 const MetricBar = ({ value, label }: { value?: number; label: string }) => {
-  if (value === undefined)
+  if (value === undefined) {
     return (
       <Typography variant="caption" color="text.disabled">
         —
       </Typography>
     );
+  }
   return (
     <Tooltip title={`${label}: ${value}%`}>
       <Box sx={{ minWidth: 80 }}>
@@ -92,7 +99,9 @@ export const HostMetricsTab = () => {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const load = useCallback((silent = false) => {
-    if (!silent) setLoading(true);
+    if (!silent) {
+      setLoading(true);
+    }
     api
       .getHostsMetrics()
       .then((res) => {
@@ -109,7 +118,9 @@ export const HostMetricsTab = () => {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
   useEffect(() => {
-    if (tick > 0) void load(true);
+    if (tick > 0) {
+      void load(true);
+    }
   }, [tick]);
 
   const filtered = hosts.filter((h) => h.hostname.toLowerCase().includes(filter.toLowerCase()));

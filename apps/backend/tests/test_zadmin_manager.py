@@ -374,9 +374,7 @@ def test_get_ldap_userdirectory_normalises_provision_groups(mgr):
             "user_username": "",
             "user_lastname": "",
             "user_ref_attr": "",
-            "provision_groups": [
-                {"user_groups": [{"usrgrpid": "7"}, {"usrgrpid": "8"}]}
-            ],
+            "provision_groups": [{"user_groups": [{"usrgrpid": "7"}, {"usrgrpid": "8"}]}],
             "provision_media": [{"severity": "5", "active": "1"}],
         }
     ]

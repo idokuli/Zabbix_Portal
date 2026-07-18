@@ -1,7 +1,8 @@
 """Bulk item creation across multiple hosts — dispatches to the per-type add_* methods."""
 
 import logging
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +92,5 @@ class BulkItemsMixin:
             results.append({"hostname": hostname, "item_id": item_id, "error": err})
 
         ok = sum(1 for r in results if not r["error"])
-        logger.info(
-            "bulk_add_items: %d/%d succeeded (type=%s).", ok, len(hostnames), item_type
-        )
+        logger.info("bulk_add_items: %d/%d succeeded (type=%s).", ok, len(hostnames), item_type)
         return results

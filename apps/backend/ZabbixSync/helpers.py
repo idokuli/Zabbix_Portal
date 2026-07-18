@@ -32,8 +32,8 @@ class SyncHelpersMixin:
                 if t in (1, 2, 3) and t not in result:
                     result[t] = str(role["roleid"])
             logger.debug("ZabbixSync: resolved roleids = %s", result)
-        except Exception as exc:
-            logger.error("ZabbixSync._fetch_roleids failed: %r", exc)
+        except Exception:
+            logger.exception("ZabbixSync._fetch_roleids failed")
         return result
 
     def _roleid_for(self, user_type: int) -> str:
@@ -51,40 +51,32 @@ class SyncHelpersMixin:
                 output=["userid", self._ufield],
             )
             return rows[0] if rows else None
-        except Exception as exc:
-            logger.error("ZabbixSync._get_zabbix_user(%r) failed: %r", username, exc)
+        except Exception:
+            logger.exception("ZabbixSync._get_zabbix_user(%r) failed", username)
             return None
 
     def _get_or_create_usergroup(self, name: str) -> str | None:
         """Return usrgrpid for a Zabbix user group, creating it if absent."""
         try:
-            existing = self.zapi.usergroup.get(
-                filter={"name": name}, output=["usrgrpid"]
-            )
+            existing = self.zapi.usergroup.get(filter={"name": name}, output=["usrgrpid"])
             if existing:
                 return existing[0]["usrgrpid"]
             result = self.zapi.usergroup.create(name=name, gui_access=0, users_status=0)
             return result["usrgrpids"][0]
-        except Exception as exc:
-            logger.error(
-                "ZabbixSync._get_or_create_usergroup(%r) failed: %r", name, exc
-            )
+        except Exception:
+            logger.exception("ZabbixSync._get_or_create_usergroup(%r) failed", name)
             return None
 
     def _get_or_create_hostgroup(self, name: str) -> str | None:
         """Return groupid for a Zabbix host group, creating it if absent."""
         try:
-            existing = self.zapi.hostgroup.get(
-                filter={"name": name}, output=["groupid"]
-            )
+            existing = self.zapi.hostgroup.get(filter={"name": name}, output=["groupid"])
             if existing:
                 return existing[0]["groupid"]
             result = self.zapi.hostgroup.create(name=name)
             return result["groupids"][0]
-        except Exception as exc:
-            logger.error(
-                "ZabbixSync._get_or_create_hostgroup(%r) failed: %r", name, exc
-            )
+        except Exception:
+            logger.exception("ZabbixSync._get_or_create_hostgroup(%r) failed", name)
             return None
 
     def _set_usergroup_permission(
@@ -106,8 +98,8 @@ class SyncHelpersMixin:
                 usrgrpid,
                 host_groupid,
             )
-        except Exception as exc:
-            logger.error("ZabbixSync._set_usergroup_permission failed: %r", exc)
+        except Exception:
+            logger.exception("ZabbixSync._set_usergroup_permission failed")
 
     def _user_type(self, roles: list[str]) -> int:
         return max((ROLE_TO_TYPE.get(r, 1) for r in roles), default=1)

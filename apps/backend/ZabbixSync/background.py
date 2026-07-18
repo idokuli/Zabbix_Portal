@@ -2,7 +2,8 @@
 
 import logging
 import threading
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
+from collections.abc import Callable
 
 from ZabbixSync.constants import SYNC_INTERVAL
 
@@ -37,9 +38,7 @@ class SyncBackgroundMixin:
                 conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
                 with conn.cursor() as cur:
                     cur.execute("LISTEN zabbix_changes;")
-                logger.info(
-                    "ZabbixSync: real-time listener active — syncing on Zabbix DB changes."
-                )
+                logger.info("ZabbixSync: real-time listener active — syncing on Zabbix DB changes.")
                 while True:
                     if sel.select([conn], [], [], 5.0)[0]:
                         conn.poll()
@@ -47,10 +46,10 @@ class SyncBackgroundMixin:
                             conn.notifies.clear()
                             try:
                                 self.full_sync()
-                            except Exception as exc:
-                                logger.error("ZabbixSync realtime sync error: %r", exc)
-            except Exception as exc:
-                logger.error("ZabbixSync real-time listener crashed: %r", exc)
+                            except Exception:
+                                logger.exception("ZabbixSync realtime sync error")
+            except Exception:
+                logger.exception("ZabbixSync real-time listener crashed")
             finally:
                 if conn is not None:
                     try:
@@ -76,12 +75,10 @@ class SyncBackgroundMixin:
                 threading.Event().wait(SYNC_INTERVAL)
                 try:
                     self.full_sync()
-                except Exception as exc:
-                    logger.error("ZabbixSync background loop error: %r", exc)
+                except Exception:
+                    logger.exception("ZabbixSync background loop error")
 
         t = threading.Thread(target=_loop, daemon=True, name="zabbix-sync")
         t.start()
-        logger.info(
-            "ZabbixSync: background full-sync started (interval=%ds).", SYNC_INTERVAL
-        )
+        logger.info("ZabbixSync: background full-sync started (interval=%ds).", SYNC_INTERVAL)
         return t

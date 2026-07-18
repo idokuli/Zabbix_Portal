@@ -37,7 +37,9 @@ class TokenCreateRequest(BaseModel):
 
 class ProxyConfig(BaseModel):
     name: str
-    operating_mode: int = 0  # 0 - active (proxy connects to server), 1 - passive (server connects to proxy)
+    operating_mode: int = (
+        0  # 0 - active (proxy connects to server), 1 - passive (server connects to proxy)
+    )
     description: str = ""
     proxy_groupid: str = ""  # empty - not a member of a proxy group
     local_address: str = ""  # required when proxy_groupid is set

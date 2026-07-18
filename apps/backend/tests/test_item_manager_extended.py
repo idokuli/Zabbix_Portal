@@ -64,9 +64,7 @@ def test_add_string_trigger_zapi_none(mgr):
 
 
 def test_get_trigger_hostname_found(mgr):
-    mgr.zapi.trigger.get.return_value = [
-        {"triggerid": "1", "hosts": [{"host": "srv01"}]}
-    ]
+    mgr.zapi.trigger.get.return_value = [{"triggerid": "1", "hosts": [{"host": "srv01"}]}]
     result = mgr.get_trigger_hostname("1")
     assert result == "srv01"
 
@@ -125,9 +123,7 @@ def test_add_ipmi_item_zapi_none(mgr):
 def test_add_telnet_item_success(mgr):
     _mock_host_iface(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["41"]}
-    item_id, err = mgr.add_telnet_item(
-        "h1", "Telnet check", "uptime", "telnet.run[uptime]"
-    )
+    item_id, err = mgr.add_telnet_item("h1", "Telnet check", "uptime", "telnet.run[uptime]")
     assert item_id == "41"
     assert err is None
 
@@ -158,9 +154,7 @@ def test_add_process_item_host_not_found(mgr):
 def test_add_windows_service_item_success(mgr):
     _mock_host_iface(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["51"]}
-    item_id, err = mgr.add_windows_service_item(
-        "h1", "Spooler", "service.info[Spooler]"
-    )
+    item_id, err = mgr.add_windows_service_item("h1", "Spooler", "service.info[Spooler]")
     assert item_id == "51"
     assert err is None
 

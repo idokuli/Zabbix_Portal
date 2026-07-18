@@ -28,6 +28,7 @@ import {
   LinearProgress,
   Menu,
   MenuItem,
+  Paper,
   Select,
   Snackbar,
   Stack,
@@ -51,6 +52,104 @@ import { EditHostDialog } from "./EditHostDialog";
 import { HostDetailDrawer } from "./HostDetailDrawer";
 import { TagEditorDialog } from "./TagEditorDialog";
 import { AvailabilityCell, ProblemsCell } from "./shared";
+
+type HostEditForm = {
+  name: string;
+  ip: string;
+  proxyid: string;
+  status: string;
+  group_ids: string[];
+};
+
+type HostUpdatePayload = {
+  name?: string;
+  ip?: string;
+  proxyid?: string;
+  status?: number;
+  group_ids?: string[];
+};
+
+const buildHostUpdatePayload = (editForm: HostEditForm, editHost: Host): HostUpdatePayload => {
+  const payload: HostUpdatePayload = {};
+  if (editForm.name !== (editHost.name ?? editHost.host)) {
+    payload.name = editForm.name;
+  }
+  const origIp = editHost.interfaces?.find((i) => i.type === "1")?.ip ?? "";
+  if (editForm.ip !== origIp) {
+    payload.ip = editForm.ip;
+  }
+  if (editForm.proxyid !== (editHost.proxyid ?? "")) {
+    payload.proxyid = editForm.proxyid;
+  }
+  if (editForm.status !== editHost.status) {
+    payload.status = Number(editForm.status);
+  }
+  const origGroupIds = (editHost.groups ?? [])
+    .map((g) => g.groupid)
+    .sort()
+    .join(",");
+  const newGroupIds = [...editForm.group_ids].sort().join(",");
+  if (origGroupIds !== newGroupIds) {
+    payload.group_ids = editForm.group_ids;
+  }
+  return payload;
+};
+
+const HostTagsCell = ({
+  tags,
+  rowHost,
+  deleteTagInline,
+}: {
+  tags: HostTag[];
+  rowHost: Host;
+  deleteTagInline: (host: Host, tag: HostTag) => void;
+}) => {
+  if (tags.length === 0) {
+    return (
+      <Typography variant="caption" color="text.disabled">
+        —
+      </Typography>
+    );
+  }
+  return (
+    <Box sx={{ display: "flex", flexWrap: "nowrap", gap: 0.4, overflow: "hidden" }}>
+      {tags.slice(0, 3).map((t) => (
+        <Chip
+          key={`${t.tag}:${t.value}`}
+          label={t.value ? `${t.tag}: ${t.value}` : t.tag}
+          size="small"
+          onDelete={t.tag !== "team" ? () => deleteTagInline(rowHost, t) : undefined}
+          sx={{
+            fontSize: "0.62rem",
+            height: 20,
+            bgcolor: "action.selected",
+            color: "primary.main",
+            border: "none",
+            flexShrink: 0,
+            "& .MuiChip-deleteIcon": {
+              fontSize: "0.7rem",
+              color: "primary.main",
+              opacity: 0.6,
+              "&:hover": { opacity: 1 },
+            },
+          }}
+        />
+      ))}
+      {tags.length > 3 && (
+        <Tooltip
+          title={tags
+            .slice(3)
+            .map((t) => `${t.tag}: ${t.value}`)
+            .join(", ")}
+        >
+          <Typography variant="caption" color="text.disabled" sx={{ alignSelf: "center" }}>
+            +{tags.length - 3}
+          </Typography>
+        </Tooltip>
+      )}
+    </Box>
+  );
+};
 
 export const Hosts = () => {
   const { t } = useTranslation();
@@ -151,7 +250,9 @@ export const Hosts = () => {
 
   const reload = useCallback(
     async (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       try {
         const res = await api.listHosts();
         setHosts(res.hosts);
@@ -164,14 +265,15 @@ export const Hosts = () => {
     [showToast],
   );
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: lastSync triggers re-fetch on sync events
   useEffect(() => {
-    void reload();
+    void reload(lastSync > 0);
   }, [reload, lastSync]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
   useEffect(() => {
-    if (tick > 0) void reload(true);
+    if (tick > 0) {
+      void reload(true);
+    }
   }, [tick]);
 
   useEffect(() => {
@@ -196,7 +298,7 @@ export const Hosts = () => {
         ip,
         template,
         proxyid: proxyid || undefined,
-        group_ids: groupIds.length ? groupIds : undefined,
+        group_ids: groupIds.length > 0 ? groupIds : undefined,
         apply_team_tag: applyTeamTag,
       });
       showToast("Host added successfully.", "success");
@@ -237,27 +339,12 @@ export const Hosts = () => {
   }, []);
 
   const onEditSave = async () => {
-    if (!editHost) return;
+    if (!editHost) {
+      return;
+    }
     setEditSaving(true);
     try {
-      const payload: {
-        name?: string;
-        ip?: string;
-        proxyid?: string;
-        status?: number;
-        group_ids?: string[];
-      } = {};
-      if (editForm.name !== (editHost.name ?? editHost.host)) payload.name = editForm.name;
-      const origIp = editHost.interfaces?.find((i) => i.type === "1")?.ip ?? "";
-      if (editForm.ip !== origIp) payload.ip = editForm.ip;
-      if (editForm.proxyid !== (editHost.proxyid ?? "")) payload.proxyid = editForm.proxyid;
-      if (editForm.status !== editHost.status) payload.status = Number(editForm.status);
-      const origGroupIds = (editHost.groups ?? [])
-        .map((g) => g.groupid)
-        .sort()
-        .join(",");
-      const newGroupIds = [...editForm.group_ids].sort().join(",");
-      if (origGroupIds !== newGroupIds) payload.group_ids = editForm.group_ids;
+      const payload = buildHostUpdatePayload(editForm, editHost);
       await api.updateHost(editHost.host, payload);
       showToast("Host updated.", "success");
       setEditHost(null);
@@ -297,7 +384,9 @@ export const Hosts = () => {
   }, []);
 
   const onLinkTemplate = async () => {
-    if (!tplHost || !tplLinkId) return;
+    if (!(tplHost && tplLinkId)) {
+      return;
+    }
     setTplLinking(true);
     try {
       await hostsApi.linkTemplate(tplHost.host, tplLinkId);
@@ -314,7 +403,9 @@ export const Hosts = () => {
   };
 
   const onUnlinkTemplate = async (templateid: string) => {
-    if (!tplHost) return;
+    if (!tplHost) {
+      return;
+    }
     try {
       await hostsApi.unlinkTemplate(tplHost.host, templateid);
       showToast("Template unlinked.", "success");
@@ -326,7 +417,9 @@ export const Hosts = () => {
   };
 
   const onSaveTags = async (tags: HostTag[]) => {
-    if (!tagHost) return;
+    if (!tagHost) {
+      return;
+    }
     try {
       await api.updateHostTags(tagHost.host, tags);
       showToast("Tags updated.", "success");
@@ -357,7 +450,9 @@ export const Hosts = () => {
   );
 
   const onBulkUpload = async () => {
-    if (!uploadFile) return;
+    if (!uploadFile) {
+      return;
+    }
     setUploading(true);
     try {
       const res = await api.bulkCreateHosts(uploadFile, bulkApplyTeamTag);
@@ -385,9 +480,11 @@ export const Hosts = () => {
   };
 
   const pickUploadFile = (file: File | null) => {
-    if (!file) return;
+    if (!file) {
+      return;
+    }
     const name = file.name.toLowerCase();
-    if (!name.endsWith(".csv") && !name.endsWith(".xlsx")) {
+    if (!(name.endsWith(".csv") || name.endsWith(".xlsx"))) {
       showToast("Only .csv and .xlsx files are supported.", "error");
       return;
     }
@@ -396,10 +493,16 @@ export const Hosts = () => {
 
   const filteredHosts = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return hosts;
+    if (!q) {
+      return hosts;
+    }
     return hosts.filter((h) => {
-      if (h.host.toLowerCase().includes(q)) return true;
-      if ((h.name ?? "").toLowerCase().includes(q)) return true;
+      if (h.host.toLowerCase().includes(q)) {
+        return true;
+      }
+      if ((h.name ?? "").toLowerCase().includes(q)) {
+        return true;
+      }
       return (h.interfaces ?? []).some((i) => i.ip.toLowerCase().includes(q));
     });
   }, [hosts, search]);
@@ -408,13 +511,13 @@ export const Hosts = () => {
 
   const headerSx = useMemo(
     () => ({
-      fontSize: "0.7rem",
-      fontWeight: 700,
+      fontSize: "0.6875rem",
+      fontWeight: 600,
       textTransform: "uppercase" as const,
-      letterSpacing: "0.07em",
-      color: isDark ? "#64748B" : "#6B7280",
+      letterSpacing: "0.05em",
+      color: "text.secondary",
     }),
-    [isDark],
+    [],
   );
 
   const columns = useMemo<GridColDef[]>(
@@ -442,12 +545,13 @@ export const Hosts = () => {
         renderCell: (params) => {
           const ifaces = params.row.interfaces as HostInterface[] | undefined;
           const iface = ifaces?.find((i) => i.type === "1") ?? ifaces?.[0];
-          if (!iface)
+          if (!iface) {
             return (
               <Typography variant="caption" color="text.disabled">
                 —
               </Typography>
             );
+          }
           return (
             <Tooltip title={`${iface.ip}:${iface.port}`} placement="top">
               <Typography
@@ -475,12 +579,13 @@ export const Hosts = () => {
         renderHeader: () => <Typography sx={headerSx}>Proxy</Typography>,
         renderCell: (params) => {
           const pid = params.value as string | undefined;
-          if (!pid || pid === "0")
+          if (!pid || pid === "0") {
             return (
               <Typography variant="caption" color="text.disabled">
                 Direct
               </Typography>
             );
+          }
           const proxy = proxies.find((p) => p.proxyid === pid);
           return (
             <Chip
@@ -503,12 +608,13 @@ export const Hosts = () => {
         renderCell: (params) => {
           const tmpls =
             (params.value as Array<{ templateid: string; name: string }> | undefined) ?? [];
-          if (tmpls.length === 0)
+          if (tmpls.length === 0) {
             return (
               <Typography variant="caption" color="text.disabled">
                 —
               </Typography>
             );
+          }
           return (
             <Tooltip title={tmpls.map((t) => t.name).join(", ")} placement="top">
               <Box sx={{ display: "flex", gap: 0.4, overflow: "hidden", flexWrap: "nowrap" }}>
@@ -557,13 +663,8 @@ export const Hosts = () => {
               fontSize: "0.7rem",
               height: 20,
               fontWeight: 600,
-              bgcolor:
-                params.value === "0"
-                  ? isDark
-                    ? "rgba(22,163,74,0.18)"
-                    : "rgba(22,163,74,0.12)"
-                  : "action.hover",
-              color: params.value === "0" ? "#16a34a" : "text.disabled",
+              bgcolor: params.value === "0" ? "rgba(46,160,67,0.14)" : "action.hover",
+              color: params.value === "0" ? "success.main" : "text.disabled",
               border: "none",
             }}
           />
@@ -577,60 +678,15 @@ export const Hosts = () => {
         sortable: false,
         filterable: false,
         renderHeader: () => <Typography sx={headerSx}>Tags</Typography>,
-        renderCell: (params) => {
-          const tags = (params.value as HostTag[] | undefined) ?? [];
-          const rowHost = params.row as Host;
-          if (tags.length === 0)
-            return (
-              <Typography variant="caption" color="text.disabled">
-                —
-              </Typography>
-            );
-          return (
-            <Box sx={{ display: "flex", flexWrap: "nowrap", gap: 0.4, overflow: "hidden" }}>
-              {tags.slice(0, 3).map((t) => (
-                <Chip
-                  key={`${t.tag}:${t.value}`}
-                  label={t.value ? `${t.tag}: ${t.value}` : t.tag}
-                  size="small"
-                  onDelete={
-                    t.tag !== "team"
-                      ? () => {
-                          void deleteTagInline(rowHost, t);
-                        }
-                      : undefined
-                  }
-                  sx={{
-                    fontSize: "0.62rem",
-                    height: 20,
-                    bgcolor: isDark ? "rgba(59,130,246,0.12)" : "rgba(59,130,246,0.08)",
-                    color: isDark ? "#93C5FD" : "#2563EB",
-                    border: "none",
-                    flexShrink: 0,
-                    "& .MuiChip-deleteIcon": {
-                      fontSize: "0.7rem",
-                      color: isDark ? "#93C5FD" : "#2563EB",
-                      opacity: 0.6,
-                      "&:hover": { opacity: 1 },
-                    },
-                  }}
-                />
-              ))}
-              {tags.length > 3 && (
-                <Tooltip
-                  title={tags
-                    .slice(3)
-                    .map((t) => `${t.tag}: ${t.value}`)
-                    .join(", ")}
-                >
-                  <Typography variant="caption" color="text.disabled" sx={{ alignSelf: "center" }}>
-                    +{tags.length - 3}
-                  </Typography>
-                </Tooltip>
-              )}
-            </Box>
-          );
-        },
+        renderCell: (params) => (
+          <HostTagsCell
+            tags={(params.value as HostTag[] | undefined) ?? []}
+            rowHost={params.row as Host}
+            deleteTagInline={(host, tag) => {
+              void deleteTagInline(host, tag);
+            }}
+          />
+        ),
       },
       {
         field: "problem_count",
@@ -687,19 +743,17 @@ export const Hosts = () => {
         ),
       },
     ],
-    [headerSx, isDark, deleteTagInline, proxies, openEditHost, openTagEditor, openTplDialog],
+    [headerSx, deleteTagInline, proxies, openEditHost, openTagEditor, openTplDialog],
   );
 
   const totalProblems = hosts.reduce((sum, h) => sum + (h.problem_count ?? 0), 0);
 
   return (
-    <Stack spacing={3}>
+    <Stack spacing={2}>
       {/* ── Header ── */}
       <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
         <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>
-            {t("hosts.title")}
-          </Typography>
+          <Typography variant="subtitle1">{t("hosts.title")}</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
             Manage hosts, interfaces, and monitor availability
           </Typography>
@@ -745,59 +799,52 @@ export const Hosts = () => {
       </Box>
 
       {/* ── Stats strip ── */}
-      <Box sx={{ display: "flex", gap: 2 }}>
+      <Paper
+        sx={{
+          display: "flex",
+          flexWrap: "wrap",
+          overflow: "hidden",
+          "& > div:not(:first-of-type)": { borderLeft: "1px solid", borderLeftColor: "divider" },
+        }}
+      >
         {[
           { label: "Total hosts", value: hosts.length },
           {
             label: "Available",
             value: hosts.filter((h) => h.interfaces?.some((i) => i.available === "1")).length,
-            color: "#16a34a",
           },
           {
             label: "Unavailable",
             value: hosts.filter((h) => h.interfaces?.some((i) => i.available === "2")).length,
-            color: "#dc2626",
+            color: "error.main",
           },
           {
             label: "Active problems",
             value: totalProblems,
-            color: totalProblems > 0 ? "#ea580c" : undefined,
+            color: totalProblems > 0 ? "warning.main" : undefined,
           },
         ].map((s) => (
-          <Box
-            key={s.label}
-            sx={{
-              flex: 1,
-              p: 1.5,
-              borderRadius: 2,
-              border: "1px solid",
-              borderColor: "divider",
-              bgcolor: isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.02)",
-            }}
-          >
+          <Box key={s.label} sx={{ flex: 1, minWidth: 130, px: 2.25, py: 1.5 }}>
             <Typography
-              sx={{
-                fontSize: "0.68rem",
-                color: "text.disabled",
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-              }}
+              variant="overline"
+              sx={{ color: "text.secondary", display: "block", mb: 0.25 }}
             >
               {s.label}
             </Typography>
             <Typography
               sx={{
-                fontSize: "1.5rem",
-                fontWeight: 700,
-                color: s.color ?? "text.primary",
+                fontSize: "1.25rem",
+                fontWeight: 600,
                 lineHeight: 1.3,
+                fontVariantNumeric: "tabular-nums",
+                color: (s.value > 0 ? s.color : undefined) ?? "text.primary",
               }}
             >
               {loading ? "—" : s.value}
             </Typography>
           </Box>
         ))}
-      </Box>
+      </Paper>
 
       {/* ── Inventory table ── */}
       <Card sx={{ overflow: "hidden" }}>
@@ -852,7 +899,7 @@ export const Hosts = () => {
             sx={{
               border: "none",
               "& .MuiDataGrid-columnHeaders": {
-                bgcolor: isDark ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.025)",
+                bgcolor: "background.paper",
                 borderBottom: "1px solid",
                 borderColor: "divider",
               },
@@ -862,7 +909,7 @@ export const Hosts = () => {
               "& .MuiDataGrid-cell": {
                 px: 2.5,
                 borderBottom: "1px solid",
-                borderColor: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.05)",
+                borderColor: "divider",
                 display: "flex",
                 alignItems: "center",
               },
@@ -870,10 +917,10 @@ export const Hosts = () => {
                 cursor: "pointer",
               },
               "& .MuiDataGrid-row:hover": {
-                bgcolor: isDark ? "rgba(59,130,246,0.05)" : "rgba(59,130,246,0.03)",
+                bgcolor: "action.hover",
               },
               "& .MuiDataGrid-row.Mui-selected": {
-                bgcolor: isDark ? "rgba(59,130,246,0.1)" : "rgba(59,130,246,0.06)",
+                bgcolor: "action.selected",
               },
               "& .MuiDataGrid-footerContainer": {
                 borderTop: "1px solid",
@@ -917,12 +964,7 @@ export const Hosts = () => {
         onBulkUpload={onBulkUpload}
       />
 
-      <TagEditorDialog
-        tagHost={tagHost}
-        onClose={() => setTagHost(null)}
-        isDark={isDark}
-        onSave={onSaveTags}
-      />
+      <TagEditorDialog tagHost={tagHost} onClose={() => setTagHost(null)} onSave={onSaveTags} />
 
       <EditHostDialog
         editHost={editHost}

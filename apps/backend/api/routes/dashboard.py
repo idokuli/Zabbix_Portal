@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 import User_Management as um
 from Auth import get_current_user
-from api.deps import live_team_id, team_hostname_filter
+from api.deps import is_global_viewer, live_team_id, team_hostname_filter
 from api.managers import dashboard_bot
 from api.schemas import (
     DashboardLayoutRequest,
@@ -15,18 +15,19 @@ router = APIRouter(tags=["Dashboard"])
 _KINDS = ("dashboard", "metrics")
 
 
+def _require_global_viewer(current_user: dict) -> None:
+    if not is_global_viewer(current_user):
+        raise HTTPException(
+            status_code=403, detail="scope 'all' is restricted to root/auditor roles."
+        )
+
+
 @router.get("/dashboard/graphs", tags=["Dashboard"], summary="List Zabbix graphs")
-def list_graphs(
-    hostid: str | None = None, current_user: dict = Depends(get_current_user)
-):
+def list_graphs(hostid: str | None = None, current_user: dict = Depends(get_current_user)):
     allowed = team_hostname_filter(current_user)
     graphs = dashboard_bot.get_graphs(hostid)
     if allowed is not None:
-        graphs = [
-            g
-            for g in graphs
-            if any(h.get("host") in allowed for h in g.get("hosts", []))
-        ]
+        graphs = [g for g in graphs if any(h.get("host") in allowed for h in g.get("hosts", []))]
     return {"graphs": graphs}
 
 
@@ -61,9 +62,7 @@ def get_graph_data(
     current_user: dict = Depends(get_current_user),
 ):
     if minutes < 1 or minutes > 10080:
-        raise HTTPException(
-            status_code=400, detail="minutes must be between 1 and 10080"
-        )
+        raise HTTPException(status_code=400, detail="minutes must be between 1 and 10080")
     return dashboard_bot.get_graph_data(graphid, minutes)
 
 
@@ -80,9 +79,7 @@ def get_hosts_metrics(current_user: dict = Depends(get_current_user)):
     return {"hosts": hosts}
 
 
-@router.get(
-    "/dashboard/items/recent", tags=["Dashboard"], summary="Recently created items"
-)
+@router.get("/dashboard/items/recent", tags=["Dashboard"], summary="Recently created items")
 def get_recent_items(limit: int = 30, current_user: dict = Depends(get_current_user)):
     allowed = team_hostname_filter(current_user)
     items = dashboard_bot.get_recent_items(min(limit, 100))
@@ -91,14 +88,21 @@ def get_recent_items(limit: int = 30, current_user: dict = Depends(get_current_u
     return {"items": items}
 
 
-@router.get(
-    "/dashboard/layout", tags=["Dashboard"], summary="Get saved dashboard layout"
-)
+@router.get("/dashboard/layout", tags=["Dashboard"], summary="Get saved dashboard layout")
 def get_dashboard_layout(
     scope: str = "user",
     page: str = "dashboard",
+    team_id: int | None = None,
     current_user: dict = Depends(get_current_user),
 ):
+    if scope == "all":
+        _require_global_viewer(current_user)
+        if team_id is None:
+            raise HTTPException(status_code=400, detail="team_id is required for scope 'all'.")
+        return {
+            "widgets": um.get_dashboard_layout("team", team_id, page),
+            "scope": "all",
+        }
     if scope == "team":
         team_id = live_team_id(current_user)
         if not team_id:
@@ -139,9 +143,10 @@ def list_dashboard_pages(
     current_user: dict = Depends(get_current_user),
 ):
     if kind not in _KINDS:
-        raise HTTPException(
-            status_code=400, detail="kind must be 'dashboard' or 'metrics'"
-        )
+        raise HTTPException(status_code=400, detail="kind must be 'dashboard' or 'metrics'")
+    if scope == "all":
+        _require_global_viewer(current_user)
+        return {"pages": _list_all_team_dashboard_pages(kind)}
     if scope == "team":
         team_id = live_team_id(current_user)
         if not team_id:
@@ -151,6 +156,38 @@ def list_dashboard_pages(
     return {"pages": um.list_dashboard_pages("user", user_id, kind)}
 
 
+def _list_all_team_dashboard_pages(kind: str) -> list[dict]:
+    """Every team's saved dashboards for this kind, tagged with their owning team.
+    One query for every team's custom pages (see um.list_all_team_dashboard_pages)
+    instead of one query per team."""
+    pages: list[dict] = []
+    seen_defaults: set[int] = set()
+    for row in um.list_all_team_dashboard_pages(kind):
+        team_id, team_name = row["team_id"], row["team_name"]
+        if team_id not in seen_defaults:
+            pages.append(
+                {
+                    "page": kind,
+                    "name": f"{team_name} — Default",
+                    "is_default": True,
+                    "team_id": team_id,
+                    "team_name": team_name,
+                }
+            )
+            seen_defaults.add(team_id)
+        if row["page_key"] is not None:
+            pages.append(
+                {
+                    "page": row["page_key"],
+                    "name": f"{team_name} — {row['page_name']}",
+                    "is_default": False,
+                    "team_id": team_id,
+                    "team_name": team_name,
+                }
+            )
+    return pages
+
+
 @router.post("/dashboard/pages", tags=["Dashboard"], summary="Create a new dashboard")
 def create_dashboard_page(
     data: DashboardPageCreateRequest, current_user: dict = Depends(get_current_user)
@@ -158,9 +195,7 @@ def create_dashboard_page(
     if data.scope not in ("user", "team"):
         raise HTTPException(status_code=400, detail="scope must be 'user' or 'team'")
     if data.kind not in _KINDS:
-        raise HTTPException(
-            status_code=400, detail="kind must be 'dashboard' or 'metrics'"
-        )
+        raise HTTPException(status_code=400, detail="kind must be 'dashboard' or 'metrics'")
     name = data.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="name is required")
@@ -177,9 +212,7 @@ def create_dashboard_page(
     return page
 
 
-@router.put(
-    "/dashboard/pages/{page_key}", tags=["Dashboard"], summary="Rename a dashboard"
-)
+@router.put("/dashboard/pages/{page_key}", tags=["Dashboard"], summary="Rename a dashboard")
 def rename_dashboard_page(
     page_key: str,
     data: DashboardPageRenameRequest,
@@ -187,15 +220,11 @@ def rename_dashboard_page(
     current_user: dict = Depends(get_current_user),
 ):
     if page_key in _KINDS:
-        raise HTTPException(
-            status_code=400, detail="Cannot rename the default dashboard."
-        )
+        raise HTTPException(status_code=400, detail="Cannot rename the default dashboard.")
     if data.scope not in ("user", "team"):
         raise HTTPException(status_code=400, detail="scope must be 'user' or 'team'")
     if kind not in _KINDS:
-        raise HTTPException(
-            status_code=400, detail="kind must be 'dashboard' or 'metrics'"
-        )
+        raise HTTPException(status_code=400, detail="kind must be 'dashboard' or 'metrics'")
     name = data.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="name is required")
@@ -211,9 +240,7 @@ def rename_dashboard_page(
     return {"message": "Dashboard renamed."}
 
 
-@router.delete(
-    "/dashboard/pages/{page_key}", tags=["Dashboard"], summary="Delete a dashboard"
-)
+@router.delete("/dashboard/pages/{page_key}", tags=["Dashboard"], summary="Delete a dashboard")
 def delete_dashboard_page(
     page_key: str,
     scope: str = "user",
@@ -221,15 +248,11 @@ def delete_dashboard_page(
     current_user: dict = Depends(get_current_user),
 ):
     if page_key in _KINDS:
-        raise HTTPException(
-            status_code=400, detail="Cannot delete the default dashboard."
-        )
+        raise HTTPException(status_code=400, detail="Cannot delete the default dashboard.")
     if scope not in ("user", "team"):
         raise HTTPException(status_code=400, detail="scope must be 'user' or 'team'")
     if kind not in _KINDS:
-        raise HTTPException(
-            status_code=400, detail="kind must be 'dashboard' or 'metrics'"
-        )
+        raise HTTPException(status_code=400, detail="kind must be 'dashboard' or 'metrics'")
     if scope == "team":
         team_id = live_team_id(current_user)
         if not team_id:

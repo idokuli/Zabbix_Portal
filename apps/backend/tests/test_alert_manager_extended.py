@@ -42,9 +42,7 @@ def mgr():
 def test_update_rule_service_type(mgr):
     conn, cur = _make_conn(fetchone={"rule_type": "service"}, rowcount=1)
     with patch("Alert_Manager.get_conn", return_value=conn):
-        result = mgr.update_rule(
-            rule_id=1, user_id=1, severity=3, expected_contains="ok"
-        )
+        result = mgr.update_rule(rule_id=1, user_id=1, severity=3, expected_contains="ok")
     assert result is True
 
 
@@ -81,9 +79,11 @@ def test_update_rule_not_found(mgr):
 def test_update_rule_db_error_raises(mgr):
     conn = MagicMock()
     conn.cursor.side_effect = Exception("db error")
-    with patch("Alert_Manager.get_conn", return_value=conn):
-        with pytest.raises(Exception):
-            mgr.update_rule(rule_id=1, user_id=1, severity=1)
+    with (
+        patch("Alert_Manager.get_conn", return_value=conn),
+        pytest.raises(Exception, match="db error"),
+    ):
+        mgr.update_rule(rule_id=1, user_id=1, severity=1)
 
 
 # ── run_checks — item rules ────────────────────────────────────────────────────
@@ -205,9 +205,7 @@ def test_run_checks_item_not_contains_operator(mgr):
             expected_contains="ok",
         )
     ]
-    mgr.zapi.item.get.return_value = [
-        {"itemid": "10", "lastvalue": "error", "value_type": "1"}
-    ]
+    mgr.zapi.item.get.return_value = [{"itemid": "10", "lastvalue": "error", "value_type": "1"}]
 
     conn, cur = _make_conn(rows=rules)
     with patch("Alert_Manager.get_conn", return_value=conn):
@@ -369,7 +367,5 @@ def test_run_checks_duplicate_item_id_only_fires_once(mgr):
     with patch("Alert_Manager.get_conn", return_value=conn):
         mgr.run_checks()
 
-    insert_calls = [
-        c for c in cur.execute.call_args_list if "INSERT INTO alert_events" in str(c)
-    ]
+    insert_calls = [c for c in cur.execute.call_args_list if "INSERT INTO alert_events" in str(c)]
     assert len(insert_calls) == 1

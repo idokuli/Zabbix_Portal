@@ -25,8 +25,8 @@ class Alert_Manager(Zabbix_Base):
                     (user_id,),
                 )
                 return [dict(r) for r in cur.fetchall()]
-        except Exception as exc:
-            logger.error("get_rules failed: %r", exc)
+        except Exception:
+            logger.exception("get_rules failed")
             return []
         finally:
             conn.close()
@@ -197,13 +197,141 @@ class Alert_Manager(Zabbix_Base):
                     (user_id, limit),
                 )
                 return [dict(r) for r in cur.fetchall()]
-        except Exception as exc:
-            logger.error("get_events failed: %r", exc)
+        except Exception:
+            logger.exception("get_events failed")
             return []
         finally:
             conn.close()
 
     # ── Background checker ────────────────────────────────────────────────
+
+    @staticmethod
+    def _insert_alert_event(conn, rule: dict, op: str, threshold: float, actual_val: float) -> None:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO alert_events
+                       (rule_id, user_id, item_id, item_name, hostname,
+                        operator, threshold, actual_value, severity)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (
+                    rule["id"],
+                    rule["user_id"],
+                    rule["item_id"],
+                    rule["item_name"],
+                    rule["hostname"],
+                    op,
+                    threshold,
+                    actual_val,
+                    rule["severity"],
+                ),
+            )
+
+    @staticmethod
+    def _set_rule_firing(conn, rule_id: int, is_firing: bool) -> None:
+        sql = (
+            "UPDATE alert_rules SET is_firing = TRUE WHERE id = %s"
+            if is_firing
+            else "UPDATE alert_rules SET is_firing = FALSE WHERE id = %s"
+        )
+        with conn.cursor() as cur:
+            cur.execute(sql, (rule_id,))
+
+    @staticmethod
+    def _evaluate_item_rule(rule: dict, item: dict) -> tuple[str, bool, float] | None:
+        """Return (operator, firing, actual_value) for one item rule, or None to
+        skip it this cycle (non-numeric item with a numeric operator, or a value
+        that doesn't parse as a number)."""
+        op = rule["operator"]
+        value_type = int(item.get("value_type", 1))
+        lastvalue = str(item.get("lastvalue") or "")
+
+        if op in ("contains", "!contains"):
+            expected = (rule["expected_contains"] or "").lower()
+            match = expected in lastvalue.lower()
+            firing = match if op == "contains" else not match
+            return op, firing, 0.0
+
+        if value_type not in (0, 3):
+            return None  # non-numeric item with a numeric operator — skip
+        try:
+            val = float(lastvalue)
+        except (ValueError, TypeError):
+            return None
+        firing = (
+            (op == ">" and val > rule["threshold"])
+            or (op == "<" and val < rule["threshold"])
+            or (op == ">=" and val >= rule["threshold"])
+            or (op == "<=" and val <= rule["threshold"])
+        )
+        return op, firing, val
+
+    def _process_item_rules(self, conn, item_rules: list[dict]) -> None:
+        """Evaluate item-type rules against their latest Zabbix values, inserting
+        an alert_event and flipping is_firing on ok→firing / firing→ok transitions.
+        At most one new firing is allowed per item per cycle."""
+        item_ids = list({r["item_id"] for r in item_rules})
+        try:
+            items = self.zapi.item.get(
+                itemids=item_ids, output=["itemid", "lastvalue", "value_type"]
+            )
+            value_map = {i["itemid"]: i for i in items}
+        except Exception:
+            logger.exception("Alert checker: failed to fetch items")
+            value_map = {}
+
+        fired_this_cycle: set[str] = set()
+        for rule in item_rules:
+            item = value_map.get(rule["item_id"])
+            if not item or item.get("lastvalue") is None:
+                continue
+
+            evaluated = self._evaluate_item_rule(rule, item)
+            if evaluated is None:
+                continue
+            op, firing, actual_val = evaluated
+
+            if firing and not rule["is_firing"]:
+                if rule["item_id"] in fired_this_cycle:
+                    continue
+                fired_this_cycle.add(rule["item_id"])
+                self._insert_alert_event(conn, rule, op, rule["threshold"], actual_val)
+                self._set_rule_firing(conn, rule["id"], True)
+            elif not firing and rule["is_firing"]:
+                self._set_rule_firing(conn, rule["id"], False)
+
+    def _process_service_rules(self, conn, service_rules: list[dict]) -> None:
+        """Check health-monitor items for service rules: firing means the response
+        body no longer contains the expected string (or the item hasn't reported
+        fresh data in the last 10 minutes)."""
+        svc_item_ids = list({r["item_id"] for r in service_rules})
+        try:
+            svc_items = self.zapi.item.get(
+                itemids=svc_item_ids,
+                output=["itemid", "lastvalue", "lastclock", "state"],
+            )
+            svc_map = {i["itemid"]: i for i in svc_items}
+        except Exception:
+            logger.exception("Alert checker: failed to fetch service items")
+            svc_map = {}
+
+        now = time.time()
+        for rule in service_rules:
+            svc = svc_map.get(rule["item_id"])
+            if not svc:
+                continue
+            lastclock = int(svc.get("lastclock") or 0)
+            lastvalue = svc.get("lastvalue") or ""
+            state = int(svc.get("state", 1))
+            # stale if not checked in the last 10 minutes
+            fresh = state == 0 and lastclock > 0 and (now - lastclock) < 600
+            working = fresh and rule["expected_contains"].lower() in lastvalue.lower()
+            firing = not working
+
+            if firing and not rule["is_firing"]:
+                self._insert_alert_event(conn, rule, "!=", 0, 0)
+                self._set_rule_firing(conn, rule["id"], True)
+            elif not firing and rule["is_firing"]:
+                self._set_rule_firing(conn, rule["id"], False)
 
     def run_checks(self) -> None:
         """Evaluate all enabled rules; insert alert_events on ok→firing transitions.
@@ -211,8 +339,6 @@ class Alert_Manager(Zabbix_Base):
         Item rules: numeric threshold comparison on Zabbix item last value.
         Service rules: check whether the health-monitor response body contains the
         expected string — fires when the service stops working.
-
-        At most one new firing is allowed per item per cycle for item rules.
         """
         if not self.zapi:
             return
@@ -234,144 +360,14 @@ class Alert_Manager(Zabbix_Base):
             item_rules = [r for r in rules if r["rule_type"] == "item"]
             service_rules = [r for r in rules if r["rule_type"] == "service"]
 
-            # ── Item rules ────────────────────────────────────────────────
             if item_rules:
-                item_ids = list({r["item_id"] for r in item_rules})
-                try:
-                    items = self.zapi.item.get(
-                        itemids=item_ids,
-                        output=["itemid", "lastvalue", "value_type"],
-                    )
-                    value_map = {i["itemid"]: i for i in items}
-                except Exception as exc:
-                    logger.error("Alert checker: failed to fetch items: %r", exc)
-                    value_map = {}
-
-                fired_this_cycle: set[str] = set()
-                for rule in item_rules:
-                    item = value_map.get(rule["item_id"])
-                    if not item or item.get("lastvalue") is None:
-                        continue
-
-                    op = rule["operator"]
-                    value_type = int(item.get("value_type", 1))
-                    lastvalue = str(item.get("lastvalue") or "")
-
-                    if op in ("contains", "!contains"):
-                        expected = (rule["expected_contains"] or "").lower()
-                        match = expected in lastvalue.lower()
-                        firing = match if op == "contains" else not match
-                        actual_val = 0.0
-                    elif value_type in (0, 3):
-                        try:
-                            val = float(lastvalue)
-                        except (ValueError, TypeError):
-                            continue
-                        firing = (
-                            (op == ">" and val > rule["threshold"])
-                            or (op == "<" and val < rule["threshold"])
-                            or (op == ">=" and val >= rule["threshold"])
-                            or (op == "<=" and val <= rule["threshold"])
-                        )
-                        actual_val = val
-                    else:
-                        # non-numeric item with a numeric operator — skip
-                        continue
-
-                    with conn.cursor() as cur:
-                        if firing and not rule["is_firing"]:
-                            if rule["item_id"] in fired_this_cycle:
-                                continue
-                            fired_this_cycle.add(rule["item_id"])
-                            cur.execute(
-                                """INSERT INTO alert_events
-                                       (rule_id, user_id, item_id, item_name, hostname,
-                                        operator, threshold, actual_value, severity)
-                                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                                (
-                                    rule["id"],
-                                    rule["user_id"],
-                                    rule["item_id"],
-                                    rule["item_name"],
-                                    rule["hostname"],
-                                    op,
-                                    rule["threshold"],
-                                    actual_val,
-                                    rule["severity"],
-                                ),
-                            )
-                            cur.execute(
-                                "UPDATE alert_rules SET is_firing = TRUE WHERE id = %s",
-                                (rule["id"],),
-                            )
-                        elif not firing and rule["is_firing"]:
-                            cur.execute(
-                                "UPDATE alert_rules SET is_firing = FALSE WHERE id = %s",
-                                (rule["id"],),
-                            )
-
-            # ── Service rules ─────────────────────────────────────────────
+                self._process_item_rules(conn, item_rules)
             if service_rules:
-                svc_item_ids = list({r["item_id"] for r in service_rules})
-                try:
-                    svc_items = self.zapi.item.get(
-                        itemids=svc_item_ids,
-                        output=["itemid", "lastvalue", "lastclock", "state"],
-                    )
-                    svc_map = {i["itemid"]: i for i in svc_items}
-                except Exception as exc:
-                    logger.error(
-                        "Alert checker: failed to fetch service items: %r", exc
-                    )
-                    svc_map = {}
-
-                now = time.time()
-                for rule in service_rules:
-                    svc = svc_map.get(rule["item_id"])
-                    if not svc:
-                        continue
-                    lastclock = int(svc.get("lastclock") or 0)
-                    lastvalue = svc.get("lastvalue") or ""
-                    state = int(svc.get("state", 1))
-                    # stale if not checked in the last 10 minutes
-                    fresh = state == 0 and lastclock > 0 and (now - lastclock) < 600
-                    working = (
-                        fresh and rule["expected_contains"].lower() in lastvalue.lower()
-                    )
-                    firing = not working
-
-                    with conn.cursor() as cur:
-                        if firing and not rule["is_firing"]:
-                            cur.execute(
-                                """INSERT INTO alert_events
-                                       (rule_id, user_id, item_id, item_name, hostname,
-                                        operator, threshold, actual_value, severity)
-                                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                                (
-                                    rule["id"],
-                                    rule["user_id"],
-                                    rule["item_id"],
-                                    rule["item_name"],
-                                    rule["hostname"],
-                                    "!=",
-                                    0,
-                                    0,
-                                    rule["severity"],
-                                ),
-                            )
-                            cur.execute(
-                                "UPDATE alert_rules SET is_firing = TRUE WHERE id = %s",
-                                (rule["id"],),
-                            )
-                        elif not firing and rule["is_firing"]:
-                            cur.execute(
-                                "UPDATE alert_rules SET is_firing = FALSE WHERE id = %s",
-                                (rule["id"],),
-                            )
+                self._process_service_rules(conn, service_rules)
 
             conn.commit()
-        except Exception as exc:
+        except Exception:
             conn.rollback()
-            logger.error("Alert checker: DB error: %r", exc)
+            logger.exception("Alert checker: DB error")
         finally:
             conn.close()

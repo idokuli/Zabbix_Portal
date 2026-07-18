@@ -100,16 +100,14 @@ def test_get_problem_history():
 def test_get_item_history():
     mock_bot = MagicMock()
     mock_bot.get_item_history.return_value = {"series": []}
-    with patch("api.routes.metrics.metrics_bot", mock_bot):
-        with TestClient(make_app()) as c:
-            r = c.get("/metrics/history/42?minutes=60")
+    with patch("api.routes.metrics.metrics_bot", mock_bot), TestClient(make_app()) as c:
+        r = c.get("/metrics/history/42?minutes=60")
     assert r.status_code == 200
 
 
 def test_get_item_history_bad_minutes():
-    with patch("api.routes.metrics.metrics_bot", MagicMock()):
-        with TestClient(make_app()) as c:
-            r = c.get("/metrics/history/42?minutes=99999")
+    with patch("api.routes.metrics.metrics_bot", MagicMock()), TestClient(make_app()) as c:
+        r = c.get("/metrics/history/42?minutes=99999")
     assert r.status_code == 400
 
 

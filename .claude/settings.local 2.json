@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./node_modules/.bin/tsc --noEmit)",
+      "Bash(echo \"Exit code: $?\")",
+      "Bash(python3 -m pytest tests/ --ignore=tests/test_auth.py --cov=. --cov-report=term -q --no-header --tb=no)",
+      "Bash(awk '{miss=$3; pct=$4; gsub\\(/%/,\"\",pct\\); print miss, pct\"%\", $1}')",
+      "Bash(python3 -m pytest tests/ -q)",
+      "Bash(awk '{print $NF, $0}')",
+      "Bash(sort -t% -k1 -n)",
+      "Bash(python3 -m pytest --no-header --tb=no -q)",
+      "Bash(awk '{print $1, $3}')",
+      "Bash(sort -t' ' -k2 -rn)",
+      "Bash(python3 *)",
+      "Bash(npx biome *)",
+      "Bash(npx --no-install biome --version)"
+    ]
+  }
+}

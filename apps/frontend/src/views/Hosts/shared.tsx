@@ -13,18 +13,19 @@ export const AVAIL_CONFIG: Record<
   string,
   { bg: string; border: string; text: string; label: string }
 > = {
-  "1": { bg: "#16a34a", border: "#16a34a", text: "#fff", label: "Available" },
-  "2": { bg: "#dc2626", border: "#dc2626", text: "#fff", label: "Unavailable" },
-  "0": { bg: "transparent", border: "#4B5563", text: "#6B7280", label: "Unknown" },
+  "1": { bg: "#2EA043", border: "#2EA043", text: "#fff", label: "Available" },
+  "2": { bg: "#D1383D", border: "#D1383D", text: "#fff", label: "Unavailable" },
+  "0": { bg: "transparent", border: "#6E7681", text: "#7D8590", label: "Unknown" },
 };
 
 export const AvailabilityCell = ({ interfaces }: { interfaces?: HostInterface[] }) => {
-  if (!interfaces || interfaces.length === 0)
+  if (!interfaces || interfaces.length === 0) {
     return (
       <Typography variant="caption" color="text.disabled">
         —
       </Typography>
     );
+  }
   const iface = interfaces.find((i) => i.type === "1") ?? interfaces[0];
   const badge = IFACE_BADGE[iface.type] ?? "N/A";
   const avail = AVAIL_CONFIG[iface.available] ?? AVAIL_CONFIG["0"];
@@ -45,7 +46,7 @@ export const AvailabilityCell = ({ interfaces }: { interfaces?: HostInterface[] 
         }}
       >
         <Typography
-          sx={{ fontSize: "0.65rem", fontWeight: 800, color: avail.text, letterSpacing: "0.06em" }}
+          sx={{ fontSize: "0.65rem", fontWeight: 600, color: avail.text, letterSpacing: "0.06em" }}
         >
           {badge}
         </Typography>
@@ -55,13 +56,14 @@ export const AvailabilityCell = ({ interfaces }: { interfaces?: HostInterface[] 
 };
 
 export const ProblemsCell = ({ count }: { count?: number }) => {
-  if (!count)
+  if (!count) {
     return (
       <Typography variant="caption" color="text.disabled" sx={{ fontSize: "0.75rem" }}>
         —
       </Typography>
     );
-  const bg = count >= 5 ? "#dc2626" : "#ea580c";
+  }
+  const bg = count >= 5 ? "#D1383D" : "#BC4C00";
   return (
     <Tooltip title={`${count} active problem${count !== 1 ? "s" : ""}`} placement="top">
       <Box

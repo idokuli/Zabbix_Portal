@@ -40,9 +40,8 @@ def make_app():
 def test_list_alert_rules_returns_rules():
     mock_bot = MagicMock()
     mock_bot.get_rules.return_value = [{"id": 1, "name": "cpu"}]
-    with patch("api.routes.alerts.alert_bot", mock_bot):
-        with TestClient(make_app()) as c:
-            r = c.get("/alerts/rules")
+    with patch("api.routes.alerts.alert_bot", mock_bot), TestClient(make_app()) as c:
+        r = c.get("/alerts/rules")
     assert r.status_code == 200
     assert r.json()["rules"][0]["id"] == 1
 
@@ -50,9 +49,8 @@ def test_list_alert_rules_returns_rules():
 def test_list_alert_rules_empty():
     mock_bot = MagicMock()
     mock_bot.get_rules.return_value = []
-    with patch("api.routes.alerts.alert_bot", mock_bot):
-        with TestClient(make_app()) as c:
-            r = c.get("/alerts/rules")
+    with patch("api.routes.alerts.alert_bot", mock_bot), TestClient(make_app()) as c:
+        r = c.get("/alerts/rules")
     assert r.status_code == 200
     assert r.json()["rules"] == []
 
@@ -73,24 +71,21 @@ ITEM_RULE = {
 def test_create_item_rule_success():
     mock_bot = MagicMock()
     mock_bot.create_rule.return_value = {"id": 10}
-    with patch("api.routes.alerts.alert_bot", mock_bot):
-        with TestClient(make_app()) as c:
-            r = c.post("/alerts/rules", json=ITEM_RULE)
+    with patch("api.routes.alerts.alert_bot", mock_bot), TestClient(make_app()) as c:
+        r = c.post("/alerts/rules", json=ITEM_RULE)
     assert r.status_code == 201
     assert r.json()["id"] == 10
 
 
 def test_create_rule_bad_severity():
-    with patch("api.routes.alerts.alert_bot", MagicMock()):
-        with TestClient(make_app()) as c:
-            r = c.post("/alerts/rules", json={**ITEM_RULE, "severity": 9})
+    with patch("api.routes.alerts.alert_bot", MagicMock()), TestClient(make_app()) as c:
+        r = c.post("/alerts/rules", json={**ITEM_RULE, "severity": 9})
     assert r.status_code == 400
 
 
 def test_create_rule_bad_rule_type():
-    with patch("api.routes.alerts.alert_bot", MagicMock()):
-        with TestClient(make_app()) as c:
-            r = c.post("/alerts/rules", json={**ITEM_RULE, "rule_type": "bad"})
+    with patch("api.routes.alerts.alert_bot", MagicMock()), TestClient(make_app()) as c:
+        r = c.post("/alerts/rules", json={**ITEM_RULE, "rule_type": "bad"})
     assert r.status_code == 400
 
 
@@ -104,9 +99,8 @@ def test_create_service_rule_success():
         "hostname": "web01",
         "severity": 2,
     }
-    with patch("api.routes.alerts.alert_bot", mock_bot):
-        with TestClient(make_app()) as c:
-            r = c.post("/alerts/rules", json=payload)
+    with patch("api.routes.alerts.alert_bot", mock_bot), TestClient(make_app()) as c:
+        r = c.post("/alerts/rules", json=payload)
     assert r.status_code == 201
 
 
@@ -116,18 +110,16 @@ def test_create_service_rule_success():
 def test_update_rule_success():
     mock_bot = MagicMock()
     mock_bot.update_rule.return_value = True
-    with patch("api.routes.alerts.alert_bot", mock_bot):
-        with TestClient(make_app()) as c:
-            r = c.put("/alerts/rules/1", json={"severity": 2})
+    with patch("api.routes.alerts.alert_bot", mock_bot), TestClient(make_app()) as c:
+        r = c.put("/alerts/rules/1", json={"severity": 2})
     assert r.status_code == 200
 
 
 def test_update_rule_not_found():
     mock_bot = MagicMock()
     mock_bot.update_rule.return_value = False
-    with patch("api.routes.alerts.alert_bot", mock_bot):
-        with TestClient(make_app()) as c:
-            r = c.put("/alerts/rules/99", json={"severity": 2})
+    with patch("api.routes.alerts.alert_bot", mock_bot), TestClient(make_app()) as c:
+        r = c.put("/alerts/rules/99", json={"severity": 2})
     assert r.status_code == 404
 
 
@@ -137,18 +129,16 @@ def test_update_rule_not_found():
 def test_delete_rule_success():
     mock_bot = MagicMock()
     mock_bot.delete_rule.return_value = True
-    with patch("api.routes.alerts.alert_bot", mock_bot):
-        with TestClient(make_app()) as c:
-            r = c.delete("/alerts/rules/1")
+    with patch("api.routes.alerts.alert_bot", mock_bot), TestClient(make_app()) as c:
+        r = c.delete("/alerts/rules/1")
     assert r.status_code == 200
 
 
 def test_delete_rule_not_found():
     mock_bot = MagicMock()
     mock_bot.delete_rule.return_value = False
-    with patch("api.routes.alerts.alert_bot", mock_bot):
-        with TestClient(make_app()) as c:
-            r = c.delete("/alerts/rules/99")
+    with patch("api.routes.alerts.alert_bot", mock_bot), TestClient(make_app()) as c:
+        r = c.delete("/alerts/rules/99")
     assert r.status_code == 404
 
 
@@ -158,9 +148,8 @@ def test_delete_rule_not_found():
 def test_toggle_rule_success():
     mock_bot = MagicMock()
     mock_bot.toggle_rule.return_value = True
-    with patch("api.routes.alerts.alert_bot", mock_bot):
-        with TestClient(make_app()) as c:
-            r = c.patch("/alerts/rules/1/toggle")
+    with patch("api.routes.alerts.alert_bot", mock_bot), TestClient(make_app()) as c:
+        r = c.patch("/alerts/rules/1/toggle")
     assert r.status_code == 200
     assert r.json()["enabled"] is True
 
@@ -168,9 +157,8 @@ def test_toggle_rule_success():
 def test_toggle_rule_not_found():
     mock_bot = MagicMock()
     mock_bot.toggle_rule.return_value = None
-    with patch("api.routes.alerts.alert_bot", mock_bot):
-        with TestClient(make_app()) as c:
-            r = c.patch("/alerts/rules/99/toggle")
+    with patch("api.routes.alerts.alert_bot", mock_bot), TestClient(make_app()) as c:
+        r = c.patch("/alerts/rules/99/toggle")
     assert r.status_code == 404
 
 
@@ -180,9 +168,8 @@ def test_toggle_rule_not_found():
 def test_get_alert_events():
     mock_bot = MagicMock()
     mock_bot.get_events.return_value = [{"id": 1}]
-    with patch("api.routes.alerts.alert_bot", mock_bot):
-        with TestClient(make_app()) as c:
-            r = c.get("/alerts/events")
+    with patch("api.routes.alerts.alert_bot", mock_bot), TestClient(make_app()) as c:
+        r = c.get("/alerts/events")
     assert r.status_code == 200
     assert len(r.json()["events"]) == 1
 
@@ -190,9 +177,8 @@ def test_get_alert_events():
 def test_get_alert_events_limit_clamped():
     mock_bot = MagicMock()
     mock_bot.get_events.return_value = []
-    with patch("api.routes.alerts.alert_bot", mock_bot):
-        with TestClient(make_app()) as c:
-            c.get("/alerts/events?limit=9999")
+    with patch("api.routes.alerts.alert_bot", mock_bot), TestClient(make_app()) as c:
+        c.get("/alerts/events?limit=9999")
     mock_bot.get_events.assert_called_once_with(1, limit=500)
 
 
@@ -202,15 +188,13 @@ def test_get_alert_events_limit_clamped():
 def test_get_notification_history():
     with patch("api.routes.alerts.um") as mock_um:
         mock_um.get_notification_history.return_value = []
-        with patch("api.routes.alerts.alert_bot", MagicMock()):
-            with TestClient(make_app()) as c:
-                r = c.get("/alerts/notification-history")
+        with patch("api.routes.alerts.alert_bot", MagicMock()), TestClient(make_app()) as c:
+            r = c.get("/alerts/notification-history")
     assert r.status_code == 200
 
 
 def test_save_notification_history():
-    with patch("api.routes.alerts.um"):
-        with patch("api.routes.alerts.alert_bot", MagicMock()):
-            with TestClient(make_app()) as c:
-                r = c.post("/alerts/notification-history", json=[])
+    with patch("api.routes.alerts.um"), patch("api.routes.alerts.alert_bot", MagicMock()):
+        with TestClient(make_app()) as c:
+            r = c.post("/alerts/notification-history", json=[])
     assert r.status_code == 204

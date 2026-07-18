@@ -48,9 +48,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # ty
 # OpenShift:      ALLOWED_ORIGINS=https://your-frontend-route.apps.cluster.example.com  (no port — Route uses 443)
 # Multiple:       comma-separated, e.g. "https://staging.example.com,https://prod.example.com"
 # Defaults to "*" when the variable is not set (local dev without strict CORS).
-_allowed_origins = [
-    o.strip() for o in os.getenv("ALLOWED_ORIGINS", "*").split(",") if o.strip()
-]
+_allowed_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "*").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
@@ -83,4 +81,4 @@ register_routes(app)
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=6769)
+    uvicorn.run(app, host="0.0.0.0", port=6769)  # noqa: S104 — must accept connections from outside the container/host network in dev and prod alike

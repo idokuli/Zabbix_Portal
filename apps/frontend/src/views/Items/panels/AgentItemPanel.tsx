@@ -9,7 +9,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../../../app/api";
 import type { Host } from "../../../app/api";
 import type { BulkResult, ServerItemKey } from "../shared";
@@ -34,18 +34,73 @@ import {
   useCommonItemState,
 } from "./shared";
 
-export const AgentItemPanel = ({
-  hosts,
-  hostsLoading,
-  serverItemKeys,
-  itemKeysLoading,
-  showToast,
-  onSuccess,
-}: PanelProps & {
-  serverItemKeys: ServerItemKey[];
-  itemKeysLoading: boolean;
-}) => {
+const applyServerItemKey = (
+  v: ServerItemKey,
+  currentItemName: string,
+  {
+    setItemName,
+    setValueType,
+    common,
+  }: {
+    setItemName: (v: string) => void;
+    setValueType: (v: number) => void;
+    common: ReturnType<typeof useCommonItemState>;
+  },
+) => {
+  if (!currentItemName) {
+    setItemName(v.name);
+  }
+  setValueType(v.valueType);
+  if (v.delay) {
+    common.setDelay(v.delay);
+  }
+  if (v.units !== undefined) {
+    common.setUnits(v.units);
+  }
+  if (v.history) {
+    common.setHistory(v.history);
+  }
+  if (v.trends) {
+    common.setTrends(v.trends);
+  }
+  if (v.description) {
+    common.setDescription(v.description);
+  }
+};
+
+const applyItemKeyString = (
+  rawKey: string,
+  {
+    setItemKey,
+    setAgentKeyBase,
+    setAgentKeyParams,
+    setAgentParamMode,
+  }: {
+    setItemKey: (v: string) => void;
+    setAgentKeyBase: (v: string) => void;
+    setAgentKeyParams: (v: string[]) => void;
+    setAgentParamMode: (v: boolean) => void;
+  },
+) => {
+  const bracketIdx = rawKey.indexOf("[");
+  const base = bracketIdx >= 0 ? rawKey.slice(0, bracketIdx) : rawKey;
+  const paramDefs = KEY_PARAM_DEFS[base];
+  if (paramDefs && paramDefs.length > 0) {
+    const existingParams = bracketIdx >= 0 ? rawKey.slice(bracketIdx + 1, -1).split(",") : [];
+    const initial = paramDefs.map((def, i) => existingParams[i] ?? def.default ?? "");
+    setAgentKeyBase(base);
+    setAgentKeyParams(initial);
+    setAgentParamMode(true);
+    setItemKey(rawKey);
+  } else {
+    setItemKey(rawKey);
+  }
+};
+
+export const AgentItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: PanelProps) => {
   const [hostname, setHostname] = useState("");
+  const [serverItemKeys, setServerItemKeys] = useState<ServerItemKey[]>([]);
+  const [itemKeysLoading, setItemKeysLoading] = useState(false);
   const [itemName, setItemName] = useState("");
   const [itemKey, setItemKey] = useState("");
   const [agentParamMode, setAgentParamMode] = useState(false);
@@ -60,53 +115,102 @@ export const AgentItemPanel = ({
   const [saving, setSaving] = useState(false);
   const common = useCommonItemState();
 
+  useEffect(() => {
+    if (!hostname) {
+      setServerItemKeys([]);
+      return;
+    }
+    let cancelled = false;
+    setItemKeysLoading(true);
+    api
+      .listItemKeys(hostname)
+      .then((r) => {
+        if (cancelled) {
+          return;
+        }
+        setServerItemKeys(
+          r.items.map((i) => ({
+            key: i.key_,
+            name: i.name,
+            valueType: Number.parseInt(i.value_type, 10),
+            group: i.group,
+            delay: i.delay,
+            units: i.units,
+            history: i.history,
+            trends: i.trends,
+            description: i.description,
+          })),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setServerItemKeys([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setItemKeysLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hostname]);
+
   const isDisabled =
-    saving || (bulkMode ? !bulkHosts.length : !hostname) || !itemName || !effectiveItemKey;
+    saving || (bulkMode ? bulkHosts.length === 0 : !hostname) || !itemName || !effectiveItemKey;
+
+  const submitBulk = async () => {
+    const result = await api.bulkAddItems({
+      hostnames: bulkHosts.map((h) => h.host),
+      item_type: "agent",
+      item_name: itemName,
+      item_key: effectiveItemKey,
+      value_type: valueType,
+      delay: common.assembleDelay(),
+      units: common.units || undefined,
+      history: common.history,
+      trends: common.trends,
+      description: common.description || undefined,
+      apply_team_tag: common.applyTeamTag,
+    });
+    setBulkResults(result.results);
+    showToast(result.message, result.results.some((r) => r.error) ? "error" : "success");
+  };
+
+  const submitSingle = async () => {
+    await api.addItem({
+      hostname,
+      item_name: itemName,
+      item_key: effectiveItemKey,
+      value_type: valueType,
+      delay: common.assembleDelay(),
+      units: common.units || undefined,
+      history: common.history,
+      trends: common.trends,
+      description: common.description || undefined,
+      status: common.enabled ? 0 : 1,
+      timeout: common.timeoutMode === "override" ? common.timeout : undefined,
+      apply_team_tag: common.applyTeamTag,
+    });
+    showToast("Item added successfully.", "success");
+    setItemName("");
+    setItemKey("");
+    setAgentParamMode(false);
+    setAgentKeyBase("");
+    setAgentKeyParams([]);
+    common.reset();
+    onSuccess();
+  };
 
   const onSubmit = async () => {
     setSaving(true);
     setBulkResults([]);
-    const assembledDelay = common.assembleDelay();
     try {
       if (bulkMode) {
-        const result = await api.bulkAddItems({
-          hostnames: bulkHosts.map((h) => h.host),
-          item_type: "agent",
-          item_name: itemName,
-          item_key: effectiveItemKey,
-          value_type: valueType,
-          delay: assembledDelay,
-          units: common.units || undefined,
-          history: common.history,
-          trends: common.trends,
-          description: common.description || undefined,
-          apply_team_tag: common.applyTeamTag,
-        });
-        setBulkResults(result.results);
-        showToast(result.message, result.results.some((r) => r.error) ? "error" : "success");
+        await submitBulk();
       } else {
-        await api.addItem({
-          hostname,
-          item_name: itemName,
-          item_key: effectiveItemKey,
-          value_type: valueType,
-          delay: assembledDelay,
-          units: common.units || undefined,
-          history: common.history,
-          trends: common.trends,
-          description: common.description || undefined,
-          status: common.enabled ? 0 : 1,
-          timeout: common.timeoutMode === "override" ? common.timeout : undefined,
-          apply_team_tag: common.applyTeamTag,
-        });
-        showToast("Item added successfully.", "success");
-        setItemName("");
-        setItemKey("");
-        setAgentParamMode(false);
-        setAgentKeyBase("");
-        setAgentKeyParams([]);
-        common.reset();
-        onSuccess();
+        await submitSingle();
       }
     } catch (e) {
       showToast(e instanceof Error ? e.message : String(e), "error");
@@ -144,86 +248,7 @@ export const AgentItemPanel = ({
         placeholder="e.g. CPU User Time"
       />
 
-      {!agentParamMode ? (
-        <Autocomplete
-          freeSolo
-          size="small"
-          options={serverItemKeys.length > 0 ? serverItemKeys : COMMON_ITEM_KEYS}
-          getOptionLabel={(opt) => (typeof opt === "string" ? opt : `${opt.key} — ${opt.name}`)}
-          groupBy={(opt) => (typeof opt === "string" ? "" : opt.group)}
-          loading={itemKeysLoading}
-          inputValue={itemKey}
-          onInputChange={(_, v, reason) => {
-            if (reason === "input" || reason === "clear") setItemKey(v);
-          }}
-          onChange={(_, v) => {
-            if (v === null) {
-              setItemKey("");
-              return;
-            }
-            const rawKey = typeof v === "string" ? v : v.key;
-            if (typeof v !== "string") {
-              if (!itemName) setItemName(v.name);
-              setValueType(v.valueType);
-              const sk = v as ServerItemKey;
-              if (sk.delay) common.setDelay(sk.delay);
-              if (sk.units !== undefined) common.setUnits(sk.units);
-              if (sk.history) common.setHistory(sk.history);
-              if (sk.trends) common.setTrends(sk.trends);
-              if (sk.description) common.setDescription(sk.description);
-            }
-            const bracketIdx = rawKey.indexOf("[");
-            const base = bracketIdx >= 0 ? rawKey.slice(0, bracketIdx) : rawKey;
-            const paramDefs = KEY_PARAM_DEFS[base];
-            if (paramDefs && paramDefs.length > 0) {
-              const existingParams =
-                bracketIdx >= 0 ? rawKey.slice(bracketIdx + 1, -1).split(",") : [];
-              const initial = paramDefs.map((def, i) => existingParams[i] ?? def.default ?? "");
-              setAgentKeyBase(base);
-              setAgentKeyParams(initial);
-              setAgentParamMode(true);
-              setItemKey(rawKey);
-            } else {
-              setItemKey(rawKey);
-            }
-          }}
-          renderOption={(props, opt) => (
-            <Box component="li" {...props} key={typeof opt === "string" ? opt : opt.key}>
-              <Box>
-                <Typography sx={{ fontSize: "0.82rem", fontFamily: "monospace", fontWeight: 500 }}>
-                  {typeof opt === "string" ? opt : opt.key}
-                </Typography>
-                {typeof opt !== "string" && (
-                  <Typography sx={{ fontSize: "0.72rem", color: "text.secondary" }}>
-                    {opt.name} · {valueTypes.find((t) => t.value === opt.valueType)?.label}
-                  </Typography>
-                )}
-              </Box>
-            </Box>
-          )}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="Item key *"
-              placeholder="e.g. system.cpu.util[,user]"
-              helperText={
-                itemKeysLoading
-                  ? "Loading items from Zabbix…"
-                  : `${serverItemKeys.length > 0 ? `${serverItemKeys.length} keys from Zabbix` : "Using built-in keys"} — select or type your own`
-              }
-              InputProps={{
-                ...params.InputProps,
-                endAdornment: (
-                  <>
-                    {itemKeysLoading && <CircularProgress size={14} />}
-                    {params.InputProps.endAdornment}
-                  </>
-                ),
-              }}
-            />
-          )}
-        />
-      ) : (
+      {agentParamMode ? (
         <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, p: 1.5 }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1.5}>
             <Typography
@@ -296,6 +321,71 @@ export const AgentItemPanel = ({
             Key: <strong>{effectiveItemKey}</strong>
           </Typography>
         </Box>
+      ) : (
+        <Autocomplete
+          freeSolo
+          size="small"
+          options={serverItemKeys.length > 0 ? serverItemKeys : COMMON_ITEM_KEYS}
+          getOptionLabel={(opt) => (typeof opt === "string" ? opt : `${opt.key} — ${opt.name}`)}
+          groupBy={(opt) => (typeof opt === "string" ? "" : opt.group)}
+          loading={itemKeysLoading}
+          inputValue={itemKey}
+          onInputChange={(_, v, reason) => {
+            if (reason === "input" || reason === "clear") {
+              setItemKey(v);
+            }
+          }}
+          onChange={(_, v) => {
+            if (v === null) {
+              setItemKey("");
+              return;
+            }
+            if (typeof v !== "string") {
+              applyServerItemKey(v, itemName, { setItemName, setValueType, common });
+            }
+            applyItemKeyString(typeof v === "string" ? v : v.key, {
+              setItemKey,
+              setAgentKeyBase,
+              setAgentKeyParams,
+              setAgentParamMode,
+            });
+          }}
+          renderOption={(props, opt) => (
+            <Box component="li" {...props} key={typeof opt === "string" ? opt : opt.key}>
+              <Box>
+                <Typography sx={{ fontSize: "0.82rem", fontFamily: "monospace", fontWeight: 500 }}>
+                  {typeof opt === "string" ? opt : opt.key}
+                </Typography>
+                {typeof opt !== "string" && (
+                  <Typography sx={{ fontSize: "0.72rem", color: "text.secondary" }}>
+                    {opt.name} · {valueTypes.find((t) => t.value === opt.valueType)?.label}
+                  </Typography>
+                )}
+              </Box>
+            </Box>
+          )}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Item key *"
+              placeholder="e.g. system.cpu.util[,user]"
+              helperText={
+                itemKeysLoading
+                  ? "Loading items from Zabbix…"
+                  : `${serverItemKeys.length > 0 ? `${serverItemKeys.length} keys from Zabbix` : "Using built-in keys"} — select or type your own`
+              }
+              InputProps={{
+                ...params.InputProps,
+                endAdornment: (
+                  <>
+                    {itemKeysLoading && <CircularProgress size={14} />}
+                    {params.InputProps.endAdornment}
+                  </>
+                ),
+              }}
+            />
+          )}
+        />
       )}
 
       <TextField

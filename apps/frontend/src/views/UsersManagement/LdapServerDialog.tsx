@@ -445,7 +445,9 @@ export const LdapServerDialog = ({
 
   // Load dropdowns when JIT provisioning is toggled on (or on open if already on)
   const loadDropdowns = async () => {
-    if (dropdownsLoaded) return;
+    if (dropdownsLoaded) {
+      return;
+    }
     try {
       const [ugRes, rolesRes, mtRes] = await Promise.all([
         api.listUserGroups(),
@@ -467,7 +469,7 @@ export const LdapServerDialog = ({
   const set = (key: keyof LdapServerForm, val: string) => setForm((f) => ({ ...f, [key]: val }));
 
   const onSave = async () => {
-    if (!form.name || !form.host || !form.base_dn || !form.search_attribute) {
+    if (!(form.name && form.host && form.base_dn && form.search_attribute)) {
       showToast("Name, Host, Base DN and Search attribute are required.", "error");
       return;
     }
@@ -655,7 +657,9 @@ export const LdapServerDialog = ({
                   checked={isJIT}
                   onChange={(_, v) => {
                     set("provision_status", v ? "1" : "0");
-                    if (v) void loadDropdowns();
+                    if (v) {
+                      void loadDropdowns();
+                    }
                   }}
                 />
               }
@@ -679,7 +683,9 @@ export const LdapServerDialog = ({
                       size="small"
                       value={groupConfig}
                       onChange={(_, v) => {
-                        if (v !== null) setGroupConfig(v);
+                        if (v !== null) {
+                          setGroupConfig(v);
+                        }
                       }}
                     >
                       <ToggleButton value="0" sx={{ px: 2, fontSize: "0.8rem" }}>
@@ -941,7 +947,7 @@ export const LdapServerDialog = ({
           <Button
             variant="outlined"
             onClick={() => setTestOpen(true)}
-            disabled={!form.host || !form.base_dn || !form.search_attribute}
+            disabled={!(form.host && form.base_dn && form.search_attribute)}
           >
             Test
           </Button>

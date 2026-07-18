@@ -24,8 +24,166 @@ import { TabHeader } from "../../app/components/TabHeader";
 import { TimeBar, fmtTs } from "./shared";
 import { useReportLoader } from "./useReportLoader";
 
-const STATUS_COLORS: Record<number, string> = { 0: "#22C55E", 1: "#F59E0B", 2: "#EF4444" };
+const STATUS_COLORS: Record<number, string> = { 0: "#2EA043", 1: "#DBA243", 2: "#E45959" };
 const STATUS_LABELS: Record<number, string> = { 0: "Sent", 1: "In progress", 2: "Failed" };
+
+type ActionLogEntry = {
+  alertid: string;
+  clock: number;
+  subject: string;
+  sendto: string;
+  status: number;
+  error: string;
+  alerttype: number;
+};
+
+const ActionLogRow = ({
+  a,
+  isExpanded,
+  onToggle,
+}: {
+  a: ActionLogEntry;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) => (
+  <>
+    <TableRow hover onClick={onToggle} sx={{ cursor: "pointer" }}>
+      <TableCell sx={{ width: 32, p: 0, pl: 0.5 }}>
+        <IconButton size="small" tabIndex={-1}>
+          {isExpanded ? (
+            <KeyboardArrowDownIcon sx={{ fontSize: 16 }} />
+          ) : (
+            <KeyboardArrowRightIcon sx={{ fontSize: 16 }} />
+          )}
+        </IconButton>
+      </TableCell>
+      <TableCell
+        sx={{
+          fontFamily: "monospace",
+          fontSize: "0.72rem",
+          color: "text.secondary",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {fmtTs(a.clock)}
+      </TableCell>
+      <TableCell>
+        <Typography variant="body2" noWrap sx={{ maxWidth: 300 }}>
+          {a.subject || "—"}
+        </Typography>
+      </TableCell>
+      <TableCell>
+        <Typography variant="body2" color="text.secondary" noWrap sx={{ maxWidth: 170 }}>
+          {a.sendto || "—"}
+        </Typography>
+      </TableCell>
+      <TableCell>
+        <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
+          <Box
+            sx={{
+              width: 8,
+              height: 8,
+              borderRadius: "50%",
+              bgcolor: STATUS_COLORS[a.status] ?? "#97AAB3",
+              flexShrink: 0,
+            }}
+          />
+          <Typography variant="caption" sx={{ fontWeight: 500, whiteSpace: "nowrap" }}>
+            {STATUS_LABELS[a.status] ?? String(a.status)}
+          </Typography>
+        </Box>
+      </TableCell>
+      <TableCell>
+        <Typography variant="caption" color="error.light" noWrap sx={{ maxWidth: 200 }}>
+          {a.error || "—"}
+        </Typography>
+      </TableCell>
+    </TableRow>
+    <TableRow>
+      <TableCell colSpan={6} sx={{ p: 0, borderBottom: isExpanded ? undefined : "none" }}>
+        <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+          <Box
+            sx={{
+              px: 3,
+              py: 1.5,
+              bgcolor: "action.hover",
+              display: "grid",
+              gridTemplateColumns: "140px 1fr",
+              gap: "4px 12px",
+            }}
+          >
+            {[
+              ["Type", a.alerttype === 0 ? "Message" : "Script"],
+              ["Status", STATUS_LABELS[a.status] ?? String(a.status)],
+              ["Sent to", a.sendto || "—"],
+            ].map(([label, value]) => (
+              <>
+                <Typography
+                  key={`${label}-label`}
+                  variant="caption"
+                  sx={{
+                    color: "text.disabled",
+                    fontWeight: 600,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                    fontSize: "0.6rem",
+                    alignSelf: "center",
+                  }}
+                >
+                  {label}
+                </Typography>
+                <Typography key={`${label}-value`} variant="body2" sx={{ fontSize: "0.78rem" }}>
+                  {value}
+                </Typography>
+              </>
+            ))}
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.disabled",
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+                fontSize: "0.6rem",
+                alignSelf: "flex-start",
+                pt: 0.25,
+              }}
+            >
+              Subject
+            </Typography>
+            <Typography variant="body2" sx={{ fontSize: "0.78rem", wordBreak: "break-all" }}>
+              {a.subject || "—"}
+            </Typography>
+            {a.error && (
+              <>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "text.disabled",
+                    fontWeight: 600,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                    fontSize: "0.6rem",
+                    alignSelf: "flex-start",
+                    pt: 0.25,
+                  }}
+                >
+                  Error
+                </Typography>
+                <Typography
+                  variant="body2"
+                  sx={{ fontSize: "0.78rem", wordBreak: "break-all", color: "error.light" }}
+                >
+                  {a.error}
+                </Typography>
+              </>
+            )}
+          </Box>
+        </Collapse>
+      </TableCell>
+    </TableRow>
+  </>
+);
 
 export const ActionLogTab = () => {
   const [hours, setHours] = useState(24);
@@ -45,7 +203,9 @@ export const ActionLogTab = () => {
 
   const load = useCallback(
     (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       api
         .getActionLog({ limit: 200, hours })
         .then((r) => setData(r.entries))
@@ -113,164 +273,12 @@ export const ActionLogTab = () => {
               </TableRow>
             )}
             {data.map((a) => (
-              <>
-                <TableRow
-                  key={a.alertid}
-                  hover
-                  onClick={() => setExpandedId(expandedId === a.alertid ? null : a.alertid)}
-                  sx={{ cursor: "pointer" }}
-                >
-                  <TableCell sx={{ width: 32, p: 0, pl: 0.5 }}>
-                    <IconButton size="small" tabIndex={-1}>
-                      {expandedId === a.alertid ? (
-                        <KeyboardArrowDownIcon sx={{ fontSize: 16 }} />
-                      ) : (
-                        <KeyboardArrowRightIcon sx={{ fontSize: 16 }} />
-                      )}
-                    </IconButton>
-                  </TableCell>
-                  <TableCell
-                    sx={{
-                      fontFamily: "monospace",
-                      fontSize: "0.72rem",
-                      color: "text.secondary",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {fmtTs(a.clock)}
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" noWrap sx={{ maxWidth: 300 }}>
-                      {a.subject || "—"}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      noWrap
-                      sx={{ maxWidth: 170 }}
-                    >
-                      {a.sendto || "—"}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={STATUS_LABELS[a.status] ?? String(a.status)}
-                      size="small"
-                      sx={{
-                        height: 18,
-                        fontSize: "0.62rem",
-                        color: STATUS_COLORS[a.status] ?? "#9E9E9E",
-                        bgcolor: `${STATUS_COLORS[a.status] ?? "#9E9E9E"}18`,
-                        border: `1px solid ${STATUS_COLORS[a.status] ?? "#9E9E9E"}40`,
-                      }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="caption" color="error.light" noWrap sx={{ maxWidth: 200 }}>
-                      {a.error || "—"}
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-                <TableRow key={`${a.alertid}-detail`}>
-                  <TableCell
-                    colSpan={6}
-                    sx={{ p: 0, borderBottom: expandedId === a.alertid ? undefined : "none" }}
-                  >
-                    <Collapse in={expandedId === a.alertid} timeout="auto" unmountOnExit>
-                      <Box
-                        sx={{
-                          px: 3,
-                          py: 1.5,
-                          bgcolor: "action.hover",
-                          display: "grid",
-                          gridTemplateColumns: "140px 1fr",
-                          gap: "4px 12px",
-                        }}
-                      >
-                        {[
-                          ["Type", a.alerttype === 0 ? "Message" : "Script"],
-                          ["Status", STATUS_LABELS[a.status] ?? String(a.status)],
-                          ["Sent to", a.sendto || "—"],
-                        ].map(([label, value]) => (
-                          <>
-                            <Typography
-                              key={`${label}-label`}
-                              variant="caption"
-                              sx={{
-                                color: "text.disabled",
-                                fontWeight: 600,
-                                textTransform: "uppercase",
-                                letterSpacing: "0.05em",
-                                fontSize: "0.6rem",
-                                alignSelf: "center",
-                              }}
-                            >
-                              {label}
-                            </Typography>
-                            <Typography
-                              key={`${label}-value`}
-                              variant="body2"
-                              sx={{ fontSize: "0.78rem" }}
-                            >
-                              {value}
-                            </Typography>
-                          </>
-                        ))}
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            color: "text.disabled",
-                            fontWeight: 600,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.05em",
-                            fontSize: "0.6rem",
-                            alignSelf: "flex-start",
-                            pt: 0.25,
-                          }}
-                        >
-                          Subject
-                        </Typography>
-                        <Typography
-                          variant="body2"
-                          sx={{ fontSize: "0.78rem", wordBreak: "break-all" }}
-                        >
-                          {a.subject || "—"}
-                        </Typography>
-                        {a.error && (
-                          <>
-                            <Typography
-                              variant="caption"
-                              sx={{
-                                color: "text.disabled",
-                                fontWeight: 600,
-                                textTransform: "uppercase",
-                                letterSpacing: "0.05em",
-                                fontSize: "0.6rem",
-                                alignSelf: "flex-start",
-                                pt: 0.25,
-                              }}
-                            >
-                              Error
-                            </Typography>
-                            <Typography
-                              variant="body2"
-                              sx={{
-                                fontSize: "0.78rem",
-                                wordBreak: "break-all",
-                                color: "error.light",
-                              }}
-                            >
-                              {a.error}
-                            </Typography>
-                          </>
-                        )}
-                      </Box>
-                    </Collapse>
-                  </TableCell>
-                </TableRow>
-              </>
+              <ActionLogRow
+                key={a.alertid}
+                a={a}
+                isExpanded={expandedId === a.alertid}
+                onToggle={() => setExpandedId(expandedId === a.alertid ? null : a.alertid)}
+              />
             ))}
           </TableBody>
         </Table>

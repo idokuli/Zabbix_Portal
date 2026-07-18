@@ -34,9 +34,7 @@ class UserGroupsMixin:
                     "gui_access": int(g["gui_access"]),
                     "gui_access_label": GUI_ACCESS.get(int(g["gui_access"]), "Default"),
                     "users_status": int(g["users_status"]),
-                    "users_status_label": USERS_STATUS.get(
-                        int(g["users_status"]), "Enabled"
-                    ),
+                    "users_status_label": USERS_STATUS.get(int(g["users_status"]), "Enabled"),
                     "user_count": len(g.get("users", [])),
                     "users": g.get("users", []),
                 }
@@ -44,7 +42,7 @@ class UserGroupsMixin:
             ]
         except Exception as e:
             logger.exception("list_user_groups failed")
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def list_zabbix_users(self) -> list[dict]:
         if not self.zapi:
@@ -63,8 +61,8 @@ class UserGroupsMixin:
                 }
                 for u in users
             ]
-        except Exception as e:
-            logger.error("list_zabbix_users failed: %r", e)
+        except Exception:
+            logger.exception("list_zabbix_users failed")
             return []
 
     def create_user_group(
@@ -114,7 +112,7 @@ class UserGroupsMixin:
             result = self.zapi.usergroup.create(**params)
             return result["usrgrpids"][0]
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def delete_user_group(self, usrgrpid: str) -> bool:
         if not self.zapi:
@@ -123,4 +121,4 @@ class UserGroupsMixin:
             self.zapi.usergroup.delete([usrgrpid])
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e

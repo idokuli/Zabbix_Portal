@@ -38,9 +38,7 @@ def test_get_problems_returns_list(mgr):
     mgr.zapi.trigger.get.return_value = [
         {"triggerid": "10", "hosts": [{"host": "web01", "hostid": "5"}]}
     ]
-    mgr.zapi.host.get.return_value = [
-        {"hostid": "5", "hostgroups": [{"name": "Linux"}]}
-    ]
+    mgr.zapi.host.get.return_value = [{"hostid": "5", "hostgroups": [{"name": "Linux"}]}]
     result = mgr.get_problems()
     assert isinstance(result, list)
     assert result[0]["hostname"] == "web01"
@@ -131,9 +129,7 @@ def test_get_problem_history_with_resolution(mgr):
             "hosts": [{"host": "srv01"}],
         }
     ]
-    mgr.zapi.trigger.get.return_value = [
-        {"triggerid": "10", "hosts": [{"host": "srv01"}]}
-    ]
+    mgr.zapi.trigger.get.return_value = [{"triggerid": "10", "hosts": [{"host": "srv01"}]}]
     # recovery event
     mgr.zapi.event.get.side_effect = None
     call_count = 0
@@ -157,9 +153,7 @@ def test_get_problem_history_with_resolution(mgr):
         return [{"eventid": "2", "clock": "1700003600"}]
 
     mgr.zapi.event.get.side_effect = _event_get
-    mgr.zapi.trigger.get.return_value = [
-        {"triggerid": "10", "hosts": [{"host": "srv01"}]}
-    ]
+    mgr.zapi.trigger.get.return_value = [{"triggerid": "10", "hosts": [{"host": "srv01"}]}]
     result = mgr.get_problem_history()
     assert isinstance(result, list)
 
@@ -175,14 +169,10 @@ def test_get_problem_history_with_acks(mgr):
             "clock": "1700000000",
             "r_eventid": "0",
             "acknowledged": "1",
-            "acknowledges": [
-                {"userid": "5", "message": "Looking into it", "clock": "1700001000"}
-            ],
+            "acknowledges": [{"userid": "5", "message": "Looking into it", "clock": "1700001000"}],
         }
     ]
-    mgr.zapi.trigger.get.return_value = [
-        {"triggerid": "10", "hosts": [{"host": "srv01"}]}
-    ]
+    mgr.zapi.trigger.get.return_value = [{"triggerid": "10", "hosts": [{"host": "srv01"}]}]
     mgr.zapi.user.get.return_value = [{"userid": "5", "username": "jsmith"}]
     result = mgr.get_problem_history()
     assert isinstance(result, list)
@@ -203,9 +193,7 @@ def test_get_problem_history_hostname_filter(mgr):
             "acknowledges": [],
         }
     ]
-    mgr.zapi.trigger.get.return_value = [
-        {"triggerid": "10", "hosts": [{"host": "db01"}]}
-    ]
+    mgr.zapi.trigger.get.return_value = [{"triggerid": "10", "hosts": [{"host": "db01"}]}]
     # Only srv01 allowed; db01 should be filtered out
     result = mgr.get_problem_history(hostname_filter={"srv01"})
     assert result == []
@@ -224,9 +212,7 @@ def test_get_problem_history_severity_filter(mgr):
             "acknowledges": [],
         }
     ]
-    mgr.zapi.trigger.get.return_value = [
-        {"triggerid": "10", "hosts": [{"host": "srv01"}]}
-    ]
+    mgr.zapi.trigger.get.return_value = [{"triggerid": "10", "hosts": [{"host": "srv01"}]}]
     # Require severity >= 3
     result = mgr.get_problem_history(severity_min=3)
     assert result == []

@@ -30,8 +30,8 @@ class DataCollection_Manager(Zabbix_Base):
                 }
                 for g in groups
             ]
-        except Exception as e:
-            logger.error("list_template_groups failed: %r", e)
+        except Exception:
+            logger.exception("list_template_groups failed")
             return []
 
     def get_template_group_members(self, groupid: str) -> list[dict]:
@@ -51,8 +51,8 @@ class DataCollection_Manager(Zabbix_Base):
                 }
                 for t in templates
             ]
-        except Exception as e:
-            logger.error("get_template_group_members(%s) failed: %r", groupid, e)
+        except Exception:
+            logger.exception("get_template_group_members(%s) failed", groupid)
             return []
 
     def create_template_group(self, name: str) -> tuple[str | None, str | None]:
@@ -64,7 +64,7 @@ class DataCollection_Manager(Zabbix_Base):
             logger.info("Created template group %r (ID: %s).", name, gid)
             return gid, None
         except Exception as e:
-            logger.error("create_template_group(%r) failed: %r", name, e)
+            logger.exception("create_template_group(%r) failed", name)
             return None, zabbix_err(e)
 
     def update_template_group(self, groupid: str, name: str) -> bool:
@@ -74,8 +74,8 @@ class DataCollection_Manager(Zabbix_Base):
             self.zapi.templategroup.update(groupid=groupid, name=name)
             logger.info("Updated template group %s → %r.", groupid, name)
             return True
-        except Exception as e:
-            logger.error("update_template_group(%s) failed: %r", groupid, e)
+        except Exception:
+            logger.exception("update_template_group(%s) failed", groupid)
             return False
 
     def delete_template_group(self, groupid: str) -> bool:
@@ -85,8 +85,8 @@ class DataCollection_Manager(Zabbix_Base):
             self.zapi.templategroup.delete([groupid])
             logger.info("Deleted template group %s.", groupid)
             return True
-        except Exception as e:
-            logger.error("delete_template_group(%s) failed: %r", groupid, e)
+        except Exception:
+            logger.exception("delete_template_group(%s) failed", groupid)
             return False
 
     def set_template_group_members(self, groupid: str, templateids: list[str]) -> bool:
@@ -106,8 +106,8 @@ class DataCollection_Manager(Zabbix_Base):
             if to_remove:
                 self.zapi.template.massremove(templateids=to_remove, groupids=[groupid])
             return True
-        except Exception as e:
-            logger.error("set_template_group_members(%s) failed: %r", groupid, e)
+        except Exception:
+            logger.exception("set_template_group_members(%s) failed", groupid)
             return False
 
     # ── Host Groups ────────────────────────────────────────────────────
@@ -133,8 +133,8 @@ class DataCollection_Manager(Zabbix_Base):
                 }
                 for g in groups
             ]
-        except Exception as e:
-            logger.error("list_host_groups failed: %r", e)
+        except Exception:
+            logger.exception("list_host_groups failed")
             return []
 
     def get_host_group_members(self, groupid: str) -> list[dict]:
@@ -155,8 +155,8 @@ class DataCollection_Manager(Zabbix_Base):
                 }
                 for h in hosts
             ]
-        except Exception as e:
-            logger.error("get_host_group_members(%s) failed: %r", groupid, e)
+        except Exception:
+            logger.exception("get_host_group_members(%s) failed", groupid)
             return []
 
     def create_host_group(self, name: str) -> tuple[str | None, str | None]:
@@ -169,7 +169,7 @@ class DataCollection_Manager(Zabbix_Base):
             self._invalidate("host_groups")
             return gid, None
         except Exception as e:
-            logger.error("create_host_group(%r) failed: %r", name, e)
+            logger.exception("create_host_group(%r) failed", name)
             return None, zabbix_err(e)
 
     def update_host_group(self, groupid: str, name: str) -> bool:
@@ -180,8 +180,8 @@ class DataCollection_Manager(Zabbix_Base):
             logger.info("Updated host group %s → %r.", groupid, name)
             self._invalidate("host_groups")
             return True
-        except Exception as e:
-            logger.error("update_host_group(%s) failed: %r", groupid, e)
+        except Exception:
+            logger.exception("update_host_group(%s) failed", groupid)
             return False
 
     def delete_host_group(self, groupid: str) -> bool:
@@ -192,8 +192,8 @@ class DataCollection_Manager(Zabbix_Base):
             logger.info("Deleted host group %s.", groupid)
             self._invalidate("host_groups")
             return True
-        except Exception as e:
-            logger.error("delete_host_group(%s) failed: %r", groupid, e)
+        except Exception:
+            logger.exception("delete_host_group(%s) failed", groupid)
             return False
 
     def set_host_group_members(self, groupid: str, hostids: list[str]) -> bool:
@@ -213,8 +213,8 @@ class DataCollection_Manager(Zabbix_Base):
                 self.zapi.host.massremove(hostids=to_remove, groupids=[groupid])
             self._invalidate("host_groups")
             return True
-        except Exception as e:
-            logger.error("set_host_group_members(%s) failed: %r", groupid, e)
+        except Exception:
+            logger.exception("set_host_group_members(%s) failed", groupid)
             return False
 
     # ── Templates ─────────────────────────────────────────────────────
@@ -256,8 +256,8 @@ class DataCollection_Manager(Zabbix_Base):
                 }
                 for t in templates
             ]
-        except Exception as e:
-            logger.error("list_templates failed: %r", e)
+        except Exception:
+            logger.exception("list_templates failed")
             return []
 
     def create_template(
@@ -277,9 +277,7 @@ class DataCollection_Manager(Zabbix_Base):
         try:
             params: dict = {
                 "host": name,
-                "name": visible_name.strip()
-                if visible_name and visible_name.strip()
-                else name,
+                "name": visible_name.strip() if visible_name and visible_name.strip() else name,
                 "description": description,
                 "groups": [{"groupid": gid} for gid in group_ids],
             }
@@ -308,7 +306,7 @@ class DataCollection_Manager(Zabbix_Base):
             self._invalidate("templates_simple")
             return tid, None
         except Exception as e:
-            logger.error("create_template(%r) failed: %r", name, e)
+            logger.exception("create_template(%r) failed", name)
             return None, zabbix_err(e)
 
     def get_template_detail(self, templateid: str) -> dict | None:
@@ -362,8 +360,8 @@ class DataCollection_Manager(Zabbix_Base):
                 ],
                 "item_count": item_count,
             }
-        except Exception as e:
-            logger.error("get_template_detail(%s) failed: %r", templateid, e)
+        except Exception:
+            logger.exception("get_template_detail(%s) failed", templateid)
             return None
 
     def update_template(
@@ -413,7 +411,7 @@ class DataCollection_Manager(Zabbix_Base):
             logger.info("Updated template %s.", templateid)
             return True, None
         except Exception as e:
-            logger.error("update_template(%s) failed: %r", templateid, e)
+            logger.exception("update_template(%s) failed", templateid)
             return False, zabbix_err(e)
 
     def delete_template(self, templateid: str) -> bool:
@@ -425,8 +423,8 @@ class DataCollection_Manager(Zabbix_Base):
             self._invalidate("templates_full")
             self._invalidate("templates_simple")
             return True
-        except Exception as e:
-            logger.error("delete_template(%s) failed: %r", templateid, e)
+        except Exception:
+            logger.exception("delete_template(%s) failed", templateid)
             return False
 
     # ── Maintenance ───────────────────────────────────────────────────
@@ -454,25 +452,21 @@ class DataCollection_Manager(Zabbix_Base):
                 {
                     "maintenanceid": m["maintenanceid"],
                     "name": m["name"],
-                    "maintenance_type": m[
-                        "maintenance_type"
-                    ],  # "0"=with data, "1"=no data
+                    "maintenance_type": m["maintenance_type"],  # "0"=with data, "1"=no data
                     "active_since": int(m["active_since"]),
                     "active_till": int(m["active_till"]),
                     "description": m.get("description", ""),
                     "hosts": [
-                        {"hostid": h["hostid"], "name": h["name"]}
-                        for h in m.get("hosts", [])
+                        {"hostid": h["hostid"], "name": h["name"]} for h in m.get("hosts", [])
                     ],
                     "groups": [
-                        {"groupid": g["groupid"], "name": g["name"]}
-                        for g in m.get("groups", [])
+                        {"groupid": g["groupid"], "name": g["name"]} for g in m.get("groups", [])
                     ],
                 }
                 for m in maintenances
             ]
-        except Exception as e:
-            logger.error("list_maintenances failed: %r", e)
+        except Exception:
+            logger.exception("list_maintenances failed")
             return []
 
     def create_maintenance(
@@ -514,7 +508,7 @@ class DataCollection_Manager(Zabbix_Base):
             logger.info("Created maintenance %r (ID: %s).", name, mid)
             return mid, None
         except Exception as e:
-            logger.error("create_maintenance(%r) failed: %r", name, e)
+            logger.exception("create_maintenance(%r) failed", name)
             return None, zabbix_err(e)
 
     def delete_maintenance(self, maintenanceid: str) -> bool:
@@ -524,8 +518,8 @@ class DataCollection_Manager(Zabbix_Base):
             self.zapi.maintenance.delete([maintenanceid])
             logger.info("Deleted maintenance %s.", maintenanceid)
             return True
-        except Exception as e:
-            logger.error("delete_maintenance(%s) failed: %r", maintenanceid, e)
+        except Exception:
+            logger.exception("delete_maintenance(%s) failed", maintenanceid)
             return False
 
     # ── Event Correlation ──────────────────────────────────────────────
@@ -552,8 +546,8 @@ class DataCollection_Manager(Zabbix_Base):
                 }
                 for c in correlations
             ]
-        except Exception as e:
-            logger.error("list_correlations failed: %r", e)
+        except Exception:
+            logger.exception("list_correlations failed")
             return []
 
     # Condition types: 0=old event tag, 1=new event tag, 2=new event tag value, 3=old event tag value
@@ -596,7 +590,7 @@ class DataCollection_Manager(Zabbix_Base):
             logger.info("Created correlation %r (ID: %s).", name, cid)
             return cid, None
         except Exception as e:
-            logger.error("create_correlation(%r) failed: %r", name, e)
+            logger.exception("create_correlation(%r) failed", name)
             return None, zabbix_err(e)
 
     def delete_correlation(self, correlationid: str) -> bool:
@@ -606,8 +600,8 @@ class DataCollection_Manager(Zabbix_Base):
             self.zapi.correlation.delete([correlationid])
             logger.info("Deleted correlation %s.", correlationid)
             return True
-        except Exception as e:
-            logger.error("delete_correlation(%s) failed: %r", correlationid, e)
+        except Exception:
+            logger.exception("delete_correlation(%s) failed", correlationid)
             return False
 
     # ── Discovery Rules ────────────────────────────────────────────────
@@ -651,8 +645,8 @@ class DataCollection_Manager(Zabbix_Base):
                 }
                 for r in rules
             ]
-        except Exception as e:
-            logger.error("list_discovery_rules failed: %r", e)
+        except Exception:
+            logger.exception("list_discovery_rules failed")
             return []
 
     def create_discovery_rule(
@@ -687,7 +681,7 @@ class DataCollection_Manager(Zabbix_Base):
             logger.info("Created discovery rule %r (ID: %s).", name, rid)
             return rid, None
         except Exception as e:
-            logger.error("create_discovery_rule(%r) failed: %r", name, e)
+            logger.exception("create_discovery_rule(%r) failed", name)
             return None, zabbix_err(e)
 
     def delete_discovery_rule(self, druleid: str) -> bool:
@@ -697,6 +691,6 @@ class DataCollection_Manager(Zabbix_Base):
             self.zapi.drule.delete([druleid])
             logger.info("Deleted discovery rule %s.", druleid)
             return True
-        except Exception as e:
-            logger.error("delete_discovery_rule(%s) failed: %r", druleid, e)
+        except Exception:
+            logger.exception("delete_discovery_rule(%s) failed", druleid)
             return False

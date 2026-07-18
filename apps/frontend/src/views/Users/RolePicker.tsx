@@ -18,7 +18,9 @@ const cascadeSelect = (current: string[], clicked: string): string[] => {
     // Also drop any higher hierarchy roles whose prerequisites were just removed
     return afterRemoval.filter((r) => {
       const rIdx = (ROLE_HIERARCHY as readonly string[]).indexOf(r);
-      if (rIdx === -1) return true; // root / auditor are unaffected
+      if (rIdx === -1) {
+        return true; // root / auditor are unaffected
+      }
       return (ROLE_HIERARCHY as readonly string[])
         .slice(0, rIdx)
         .every((p) => afterRemoval.includes(p));
@@ -31,7 +33,9 @@ const cascadeSelect = (current: string[], clicked: string): string[] => {
 
 const isInherited = (role: string, selected: string[]): boolean => {
   const idx = (ROLE_HIERARCHY as readonly string[]).indexOf(role);
-  if (idx === -1 || idx === ROLE_HIERARCHY.length - 1) return false;
+  if (idx === -1 || idx === ROLE_HIERARCHY.length - 1) {
+    return false;
+  }
   return (ROLE_HIERARCHY as readonly string[]).slice(idx + 1).some((r) => selected.includes(r));
 };
 

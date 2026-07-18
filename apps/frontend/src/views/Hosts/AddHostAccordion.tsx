@@ -103,10 +103,14 @@ export const AddHostAccordion = ({
           options={templates.map((t) => t.name)}
           value={template}
           onChange={(_, v) => {
-            if (v !== null) setTemplate(v);
+            if (v !== null) {
+              setTemplate(v);
+            }
           }}
           onInputChange={(_, v, reason) => {
-            if (reason === "input" || reason === "clear") setTemplate(v);
+            if (reason === "input" || reason === "clear") {
+              setTemplate(v);
+            }
           }}
           renderInput={(params) => (
             <TextField
@@ -179,7 +183,7 @@ export const AddHostAccordion = ({
             variant="contained"
             size="small"
             onClick={onCreate}
-            disabled={!hostname || !ip}
+            disabled={!(hostname && ip)}
             startIcon={<AddIcon />}
           >
             Create host

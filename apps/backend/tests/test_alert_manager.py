@@ -169,9 +169,7 @@ def test_update_rule_service_type(mgr):
     mock_cur.fetchone.side_effect = [{"rule_type": "service"}, None]
     mock_cur.rowcount = 1
     with patch("Alert_Manager.get_conn", return_value=mock_conn):
-        result = mgr.update_rule(
-            rule_id=1, user_id=1, severity=3, expected_contains="ok"
-        )
+        result = mgr.update_rule(rule_id=1, user_id=1, severity=3, expected_contains="ok")
     assert result is True
 
 
@@ -196,25 +194,29 @@ def test_update_rule_partial_params(mgr):
 def test_create_rule_db_error_raises(mgr):
     mock_conn = MagicMock()
     mock_conn.cursor.side_effect = Exception("constraint error")
-    with patch("Alert_Manager.get_conn", return_value=mock_conn):
-        with pytest.raises(Exception):
-            mgr.create_rule(
-                user_id=1,
-                item_id="42",
-                item_name="CPU",
-                hostname="srv01",
-                operator=">",
-                threshold=90.0,
-                severity=3,
-            )
+    with (
+        patch("Alert_Manager.get_conn", return_value=mock_conn),
+        pytest.raises(Exception, match="constraint error"),
+    ):
+        mgr.create_rule(
+            user_id=1,
+            item_id="42",
+            item_name="CPU",
+            hostname="srv01",
+            operator=">",
+            threshold=90.0,
+            severity=3,
+        )
 
 
 def test_delete_rule_raises_on_error(mgr):
     mock_conn = MagicMock()
     mock_conn.cursor.side_effect = Exception("db error")
-    with patch("Alert_Manager.get_conn", return_value=mock_conn):
-        with pytest.raises(Exception):
-            mgr.delete_rule(rule_id=1, user_id=1)
+    with (
+        patch("Alert_Manager.get_conn", return_value=mock_conn),
+        pytest.raises(Exception, match="db error"),
+    ):
+        mgr.delete_rule(rule_id=1, user_id=1)
 
 
 def test_run_checks_no_rules(mgr):

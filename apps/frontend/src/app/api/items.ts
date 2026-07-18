@@ -22,9 +22,15 @@ export const itemsApi = {
     }),
   listAllItems: (params?: { search?: string; hostname?: string; limit?: number }) => {
     const q = new URLSearchParams();
-    if (params?.search) q.set("search", params.search);
-    if (params?.hostname) q.set("hostname", params.hostname);
-    if (params?.limit != null) q.set("limit", String(params.limit));
+    if (params?.search) {
+      q.set("search", params.search);
+    }
+    if (params?.hostname) {
+      q.set("hostname", params.hostname);
+    }
+    if (params?.limit != null) {
+      q.set("limit", String(params.limit));
+    }
     const qs = q.toString();
     return apiFetch<{
       items: Array<{
@@ -44,7 +50,7 @@ export const itemsApi = {
       total: number;
     }>(`/items${qs ? `?${qs}` : ""}`);
   },
-  listItemKeys: () =>
+  listItemKeys: (hostname: string) =>
     apiFetch<{
       items: Array<{
         key_: string;
@@ -57,7 +63,7 @@ export const itemsApi = {
         trends: string;
         description: string;
       }>;
-    }>("/items/keys"),
+    }>(`/items/keys?hostname=${encodeURIComponent(hostname)}`),
   listItems: (hostname: string, includeInherited = false) =>
     apiFetch<{
       items: Array<{
@@ -83,9 +89,15 @@ export const itemsApi = {
     }),
   listAllTriggers: (params?: { search?: string; hostname?: string; limit?: number }) => {
     const q = new URLSearchParams();
-    if (params?.search) q.set("search", params.search);
-    if (params?.hostname) q.set("hostname", params.hostname);
-    if (params?.limit != null) q.set("limit", String(params.limit));
+    if (params?.search) {
+      q.set("search", params.search);
+    }
+    if (params?.hostname) {
+      q.set("hostname", params.hostname);
+    }
+    if (params?.limit != null) {
+      q.set("limit", String(params.limit));
+    }
     const qs = q.toString();
     return apiFetch<{
       triggers: Array<{

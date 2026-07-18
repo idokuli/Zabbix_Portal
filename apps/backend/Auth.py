@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from pathlib import Path
 
 import bcrypt
@@ -12,9 +12,7 @@ load_dotenv(Path(__file__).resolve().parent / ".env", override=False)
 
 _SECRET = os.getenv("SECRET_KEY")
 if not _SECRET:
-    raise RuntimeError(
-        "SECRET_KEY environment variable must be set before starting the server."
-    )
+    raise RuntimeError("SECRET_KEY environment variable must be set before starting the server.")
 _ALG = "HS256"
 _HOURS = 8
 
@@ -59,9 +57,7 @@ def can_grant_roles(granter_roles: list[str], requested_roles: list[str]) -> boo
 
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=14)).decode(
-        "utf-8"
-    )
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=14)).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
@@ -75,7 +71,7 @@ def create_token(
     team_id: int | None,
     display_name: str = "",
 ) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(hours=_HOURS)
+    expire = datetime.now(UTC) + timedelta(hours=_HOURS)
     return jwt.encode(
         {
             "sub": str(user_id),
@@ -106,18 +102,14 @@ def get_current_user(
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> dict:
     if not creds:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated."
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated.")
     return _decode(creds.credentials)
 
 
 def require_root(user: dict = Depends(get_current_user)) -> dict:
     """Only root. Used for platform-wide actions: create/delete teams."""
     if "root" not in user.get("roles", []):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Root access required."
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Root access required.")
     return user
 
 

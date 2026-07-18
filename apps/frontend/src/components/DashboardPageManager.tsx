@@ -16,20 +16,29 @@ import {
   Tooltip,
 } from "@mui/material";
 import { useEffect, useState } from "react";
-import { type DashboardPage, type DashboardPageKind, api } from "../app/api";
+import { type DashboardPage, type DashboardPageKind, type DashboardScope, api } from "../app/api";
 import { ConfirmDelete } from "../app/components/ConfirmDelete";
 
 type DashboardPageManagerProps = {
   kind: DashboardPageKind;
-  scope: "user" | "team";
+  scope: DashboardScope;
   page: string;
-  onPageChange: (page: string) => void;
+  teamId?: number;
+  onPageChange: (page: string, teamId?: number) => void;
 };
+
+// Multiple teams all have a default page literally named "dashboard"/"metrics",
+// so the page key alone isn't a unique Select value once scope="all" lists every
+// team's pages together — key/value it by team+page, independent of what's sent
+// to the API (that's just `page` and `teamId`, passed up via onPageChange).
+const pageOptionValue = (p: Pick<DashboardPage, "page" | "team_id">) =>
+  `${p.team_id ?? ""}::${p.page}`;
 
 export const DashboardPageManager = ({
   kind,
   scope,
   page,
+  teamId,
   onPageChange,
 }: DashboardPageManagerProps) => {
   const [pages, setPages] = useState<DashboardPage[]>([
@@ -40,26 +49,41 @@ export const DashboardPageManager = ({
   const [saving, setSaving] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: onPageChange re-selects a valid page when the fetched list no longer contains the current one (e.g. switching to/from "all" scope)
   useEffect(() => {
     api
       .listDashboardPages(scope, kind)
-      .then((res) => setPages(res.pages))
+      .then((res) => {
+        setPages(res.pages);
+        const stillValid = res.pages.some(
+          (p) => p.page === page && (p.team_id ?? undefined) === teamId,
+        );
+        if (res.pages.length > 0 && !stillValid) {
+          onPageChange(res.pages[0].page, res.pages[0].team_id);
+        }
+      })
       .catch(() => {});
   }, [scope, kind]);
 
-  const current = pages.find((p) => p.page === page);
+  const current = pages.find((p) => p.page === page && (p.team_id ?? undefined) === teamId);
+  const readOnly = scope === "all";
 
   const closeDialog = () => setDialog(null);
 
   const submitDialog = async () => {
+    if (scope === "all") {
+      return;
+    }
     const name = nameInput.trim();
-    if (!name) return;
+    if (!name) {
+      return;
+    }
     setSaving(true);
     try {
       if (dialog === "new") {
         const created = await api.createDashboardPage(scope, kind, name);
         setPages((prev) => [...prev, created]);
-        onPageChange(created.page);
+        onPageChange(created.page, created.team_id);
       } else if (dialog === "rename" && current && !current.is_default) {
         await api.renameDashboardPage(scope, kind, current.page, name);
         setPages((prev) => prev.map((p) => (p.page === current.page ? { ...p, name } : p)));
@@ -73,7 +97,9 @@ export const DashboardPageManager = ({
   };
 
   const handleDelete = async () => {
-    if (!current || current.is_default) return;
+    if (scope === "all" || !current || current.is_default) {
+      return;
+    }
     try {
       await api.deleteDashboardPage(scope, kind, current.page);
       setPages((prev) => prev.filter((p) => p.page !== current.page));
@@ -89,8 +115,13 @@ export const DashboardPageManager = ({
     <>
       <Select
         size="small"
-        value={page}
-        onChange={(e) => onPageChange(e.target.value)}
+        value={pageOptionValue({ page, team_id: teamId })}
+        onChange={(e) => {
+          const found = pages.find((p) => pageOptionValue(p) === e.target.value);
+          if (found) {
+            onPageChange(found.page, found.team_id);
+          }
+        }}
         sx={{
           fontSize: "0.72rem",
           height: 28,
@@ -99,27 +130,34 @@ export const DashboardPageManager = ({
         }}
       >
         {pages.map((p) => (
-          <MenuItem key={p.page} value={p.page} sx={{ fontSize: "0.78rem" }}>
+          <MenuItem
+            key={pageOptionValue(p)}
+            value={pageOptionValue(p)}
+            sx={{ fontSize: "0.78rem" }}
+          >
             {p.name}
           </MenuItem>
         ))}
       </Select>
-      <Tooltip title="New dashboard">
-        <IconButton
-          size="small"
-          onClick={() => {
-            setNameInput("");
-            setDialog("new");
-          }}
-        >
-          <AddIcon sx={{ fontSize: 18 }} />
-        </IconButton>
-      </Tooltip>
-      <Tooltip title="Rename dashboard">
+      <Tooltip title={readOnly ? "Read-only across teams" : "New dashboard"}>
         <span>
           <IconButton
             size="small"
-            disabled={!current || current.is_default}
+            disabled={readOnly}
+            onClick={() => {
+              setNameInput("");
+              setDialog("new");
+            }}
+          >
+            <AddIcon sx={{ fontSize: 18 }} />
+          </IconButton>
+        </span>
+      </Tooltip>
+      <Tooltip title={readOnly ? "Read-only across teams" : "Rename dashboard"}>
+        <span>
+          <IconButton
+            size="small"
+            disabled={readOnly || !current || current.is_default}
             onClick={() => {
               setNameInput(current?.name ?? "");
               setDialog("rename");
@@ -129,11 +167,11 @@ export const DashboardPageManager = ({
           </IconButton>
         </span>
       </Tooltip>
-      <Tooltip title="Delete dashboard">
+      <Tooltip title={readOnly ? "Read-only across teams" : "Delete dashboard"}>
         <span>
           <IconButton
             size="small"
-            disabled={!current || current.is_default}
+            disabled={readOnly || !current || current.is_default}
             onClick={() => setConfirmDeleteOpen(true)}
           >
             <DeleteOutlineIcon sx={{ fontSize: 16 }} />
@@ -154,7 +192,9 @@ export const DashboardPageManager = ({
             value={nameInput}
             onChange={(e) => setNameInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") submitDialog();
+              if (e.key === "Enter") {
+                submitDialog();
+              }
             }}
             sx={{ mt: 1 }}
           />

@@ -5,6 +5,7 @@ export type {
   MetricLayoutData,
   DashboardPageKind,
   DashboardPage,
+  DashboardScope,
   ProxyConfig,
   Proxy,
   HostGroup,

@@ -15,9 +15,7 @@ load_dotenv(dotenv_path=dotenv_path, override=False)
 
 _DATABASE_URL = os.getenv("DATABASE_URL")
 if not _DATABASE_URL:
-    raise RuntimeError(
-        "DATABASE_URL environment variable must be set before starting the server."
-    )
+    raise RuntimeError("DATABASE_URL environment variable must be set before starting the server.")
 
 _pool: psycopg2.pool.ThreadedConnectionPool | None = None
 
@@ -268,9 +266,9 @@ def init_db() -> None:
             cur.execute(_MIGRATIONS)
         conn.commit()
         logger.info("Database schema ready.")
-    except Exception as exc:
+    except Exception:
         conn.rollback()
-        logger.error("Database init failed: %r", exc)
+        logger.exception("Database init failed")
         raise
     finally:
         conn.close()

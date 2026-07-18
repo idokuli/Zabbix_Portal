@@ -29,6 +29,22 @@ import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { SEVERITY_CONFIG, SeverityChip, formatAge } from "./shared";
 
+const SkeletonRows = ({ rows, cols }: { rows: number; cols: number }) => (
+  <>
+    {Array.from({ length: rows }).map((_, i) => (
+      // biome-ignore lint/suspicious/noArrayIndexKey: skeleton rows
+      <TableRow key={i}>
+        {Array.from({ length: cols }).map((__, j) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: skeleton cells
+          <TableCell key={j}>
+            <Skeleton variant="text" height={20} />
+          </TableCell>
+        ))}
+      </TableRow>
+    ))}
+  </>
+);
+
 // ── Notifications tab ─────────────────────────────────────────────────
 
 type ZabbixNotification = {
@@ -43,6 +59,163 @@ type ZabbixNotification = {
   media_type: string;
 };
 
+const notificationStatusColor = (s: number) =>
+  s === 1 ? "success" : s === 2 ? "error" : "default";
+
+const NotificationRow = ({ n, onClick }: { n: ZabbixNotification; onClick: () => void }) => (
+  <TableRow hover sx={{ cursor: "pointer" }} onClick={onClick}>
+    <TableCell>
+      <Tooltip title={new Date(n.clock * 1000).toLocaleString()}>
+        <Typography
+          variant="body2"
+          sx={{ fontSize: "0.75rem", color: "text.secondary", cursor: "pointer" }}
+        >
+          {formatAge(Math.floor(Date.now() / 1000) - n.clock)} ago
+        </Typography>
+      </Tooltip>
+    </TableCell>
+    <TableCell>
+      <Typography
+        variant="body2"
+        sx={{
+          fontSize: "0.8rem",
+          color: "primary.main",
+          "&:hover": { textDecoration: "underline" },
+        }}
+      >
+        {n.subject || "—"}
+      </Typography>
+      {n.error && (
+        <Typography variant="caption" color="error.main" sx={{ display: "block" }}>
+          {n.error}
+        </Typography>
+      )}
+    </TableCell>
+    <TableCell sx={{ maxWidth: 200 }}>
+      <Tooltip title={n.sendto || ""} placement="top">
+        <Typography
+          variant="body2"
+          sx={{
+            fontSize: "0.78rem",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {n.sendto || "—"}
+        </Typography>
+      </Tooltip>
+    </TableCell>
+    <TableCell>
+      <Typography variant="body2" sx={{ fontSize: "0.78rem" }}>
+        {n.username || "—"}
+      </Typography>
+    </TableCell>
+    <TableCell>
+      <Typography variant="body2" sx={{ fontSize: "0.78rem" }}>
+        {n.media_type || "—"}
+      </Typography>
+    </TableCell>
+    <TableCell>
+      <Chip
+        label={n.status_label}
+        size="small"
+        color={notificationStatusColor(n.status)}
+        sx={{ fontSize: "0.68rem", height: 18 }}
+      />
+    </TableCell>
+  </TableRow>
+);
+
+const PortalEventRow = ({ e, onClick }: { e: AlertEvent; onClick: () => void }) => {
+  const sev = SEVERITY_CONFIG.find((s) => s.severity === e.severity) ?? SEVERITY_CONFIG[5];
+  return (
+    <TableRow key={e.id} hover sx={{ cursor: "pointer" }} onClick={onClick}>
+      <TableCell>
+        <SeverityChip severity={e.severity} />
+      </TableCell>
+      <TableCell>
+        <Typography
+          variant="body2"
+          sx={{
+            fontSize: "0.8rem",
+            fontWeight: 500,
+            color: "primary.main",
+            "&:hover": { textDecoration: "underline" },
+          }}
+        >
+          {e.hostname}
+        </Typography>
+      </TableCell>
+      <TableCell>
+        <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
+          {e.item_name}
+        </Typography>
+      </TableCell>
+      <TableCell>
+        <Typography variant="body2" sx={{ fontSize: "0.8rem", fontFamily: "monospace" }}>
+          {e.operator} {e.threshold}
+        </Typography>
+      </TableCell>
+      <TableCell>
+        <Typography variant="body2" sx={{ fontSize: "0.8rem", fontWeight: 600, color: sev.color }}>
+          {e.actual_value}
+        </Typography>
+      </TableCell>
+      <TableCell>
+        <Tooltip title={new Date(e.fired_at * 1000).toLocaleString()}>
+          <Typography
+            variant="body2"
+            sx={{ fontSize: "0.75rem", color: "text.secondary", cursor: "default" }}
+          >
+            {formatAge(Math.floor(Date.now() / 1000) - e.fired_at)} ago
+          </Typography>
+        </Tooltip>
+      </TableCell>
+    </TableRow>
+  );
+};
+
+const NotificationStats = ({
+  total,
+  sent,
+  failed,
+  pending,
+}: {
+  total: number;
+  sent: number;
+  failed: number;
+  pending: number;
+}) => (
+  <>
+    <Chip label={`${total} total`} size="small" sx={{ height: 18, fontSize: "0.68rem" }} />
+    {sent > 0 && (
+      <Chip
+        label={`${sent} sent`}
+        size="small"
+        color="success"
+        sx={{ height: 18, fontSize: "0.68rem" }}
+      />
+    )}
+    {failed > 0 && (
+      <Chip
+        label={`${failed} failed`}
+        size="small"
+        color="error"
+        sx={{ height: 18, fontSize: "0.68rem" }}
+      />
+    )}
+    {pending > 0 && (
+      <Chip
+        label={`${pending} pending`}
+        size="small"
+        color="warning"
+        sx={{ height: 18, fontSize: "0.68rem" }}
+      />
+    )}
+  </>
+);
+
 export const NotificationsTab = () => {
   const tick = useRefreshTick();
   const router = useRouter();
@@ -55,7 +228,9 @@ export const NotificationsTab = () => {
 
   const loadAll = useCallback(
     (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       setFetchError("");
       Promise.all([api.getNotificationHistory({ hours, limit: 500 }), api.getAlertEvents(500)])
         .then(([nr, ar]) => {
@@ -74,7 +249,9 @@ export const NotificationsTab = () => {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
   useEffect(() => {
-    if (tick > 0) void loadAll(true);
+    if (tick > 0) {
+      void loadAll(true);
+    }
   }, [tick]);
 
   const filtered = statusFilter === "" ? notifs : notifs.filter((n) => n.status === statusFilter);
@@ -82,8 +259,6 @@ export const NotificationsTab = () => {
   const sentCount = notifs.filter((n) => n.status === 1).length;
   const failedCount = notifs.filter((n) => n.status === 2).length;
   const pendingCount = notifs.filter((n) => n.status === 0).length;
-
-  const statusColor = (s: number) => (s === 1 ? "success" : s === 2 ? "error" : "default");
 
   return (
     <Box>
@@ -104,34 +279,11 @@ export const NotificationsTab = () => {
           Zabbix Notification Deliveries
         </Typography>
         {!loading && (
-          <Chip
-            label={`${notifs.length} total`}
-            size="small"
-            sx={{ height: 18, fontSize: "0.68rem" }}
-          />
-        )}
-        {!loading && sentCount > 0 && (
-          <Chip
-            label={`${sentCount} sent`}
-            size="small"
-            color="success"
-            sx={{ height: 18, fontSize: "0.68rem" }}
-          />
-        )}
-        {!loading && failedCount > 0 && (
-          <Chip
-            label={`${failedCount} failed`}
-            size="small"
-            color="error"
-            sx={{ height: 18, fontSize: "0.68rem" }}
-          />
-        )}
-        {!loading && pendingCount > 0 && (
-          <Chip
-            label={`${pendingCount} pending`}
-            size="small"
-            color="warning"
-            sx={{ height: 18, fontSize: "0.68rem" }}
+          <NotificationStats
+            total={notifs.length}
+            sent={sentCount}
+            failed={failedCount}
+            pending={pendingCount}
           />
         )}
         <Box sx={{ flex: 1 }} />
@@ -189,17 +341,7 @@ export const NotificationsTab = () => {
           </TableHead>
           <TableBody>
             {loading ? (
-              Array.from({ length: 4 }).map((_, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: skeleton rows
-                <TableRow key={i}>
-                  {Array.from({ length: 6 }).map((__, j) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: skeleton cells
-                    <TableCell key={j}>
-                      <Skeleton variant="text" height={20} />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
+              <SkeletonRows rows={4} cols={6} />
             ) : filtered.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} align="center" sx={{ py: 4, color: "text.secondary" }}>
@@ -210,73 +352,11 @@ export const NotificationsTab = () => {
               </TableRow>
             ) : (
               filtered.map((n) => (
-                <TableRow
+                <NotificationRow
                   key={n.alertid}
-                  hover
-                  sx={{ cursor: "pointer" }}
+                  n={n}
                   onClick={() => router.push("/metrics?tab=problems")}
-                >
-                  <TableCell>
-                    <Tooltip title={new Date(n.clock * 1000).toLocaleString()}>
-                      <Typography
-                        variant="body2"
-                        sx={{ fontSize: "0.75rem", color: "text.secondary", cursor: "pointer" }}
-                      >
-                        {formatAge(Math.floor(Date.now() / 1000) - n.clock)} ago
-                      </Typography>
-                    </Tooltip>
-                  </TableCell>
-                  <TableCell>
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        fontSize: "0.8rem",
-                        color: "primary.main",
-                        "&:hover": { textDecoration: "underline" },
-                      }}
-                    >
-                      {n.subject || "—"}
-                    </Typography>
-                    {n.error && (
-                      <Typography variant="caption" color="error.main" sx={{ display: "block" }}>
-                        {n.error}
-                      </Typography>
-                    )}
-                  </TableCell>
-                  <TableCell sx={{ maxWidth: 200 }}>
-                    <Tooltip title={n.sendto || ""} placement="top">
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          fontSize: "0.78rem",
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
-                        {n.sendto || "—"}
-                      </Typography>
-                    </Tooltip>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" sx={{ fontSize: "0.78rem" }}>
-                      {n.username || "—"}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" sx={{ fontSize: "0.78rem" }}>
-                      {n.media_type || "—"}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={n.status_label}
-                      size="small"
-                      color={statusColor(n.status)}
-                      sx={{ fontSize: "0.68rem", height: 18 }}
-                    />
-                  </TableCell>
-                </TableRow>
+                />
               ))
             )}
           </TableBody>
@@ -314,17 +394,7 @@ export const NotificationsTab = () => {
           </TableHead>
           <TableBody>
             {loading ? (
-              Array.from({ length: 3 }).map((_, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: skeleton rows
-                <TableRow key={i}>
-                  {Array.from({ length: 6 }).map((__, j) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: skeleton cells
-                    <TableCell key={j}>
-                      <Skeleton variant="text" height={20} />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
+              <SkeletonRows rows={3} cols={6} />
             ) : portalEvents.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} align="center" sx={{ py: 3, color: "text.secondary" }}>
@@ -332,68 +402,15 @@ export const NotificationsTab = () => {
                 </TableCell>
               </TableRow>
             ) : (
-              portalEvents.map((e) => {
-                const sev =
-                  SEVERITY_CONFIG.find((s) => s.severity === e.severity) ?? SEVERITY_CONFIG[5];
-                return (
-                  <TableRow
-                    key={e.id}
-                    hover
-                    sx={{ cursor: "pointer" }}
-                    onClick={() =>
-                      router.push(`/metrics?tab=problems&host=${encodeURIComponent(e.hostname)}`)
-                    }
-                  >
-                    <TableCell>
-                      <SeverityChip severity={e.severity} />
-                    </TableCell>
-                    <TableCell>
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          fontSize: "0.8rem",
-                          fontWeight: 500,
-                          color: "primary.main",
-                          "&:hover": { textDecoration: "underline" },
-                        }}
-                      >
-                        {e.hostname}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
-                        {e.item_name}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography
-                        variant="body2"
-                        sx={{ fontSize: "0.8rem", fontFamily: "monospace" }}
-                      >
-                        {e.operator} {e.threshold}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography
-                        variant="body2"
-                        sx={{ fontSize: "0.8rem", fontWeight: 600, color: sev.color }}
-                      >
-                        {e.actual_value}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Tooltip title={new Date(e.fired_at * 1000).toLocaleString()}>
-                        <Typography
-                          variant="body2"
-                          sx={{ fontSize: "0.75rem", color: "text.secondary", cursor: "default" }}
-                        >
-                          {formatAge(Math.floor(Date.now() / 1000) - e.fired_at)} ago
-                        </Typography>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
+              portalEvents.map((e) => (
+                <PortalEventRow
+                  key={e.id}
+                  e={e}
+                  onClick={() =>
+                    router.push(`/metrics?tab=problems&host=${encodeURIComponent(e.hostname)}`)
+                  }
+                />
+              ))
             )}
           </TableBody>
         </Table>

@@ -39,8 +39,7 @@ def get_all_hosts(current_user: dict = Depends(get_current_user)):
             return True
         if team_name:
             return any(
-                t.get("tag") == "team" and t.get("value") == team_name
-                for t in h.get("tags", [])
+                t.get("tag") == "team" and t.get("value") == team_name for t in h.get("tags", [])
             )
         return False
 
@@ -48,12 +47,8 @@ def get_all_hosts(current_user: dict = Depends(get_current_user)):
     return {"count": len(hosts), "hosts": hosts}
 
 
-@router.get(
-    "/hosts/download", tags=["Hosts"], summary="Download Host Inventory (.xlsx or .csv)"
-)
-def download_inventory(
-    format: str = "xlsx", current_user: dict = Depends(get_current_user)
-):
+@router.get("/hosts/download", tags=["Hosts"], summary="Download Host Inventory (.xlsx or .csv)")
+def download_inventory(format: str = "xlsx", current_user: dict = Depends(get_current_user)):
     """Generates a host inventory file. ?format=xlsx (default) or ?format=csv."""
     allowed = team_hostname_filter(current_user)
     if format == "csv":
@@ -63,9 +58,7 @@ def download_inventory(
         return StreamingResponse(
             content=iter([data]),
             media_type="text/csv; charset=utf-8",
-            headers={
-                "Content-Disposition": 'attachment; filename="Zabbix_Inventory.csv"'
-            },
+            headers={"Content-Disposition": 'attachment; filename="Zabbix_Inventory.csv"'},
         )
     data = host_bot.export_hosts_to_excel_bytes(hostname_filter=allowed)
     if not data:
@@ -99,9 +92,7 @@ def create_host(data: HostRequest, current_user: dict = Depends(require_operator
     if team_id:
         team_name = team_tag(current_user, data.apply_team_tag)
         if not um.assign_host(team_id, data.hostname):
-            logger.warning(
-                "assign_host failed for %r team_id=%s", data.hostname, team_id
-            )
+            logger.warning("assign_host failed for %r team_id=%s", data.hostname, team_id)
         if team_name:
             host_bot.tag_host(data.hostname, team_name)
             # Add to the team's Zabbix host group so the team user can see it in Zabbix
@@ -123,17 +114,13 @@ async def bulk_create_hosts(
     """Creates multiple hosts from a CSV/XLSX file with columns: hostname, ip, template(optional)."""
     filename = (file.filename or "").lower()
     if not filename.endswith((".csv", ".xlsx")):
-        raise HTTPException(
-            status_code=400, detail="Unsupported file type. Use .csv or .xlsx"
-        )
+        raise HTTPException(status_code=400, detail="Unsupported file type. Use .csv or .xlsx")
 
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
     if len(content) > 10 * 1024 * 1024:  # 10 MB hard limit
-        raise HTTPException(
-            status_code=413, detail="File too large. Maximum size is 10 MB."
-        )
+        raise HTTPException(status_code=413, detail="File too large. Maximum size is 10 MB.")
 
     try:
         if filename.endswith(".csv"):
@@ -141,7 +128,7 @@ async def bulk_create_hosts(
         else:
             df = pd.read_excel(BytesIO(content))
     except Exception as exc:
-        logger.error("Bulk upload: failed to parse file %r: %r", file.filename, exc)
+        logger.exception("Bulk upload: failed to parse file %r", file.filename)
         raise HTTPException(
             status_code=400,
             detail="Failed to parse file. Ensure it is a valid CSV or XLSX.",
@@ -169,12 +156,7 @@ async def bulk_create_hosts(
             hostname = str(row.get(hostname_col, "")).strip()
             ip = str(row.get(ip_col, "")).strip()
             template = str(row.get(template_col, "")).strip() if template_col else ""
-            if (
-                not hostname
-                or hostname.lower() == "nan"
-                or not ip
-                or ip.lower() == "nan"
-            ):
+            if not hostname or hostname.lower() == "nan" or not ip or ip.lower() == "nan":
                 failed.append({"row": int(idx) + 2, "reason": "Missing hostname/ip"})
                 continue
 
@@ -187,9 +169,7 @@ async def bulk_create_hosts(
                 if team_name:
                     host_bot.tag_host(hostname, team_name)
                     host_bot.add_host_to_hostgroup(hostname, team_name)
-                created.append(
-                    {"row": int(idx) + 2, "hostname": hostname, "hostid": hostid}
-                )
+                created.append({"row": int(idx) + 2, "hostname": hostname, "hostid": hostid})
             else:
                 failed.append(
                     {
@@ -308,9 +288,7 @@ def delete_host(hostname: str, current_user: dict = Depends(require_operator)):
     return {"message": f"Host '{hostname}' deleted successfully."}
 
 
-@router.put(
-    "/hosts/{hostname}/tags", tags=["Hosts"], summary="Update custom tags on a host"
-)
+@router.put("/hosts/{hostname}/tags", tags=["Hosts"], summary="Update custom tags on a host")
 def update_host_tags(
     hostname: str,
     body: TagsUpdateRequest,

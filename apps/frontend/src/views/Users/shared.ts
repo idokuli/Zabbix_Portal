@@ -5,32 +5,32 @@ export const ROLE_OPTIONS = [
   {
     value: "root",
     label: "Root",
-    color: "#EF4444",
+    color: "#C2574F",
     description:
       "Full platform access across all teams. Can manage all users, teams, and hosts, and grant any role.",
   },
   {
     value: "team_lead",
     label: "Team Lead",
-    color: "#3B82F6",
+    color: "#4C7FDB",
     description: "Full team management — add/remove users, assign hosts, reset passwords.",
   },
   {
     value: "operator",
     label: "Operator",
-    color: "#10B981",
+    color: "#3B9E5A",
     description: "Create/delete hosts and monitoring within the team. No user management.",
   },
   {
     value: "member",
     label: "Member",
-    color: "#64748B",
+    color: "#7D8590",
     description: "Read-only access to the team's own hosts.",
   },
   {
     value: "auditor",
     label: "Auditor",
-    color: "#F59E0B",
+    color: "#C08A2D",
     description:
       "Read-only across ALL teams. For compliance and security reviews. Only root can grant this.",
   },
@@ -53,6 +53,6 @@ export const roleLabel = (r: string) =>
 export const userInitials = (name: string) => name.slice(0, 2).toUpperCase();
 
 export const avatarColor = (name: string) => {
-  const colors = ["#3B82F6", "#8B5CF6", "#10B981", "#F59E0B", "#EF4444", "#06B6D4"];
+  const colors = ["#4C7FDB", "#7D6BB8", "#3B9E5A", "#C08A2D", "#C2574F", "#3E8E9E"];
   return colors[name.charCodeAt(0) % colors.length];
 };

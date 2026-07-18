@@ -41,7 +41,9 @@ export const AvailabilityTab = () => {
 
   const load = useCallback(
     (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       api
         .getAvailability({ hours })
         .then((r) => setData(r.hosts))
@@ -101,7 +103,7 @@ export const AvailabilityTab = () => {
             )}
             {data.map((h) => {
               const pct = h.availability_pct;
-              const color = pct >= 99 ? "#22C55E" : pct >= 95 ? "#F59E0B" : "#EF4444";
+              const color = pct >= 99 ? "#2EA043" : pct >= 95 ? "#DBA243" : "#E45959";
               const downMins = Math.floor(h.downtime_seconds / 60);
               const downStr =
                 downMins >= 60 ? `${Math.floor(downMins / 60)}h ${downMins % 60}m` : `${downMins}m`;

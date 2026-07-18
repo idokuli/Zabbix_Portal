@@ -37,6 +37,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { type Team, type UserRow, api } from "../../app/api";
 import { ConfirmDelete } from "../../app/components/ConfirmDelete";
 import { useAuth } from "../../app/context/AuthContext";
@@ -44,6 +45,450 @@ import { useRefreshTick } from "../../app/context/RefreshContext";
 import { useSync } from "../../app/context/SyncContext";
 import { RolePicker } from "./RolePicker";
 import { ROLE_OPTIONS, avatarColor, roleColor, roleLabel, userInitials } from "./shared";
+
+const userSourceLabel = (source: UserRow["source"]) =>
+  source === "ldap" ? "LDAP" : source === "zabbix" ? "Zabbix" : "Local";
+
+const userSourceColor = (source: UserRow["source"]) =>
+  source === "ldap" ? "info" : source === "zabbix" ? "warning" : ("default" as const);
+
+const UserRowItem = ({
+  u,
+  idx,
+  isExpanded,
+  onToggle,
+  onEdit,
+  onResetPassword,
+  onDeleteRequest,
+}: {
+  u: UserRow;
+  idx: number;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onEdit: (u: UserRow) => void;
+  onResetPassword: (u: UserRow) => void;
+  onDeleteRequest: (u: UserRow) => void;
+}) => {
+  const displayLabel = u.display_name?.trim() || u.username;
+  const sourceLabel = userSourceLabel(u.source);
+  const sourceColor = userSourceColor(u.source);
+  return (
+    <Box>
+      {idx > 0 && <Divider />}
+      {/* Clickable summary row */}
+      <Box
+        onClick={onToggle}
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 2,
+          px: 2.5,
+          py: 1.75,
+          cursor: "pointer",
+          "&:hover": { backgroundColor: "action.hover" },
+          transition: "background 0.15s ease",
+        }}
+      >
+        {/* Avatar */}
+        <Avatar
+          sx={{
+            width: 36,
+            height: 36,
+            fontSize: "0.75rem",
+            fontWeight: 600,
+            bgcolor: avatarColor(u.username),
+            flexShrink: 0,
+          }}
+        >
+          {userInitials(u.display_name?.trim() || u.username)}
+        </Avatar>
+
+        {/* Identity */}
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+            {displayLabel}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" noWrap>
+            {u.email || "—"}
+          </Typography>
+        </Box>
+
+        {/* Roles */}
+        <Box
+          sx={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 0.5,
+            flex: 1,
+            justifyContent: "flex-start",
+          }}
+        >
+          {(u.roles ?? []).map((r) => (
+            <Chip
+              key={r}
+              label={roleLabel(r)}
+              size="small"
+              color={roleColor(r)}
+              variant="outlined"
+              sx={{ height: 20, fontSize: "0.68rem" }}
+            />
+          ))}
+        </Box>
+
+        {/* Team */}
+        <Box sx={{ minWidth: 120, display: { xs: "none", md: "block" } }}>
+          {u.team_name ? (
+            <Chip
+              label={u.team_name}
+              size="small"
+              variant="outlined"
+              sx={{ height: 20, fontSize: "0.68rem", borderColor: "rgba(148,163,184,0.3)" }}
+            />
+          ) : (
+            <Typography variant="caption" color="text.disabled">
+              No team
+            </Typography>
+          )}
+        </Box>
+      </Box>
+
+      {/* Expanded detail */}
+      <Collapse in={isExpanded} unmountOnExit>
+        <Box
+          sx={{
+            px: 3,
+            pb: 1.5,
+            pt: 0,
+            bgcolor: "action.hover",
+            borderTop: "1px solid",
+            borderColor: "divider",
+          }}
+        >
+          <Stack spacing={0.5} sx={{ pt: 1.25, pb: 1 }}>
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+              <Typography variant="caption" color="text.disabled" sx={{ minWidth: 90 }}>
+                Login
+              </Typography>
+              <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                {u.username}
+              </Typography>
+            </Box>
+            {u.display_name?.trim() && u.display_name !== u.username && (
+              <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                <Typography variant="caption" color="text.disabled" sx={{ minWidth: 90 }}>
+                  Display name
+                </Typography>
+                <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                  {u.display_name}
+                </Typography>
+              </Box>
+            )}
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+              <Typography variant="caption" color="text.disabled" sx={{ minWidth: 90 }}>
+                Email
+              </Typography>
+              <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                {u.email || "—"}
+              </Typography>
+            </Box>
+            <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+              <Typography variant="caption" color="text.disabled" sx={{ minWidth: 90 }}>
+                Source
+              </Typography>
+              <Chip
+                label={sourceLabel}
+                size="small"
+                color={sourceColor}
+                variant="outlined"
+                sx={{ height: 16, fontSize: "0.6rem" }}
+              />
+            </Box>
+          </Stack>
+          {/* Actions */}
+          <Box sx={{ display: "flex", gap: 0.5, pt: 0.5 }}>
+            <Tooltip title="Edit roles & team">
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(u);
+                }}
+                sx={{ color: "primary.main" }}
+              >
+                <EditOutlinedIcon sx={{ fontSize: 17 }} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Reset password">
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onResetPassword(u);
+                }}
+                sx={{ color: "warning.main" }}
+              >
+                <LockResetOutlinedIcon sx={{ fontSize: 17 }} />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Delete user">
+              <IconButton
+                size="small"
+                aria-label="Delete user"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteRequest(u);
+                }}
+                sx={{ color: "error.main" }}
+              >
+                <DeleteOutlineIcon sx={{ fontSize: 17 }} />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </Box>
+      </Collapse>
+    </Box>
+  );
+};
+
+const EditUserDialog = ({
+  editUser,
+  editRoles,
+  setEditRoles,
+  isRoot,
+  teams,
+  editTeamId,
+  setEditTeamId,
+  onClose,
+  onSave,
+}: {
+  editUser: UserRow | null;
+  editRoles: string[];
+  setEditRoles: Dispatch<SetStateAction<string[]>>;
+  isRoot: boolean;
+  teams: Team[];
+  editTeamId: number | "";
+  setEditTeamId: (id: number | "") => void;
+  onClose: () => void;
+  onSave: () => void;
+}) => (
+  <Dialog open={!!editUser} onClose={onClose} fullWidth maxWidth="sm">
+    <DialogTitle sx={{ fontWeight: 700 }}>
+      Edit User — {editUser?.display_name?.trim() || editUser?.username}
+    </DialogTitle>
+    <DialogContent sx={{ pt: "16px !important" }}>
+      <Stack spacing={2.5}>
+        <Box>
+          <Typography
+            variant="caption"
+            sx={{ color: "text.secondary", fontWeight: 500, mb: 1, display: "block" }}
+          >
+            Roles — select one or more
+          </Typography>
+          <RolePicker selected={editRoles} onChange={setEditRoles} />
+        </Box>
+        {isRoot && (
+          <FormControl fullWidth size="small">
+            <InputLabel>Team</InputLabel>
+            <Select
+              value={editTeamId}
+              label="Team"
+              onChange={(e: SelectChangeEvent<number | "">) =>
+                setEditTeamId(e.target.value as number | "")
+              }
+            >
+              <MenuItem value="">— No team —</MenuItem>
+              {teams.map((t) => (
+                <MenuItem key={t.id} value={t.id}>
+                  {t.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
+      </Stack>
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={onClose}>Cancel</Button>
+      <Button variant="contained" onClick={onSave} disabled={editRoles.length === 0}>
+        Save
+      </Button>
+    </DialogActions>
+  </Dialog>
+);
+
+const ResetPasswordDialog = ({
+  pwUser,
+  newPw,
+  setNewPw,
+  showNewPw,
+  setShowNewPw,
+  onClose,
+  onSave,
+}: {
+  pwUser: UserRow | null;
+  newPw: string;
+  setNewPw: (v: string) => void;
+  showNewPw: boolean;
+  setShowNewPw: (fn: (v: boolean) => boolean) => void;
+  onClose: () => void;
+  onSave: () => void;
+}) => (
+  <Dialog open={!!pwUser} onClose={onClose} fullWidth maxWidth="xs">
+    <DialogTitle sx={{ fontWeight: 700 }}>
+      Reset Password — {pwUser?.display_name?.trim() || pwUser?.username}
+    </DialogTitle>
+    <DialogContent sx={{ pt: "16px !important" }}>
+      <TextField
+        label="New password"
+        type={showNewPw ? "text" : "password"}
+        value={newPw}
+        onChange={(e) => setNewPw(e.target.value)}
+        fullWidth
+        autoFocus
+        InputProps={{
+          endAdornment: (
+            <InputAdornment position="end">
+              <IconButton
+                size="small"
+                aria-label="Toggle password visibility"
+                onClick={() => setShowNewPw((v) => !v)}
+              >
+                {showNewPw ? (
+                  <VisibilityOffIcon sx={{ fontSize: 18 }} />
+                ) : (
+                  <VisibilityIcon sx={{ fontSize: 18 }} />
+                )}
+              </IconButton>
+            </InputAdornment>
+          ),
+        }}
+      />
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={onClose}>Cancel</Button>
+      <Button variant="contained" onClick={onSave} disabled={!newPw.trim()}>
+        Update
+      </Button>
+    </DialogActions>
+  </Dialog>
+);
+
+const CreateUserDialog = ({
+  open,
+  onClose,
+  newUsername,
+  setNewUsername,
+  newPassword,
+  setNewPassword,
+  showCreatePw,
+  setShowCreatePw,
+  newEmail,
+  setNewEmail,
+  newRoles,
+  setNewRoles,
+  teams,
+  newTeamId,
+  setNewTeamId,
+  onCreate,
+}: {
+  open: boolean;
+  onClose: () => void;
+  newUsername: string;
+  setNewUsername: (v: string) => void;
+  newPassword: string;
+  setNewPassword: (v: string) => void;
+  showCreatePw: boolean;
+  setShowCreatePw: (fn: (v: boolean) => boolean) => void;
+  newEmail: string;
+  setNewEmail: (v: string) => void;
+  newRoles: string[];
+  setNewRoles: Dispatch<SetStateAction<string[]>>;
+  teams: Team[];
+  newTeamId: number | "";
+  setNewTeamId: (id: number | "") => void;
+  onCreate: () => void;
+}) => (
+  <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+    <DialogTitle sx={{ fontWeight: 700 }}>New User</DialogTitle>
+    <DialogContent sx={{ pt: "16px !important" }}>
+      <Stack spacing={2}>
+        <TextField
+          label="Username"
+          value={newUsername}
+          onChange={(e) => setNewUsername(e.target.value)}
+          fullWidth
+          autoFocus
+        />
+        <TextField
+          label="Password"
+          type={showCreatePw ? "text" : "password"}
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          fullWidth
+          InputProps={{
+            endAdornment: (
+              <InputAdornment position="end">
+                <IconButton
+                  size="small"
+                  aria-label="Toggle password visibility"
+                  onClick={() => setShowCreatePw((v) => !v)}
+                >
+                  {showCreatePw ? (
+                    <VisibilityOffIcon sx={{ fontSize: 18 }} />
+                  ) : (
+                    <VisibilityIcon sx={{ fontSize: 18 }} />
+                  )}
+                </IconButton>
+              </InputAdornment>
+            ),
+          }}
+        />
+        <TextField
+          label="Email (optional)"
+          value={newEmail}
+          onChange={(e) => setNewEmail(e.target.value)}
+          fullWidth
+        />
+        <Box>
+          <Typography
+            variant="caption"
+            sx={{ color: "text.secondary", fontWeight: 500, mb: 1, display: "block" }}
+          >
+            Roles — select one or more
+          </Typography>
+          <RolePicker selected={newRoles} onChange={setNewRoles} />
+        </Box>
+        <FormControl fullWidth size="small">
+          <InputLabel>Team (optional)</InputLabel>
+          <Select
+            value={newTeamId}
+            label="Team (optional)"
+            onChange={(e: SelectChangeEvent<number | "">) =>
+              setNewTeamId(e.target.value as number | "")
+            }
+          >
+            <MenuItem value="">— No team —</MenuItem>
+            {teams.map((t) => (
+              <MenuItem key={t.id} value={t.id}>
+                {t.name}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Stack>
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={onClose}>Cancel</Button>
+      <Button
+        variant="contained"
+        onClick={onCreate}
+        disabled={!(newUsername.trim() && newPassword) || newRoles.length === 0}
+      >
+        Create
+      </Button>
+    </DialogActions>
+  </Dialog>
+);
 
 export const Users = () => {
   const tick = useRefreshTick();
@@ -82,7 +527,9 @@ export const Users = () => {
   const [snack, setSnack] = useState<{ msg: string; sev: "success" | "error" } | null>(null);
 
   const load = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
+    if (!silent) {
+      setLoading(true);
+    }
     try {
       const [usersRes, teamsRes] = await Promise.all([api.listUsers(), api.getTeamsOverview()]);
       setUsers(usersRes.users);
@@ -94,14 +541,15 @@ export const Users = () => {
     }
   }, []);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: lastSync triggers re-fetch on sync events
   useEffect(() => {
-    void load();
+    void load(lastSync > 0);
   }, [load, lastSync]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
   useEffect(() => {
-    if (tick > 0) void load(true);
+    if (tick > 0) {
+      void load(true);
+    }
   }, [tick]);
 
   const openEdit = (u: UserRow) => {
@@ -111,7 +559,9 @@ export const Users = () => {
   };
 
   const handleSaveEdit = async () => {
-    if (!editUser) return;
+    if (!editUser) {
+      return;
+    }
     try {
       await api.updateUser(editUser.id, {
         roles: editRoles,
@@ -126,7 +576,9 @@ export const Users = () => {
   };
 
   const handleResetPassword = async () => {
-    if (!pwUser || !newPw.trim()) return;
+    if (!(pwUser && newPw.trim())) {
+      return;
+    }
     try {
       await api.changePassword(pwUser.id, newPw.trim());
       setSnack({ msg: "Password updated.", sev: "success" });
@@ -149,7 +601,9 @@ export const Users = () => {
   };
 
   const handleCreate = async () => {
-    if (!newUsername.trim() || !newPassword) return;
+    if (!(newUsername.trim() && newPassword)) {
+      return;
+    }
     try {
       await api.createUser({
         username: newUsername.trim(),
@@ -186,9 +640,7 @@ export const Users = () => {
       {/* Header */}
       <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
         <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>
-            Users
-          </Typography>
+          <Typography variant="subtitle1">Users</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
             {isRoot ? "All users across every team" : "Users in your team"}
           </Typography>
@@ -279,373 +731,68 @@ export const Users = () => {
               </Typography>
             </Box>
           ) : (
-            filtered.map((u, idx) => {
-              const isExpanded = expandedUserId === u.id;
-              const displayLabel = u.display_name?.trim() || u.username;
-              const sourceLabel =
-                u.source === "ldap" ? "LDAP" : u.source === "zabbix" ? "Zabbix" : "Local";
-              const sourceColor =
-                u.source === "ldap"
-                  ? "info"
-                  : u.source === "zabbix"
-                    ? "warning"
-                    : ("default" as const);
-              return (
-                <Box key={u.id}>
-                  {idx > 0 && <Divider />}
-                  {/* Clickable summary row */}
-                  <Box
-                    onClick={() => setExpandedUserId(isExpanded ? null : u.id)}
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 2,
-                      px: 2.5,
-                      py: 1.75,
-                      cursor: "pointer",
-                      "&:hover": { backgroundColor: "action.hover" },
-                      transition: "background 0.15s ease",
-                    }}
-                  >
-                    {/* Avatar */}
-                    <Avatar
-                      sx={{
-                        width: 36,
-                        height: 36,
-                        fontSize: "0.75rem",
-                        fontWeight: 700,
-                        background: `linear-gradient(135deg, ${avatarColor(u.username)}, ${avatarColor(u.username)}99)`,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {userInitials(u.display_name?.trim() || u.username)}
-                    </Avatar>
-
-                    {/* Identity */}
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
-                        {displayLabel}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary" noWrap>
-                        {u.email || "—"}
-                      </Typography>
-                    </Box>
-
-                    {/* Roles */}
-                    <Box
-                      sx={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: 0.5,
-                        flex: 1,
-                        justifyContent: "flex-start",
-                      }}
-                    >
-                      {(u.roles ?? []).map((r) => (
-                        <Chip
-                          key={r}
-                          label={roleLabel(r)}
-                          size="small"
-                          color={roleColor(r)}
-                          variant="outlined"
-                          sx={{ height: 20, fontSize: "0.68rem" }}
-                        />
-                      ))}
-                    </Box>
-
-                    {/* Team */}
-                    <Box sx={{ minWidth: 120, display: { xs: "none", md: "block" } }}>
-                      {u.team_name ? (
-                        <Chip
-                          label={u.team_name}
-                          size="small"
-                          variant="outlined"
-                          sx={{
-                            height: 20,
-                            fontSize: "0.68rem",
-                            borderColor: "rgba(148,163,184,0.3)",
-                          }}
-                        />
-                      ) : (
-                        <Typography variant="caption" color="text.disabled">
-                          No team
-                        </Typography>
-                      )}
-                    </Box>
-                  </Box>
-
-                  {/* Expanded detail */}
-                  <Collapse in={isExpanded} unmountOnExit>
-                    <Box
-                      sx={{
-                        px: 3,
-                        pb: 1.5,
-                        pt: 0,
-                        bgcolor: "action.hover",
-                        borderTop: "1px solid",
-                        borderColor: "divider",
-                      }}
-                    >
-                      <Stack spacing={0.5} sx={{ pt: 1.25, pb: 1 }}>
-                        <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-                          <Typography variant="caption" color="text.disabled" sx={{ minWidth: 90 }}>
-                            Login
-                          </Typography>
-                          <Typography variant="caption" sx={{ fontWeight: 500 }}>
-                            {u.username}
-                          </Typography>
-                        </Box>
-                        {u.display_name?.trim() && u.display_name !== u.username && (
-                          <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-                            <Typography
-                              variant="caption"
-                              color="text.disabled"
-                              sx={{ minWidth: 90 }}
-                            >
-                              Display name
-                            </Typography>
-                            <Typography variant="caption" sx={{ fontWeight: 500 }}>
-                              {u.display_name}
-                            </Typography>
-                          </Box>
-                        )}
-                        <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-                          <Typography variant="caption" color="text.disabled" sx={{ minWidth: 90 }}>
-                            Email
-                          </Typography>
-                          <Typography variant="caption" sx={{ fontWeight: 500 }}>
-                            {u.email || "—"}
-                          </Typography>
-                        </Box>
-                        <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-                          <Typography variant="caption" color="text.disabled" sx={{ minWidth: 90 }}>
-                            Source
-                          </Typography>
-                          <Chip
-                            label={sourceLabel}
-                            size="small"
-                            color={sourceColor}
-                            variant="outlined"
-                            sx={{ height: 16, fontSize: "0.6rem" }}
-                          />
-                        </Box>
-                      </Stack>
-                      {/* Actions */}
-                      <Box sx={{ display: "flex", gap: 0.5, pt: 0.5 }}>
-                        <Tooltip title="Edit roles & team">
-                          <IconButton
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openEdit(u);
-                            }}
-                            sx={{ color: "primary.main" }}
-                          >
-                            <EditOutlinedIcon sx={{ fontSize: 17 }} />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Reset password">
-                          <IconButton
-                            size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setPwUser(u);
-                              setNewPw("");
-                            }}
-                            sx={{ color: "warning.main" }}
-                          >
-                            <LockResetOutlinedIcon sx={{ fontSize: 17 }} />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Delete user">
-                          <IconButton
-                            size="small"
-                            aria-label="Delete user"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setConfirmDelete(u);
-                            }}
-                            sx={{ color: "error.main" }}
-                          >
-                            <DeleteOutlineIcon sx={{ fontSize: 17 }} />
-                          </IconButton>
-                        </Tooltip>
-                      </Box>
-                    </Box>
-                  </Collapse>
-                </Box>
-              );
-            })
+            filtered.map((u, idx) => (
+              <UserRowItem
+                key={u.id}
+                u={u}
+                idx={idx}
+                isExpanded={expandedUserId === u.id}
+                onToggle={() => setExpandedUserId(expandedUserId === u.id ? null : u.id)}
+                onEdit={openEdit}
+                onResetPassword={(user) => {
+                  setPwUser(user);
+                  setNewPw("");
+                }}
+                onDeleteRequest={setConfirmDelete}
+              />
+            ))
           )}
         </CardContent>
       </Card>
 
       {/* ── Edit dialog ── */}
-      <Dialog open={!!editUser} onClose={() => setEditUser(null)} fullWidth maxWidth="sm">
-        <DialogTitle sx={{ fontWeight: 700 }}>
-          Edit User — {editUser?.display_name?.trim() || editUser?.username}
-        </DialogTitle>
-        <DialogContent sx={{ pt: "16px !important" }}>
-          <Stack spacing={2.5}>
-            <Box>
-              <Typography
-                variant="caption"
-                sx={{ color: "text.secondary", fontWeight: 500, mb: 1, display: "block" }}
-              >
-                Roles — select one or more
-              </Typography>
-              <RolePicker selected={editRoles} onChange={setEditRoles} />
-            </Box>
-            {isRoot && (
-              <FormControl fullWidth size="small">
-                <InputLabel>Team</InputLabel>
-                <Select
-                  value={editTeamId}
-                  label="Team"
-                  onChange={(e: SelectChangeEvent<number | "">) =>
-                    setEditTeamId(e.target.value as number | "")
-                  }
-                >
-                  <MenuItem value="">— No team —</MenuItem>
-                  {teams.map((t) => (
-                    <MenuItem key={t.id} value={t.id}>
-                      {t.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            )}
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEditUser(null)}>Cancel</Button>
-          <Button variant="contained" onClick={handleSaveEdit} disabled={editRoles.length === 0}>
-            Save
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <EditUserDialog
+        editUser={editUser}
+        editRoles={editRoles}
+        setEditRoles={setEditRoles}
+        isRoot={isRoot}
+        teams={teams}
+        editTeamId={editTeamId}
+        setEditTeamId={setEditTeamId}
+        onClose={() => setEditUser(null)}
+        onSave={() => void handleSaveEdit()}
+      />
 
       {/* ── Reset password dialog ── */}
-      <Dialog open={!!pwUser} onClose={() => setPwUser(null)} fullWidth maxWidth="xs">
-        <DialogTitle sx={{ fontWeight: 700 }}>
-          Reset Password — {pwUser?.display_name?.trim() || pwUser?.username}
-        </DialogTitle>
-        <DialogContent sx={{ pt: "16px !important" }}>
-          <TextField
-            label="New password"
-            type={showNewPw ? "text" : "password"}
-            value={newPw}
-            onChange={(e) => setNewPw(e.target.value)}
-            fullWidth
-            autoFocus
-            InputProps={{
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton
-                    size="small"
-                    aria-label="Toggle password visibility"
-                    onClick={() => setShowNewPw((v) => !v)}
-                  >
-                    {showNewPw ? (
-                      <VisibilityOffIcon sx={{ fontSize: 18 }} />
-                    ) : (
-                      <VisibilityIcon sx={{ fontSize: 18 }} />
-                    )}
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPwUser(null)}>Cancel</Button>
-          <Button variant="contained" onClick={handleResetPassword} disabled={!newPw.trim()}>
-            Update
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ResetPasswordDialog
+        pwUser={pwUser}
+        newPw={newPw}
+        setNewPw={setNewPw}
+        showNewPw={showNewPw}
+        setShowNewPw={setShowNewPw}
+        onClose={() => setPwUser(null)}
+        onSave={() => void handleResetPassword()}
+      />
 
       {/* ── Create user dialog ── */}
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} fullWidth maxWidth="sm">
-        <DialogTitle sx={{ fontWeight: 700 }}>New User</DialogTitle>
-        <DialogContent sx={{ pt: "16px !important" }}>
-          <Stack spacing={2}>
-            <TextField
-              label="Username"
-              value={newUsername}
-              onChange={(e) => setNewUsername(e.target.value)}
-              fullWidth
-              autoFocus
-            />
-            <TextField
-              label="Password"
-              type={showCreatePw ? "text" : "password"}
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              fullWidth
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton
-                      size="small"
-                      aria-label="Toggle password visibility"
-                      onClick={() => setShowCreatePw((v) => !v)}
-                    >
-                      {showCreatePw ? (
-                        <VisibilityOffIcon sx={{ fontSize: 18 }} />
-                      ) : (
-                        <VisibilityIcon sx={{ fontSize: 18 }} />
-                      )}
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
-            />
-            <TextField
-              label="Email (optional)"
-              value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
-              fullWidth
-            />
-            <Box>
-              <Typography
-                variant="caption"
-                sx={{ color: "text.secondary", fontWeight: 500, mb: 1, display: "block" }}
-              >
-                Roles — select one or more
-              </Typography>
-              <RolePicker selected={newRoles} onChange={setNewRoles} />
-            </Box>
-            <FormControl fullWidth size="small">
-              <InputLabel>Team (optional)</InputLabel>
-              <Select
-                value={newTeamId}
-                label="Team (optional)"
-                onChange={(e: SelectChangeEvent<number | "">) =>
-                  setNewTeamId(e.target.value as number | "")
-                }
-              >
-                <MenuItem value="">— No team —</MenuItem>
-                {teams.map((t) => (
-                  <MenuItem key={t.id} value={t.id}>
-                    {t.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={handleCreate}
-            disabled={!newUsername.trim() || !newPassword || newRoles.length === 0}
-          >
-            Create
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <CreateUserDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        newUsername={newUsername}
+        setNewUsername={setNewUsername}
+        newPassword={newPassword}
+        setNewPassword={setNewPassword}
+        showCreatePw={showCreatePw}
+        setShowCreatePw={setShowCreatePw}
+        newEmail={newEmail}
+        setNewEmail={setNewEmail}
+        newRoles={newRoles}
+        setNewRoles={setNewRoles}
+        teams={teams}
+        newTeamId={newTeamId}
+        setNewTeamId={setNewTeamId}
+        onCreate={() => void handleCreate()}
+      />
 
       <ConfirmDelete
         open={!!confirmDelete}

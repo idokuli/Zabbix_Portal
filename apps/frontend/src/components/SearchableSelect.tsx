@@ -4,12 +4,21 @@ import { InputAdornment, ListSubheader, Select, type SelectProps, TextField } fr
 import React, { useState, type ReactNode } from "react";
 
 const extractText = (node: ReactNode): string => {
-  if (typeof node === "string") return node;
-  if (typeof node === "number") return String(node);
-  if (node == null) return "";
-  if (Array.isArray(node)) return node.map(extractText).join("");
-  if (React.isValidElement(node))
+  if (typeof node === "string") {
+    return node;
+  }
+  if (typeof node === "number") {
+    return String(node);
+  }
+  if (node == null) {
+    return "";
+  }
+  if (Array.isArray(node)) {
+    return node.map(extractText).join("");
+  }
+  if (React.isValidElement(node)) {
     return extractText((node.props as { children?: ReactNode }).children);
+  }
   return "";
 };
 
@@ -29,9 +38,15 @@ export const SearchableSelect = <T = string>({
   const selectedValue = rest.value;
 
   const filtered = React.Children.toArray(children).filter((child) => {
-    if (!React.isValidElement(child)) return true;
-    if (!search) return true;
-    if ((child.props as { value?: unknown }).value === selectedValue) return true;
+    if (!React.isValidElement(child)) {
+      return true;
+    }
+    if (!search) {
+      return true;
+    }
+    if ((child.props as { value?: unknown }).value === selectedValue) {
+      return true;
+    }
     const text = extractText((child.props as { children?: ReactNode }).children).toLowerCase();
     return text.includes(search.toLowerCase());
   });

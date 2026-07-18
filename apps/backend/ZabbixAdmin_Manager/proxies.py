@@ -1,7 +1,8 @@
 """Proxy CRUD, proxy groups (Zabbix 7.x), and the cached proxy list."""
 
 import logging
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
 
 if TYPE_CHECKING:
     from zabbix_utils import ZabbixAPI
@@ -101,7 +102,7 @@ class ProxiesMixin:
             self._invalidate("proxies")
             return result["proxyids"][0]
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def update_proxy(self, proxyid: str, **kwargs) -> bool:
         if not self.zapi:
@@ -113,7 +114,7 @@ class ProxiesMixin:
             self._invalidate("proxies")
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def delete_proxy(self, proxyid: str) -> bool:
         if not self.zapi:
@@ -123,7 +124,7 @@ class ProxiesMixin:
             self._invalidate("proxies")
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def list_proxy_groups(self) -> list[dict]:
         if not self.zapi:
@@ -168,7 +169,7 @@ class ProxiesMixin:
             )
             return result["proxygroupids"][0]
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def delete_proxy_group(self, proxygroupid: str) -> bool:
         if not self.zapi:
@@ -177,7 +178,7 @@ class ProxiesMixin:
             self.zapi.proxygroup.delete([proxygroupid])
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def list_proxies(self) -> list[dict]:
         return self._cached("proxies", 300.0, self._fetch_proxies)

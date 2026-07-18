@@ -32,16 +32,17 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
+import { SEVERITIES } from "../../app/severity";
 import { ConfirmDelete } from "./shared";
 
 const STATUS_COLOR: Record<number, string> = {
-  0: "#22C55E",
-  1: "#2196F3",
-  2: "#FFC107",
-  3: "#FF5722",
-  4: "#F44336",
-  5: "#B71C1C",
-  6: "#9E9E9E",
+  0: "#2EA043",
+  1: SEVERITIES[1].color,
+  2: SEVERITIES[2].color,
+  3: SEVERITIES[3].color,
+  4: SEVERITIES[4].color,
+  5: SEVERITIES[5].color,
+  6: SEVERITIES[0].color,
 };
 const STATUS_LABEL: Record<number, string> = {
   0: "OK",
@@ -87,7 +88,9 @@ export const ServicesTab = ({
 
   const load = useCallback(
     async (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       try {
         const r = await api.listServices();
         setItems(r.services);
@@ -105,7 +108,9 @@ export const ServicesTab = ({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
   useEffect(() => {
-    if (tick > 0) void load(true);
+    if (tick > 0) {
+      void load(true);
+    }
   }, [tick]);
 
   const onSave = async () => {
@@ -133,7 +138,9 @@ export const ServicesTab = ({
     }
   };
   const onDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget) {
+      return;
+    }
     try {
       await api.deleteService(deleteTarget.serviceid);
       showToast("Service deleted.", "success");
@@ -213,7 +220,7 @@ export const ServicesTab = ({
               </TableRow>
             ) : (
               items.map((s) => {
-                const sColor = STATUS_COLOR[s.status] ?? "#9E9E9E";
+                const sColor = STATUS_COLOR[s.status] ?? "#97AAB3";
                 return (
                   <TableRow key={s.serviceid} hover>
                     <TableCell>
@@ -222,17 +229,23 @@ export const ServicesTab = ({
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <Chip
-                        label={STATUS_LABEL[s.status] ?? "—"}
-                        size="small"
-                        sx={{
-                          height: 18,
-                          fontSize: "0.62rem",
-                          color: sColor,
-                          bgcolor: `${sColor}18`,
-                          border: `1px solid ${sColor}40`,
-                        }}
-                      />
+                      <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
+                        <Box
+                          sx={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: "50%",
+                            bgcolor: sColor,
+                            flexShrink: 0,
+                          }}
+                        />
+                        <Typography
+                          variant="caption"
+                          sx={{ fontWeight: 500, whiteSpace: "nowrap" }}
+                        >
+                          {STATUS_LABEL[s.status] ?? "—"}
+                        </Typography>
+                      </Box>
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2" color="text.secondary">

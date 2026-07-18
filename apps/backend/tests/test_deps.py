@@ -33,33 +33,29 @@ def test_zabbix_call_passes_through_on_success():
 def test_zabbix_call_converts_runtime_error_to_422():
     from fastapi import HTTPException
 
-    with pytest.raises(HTTPException) as exc_info:
-        with zabbix_call():
-            raise RuntimeError("Zabbix error: host not found")
+    with pytest.raises(HTTPException) as exc_info, zabbix_call():
+        raise RuntimeError("Zabbix error: host not found")
     assert exc_info.value.status_code == 422
 
 
 def test_zabbix_call_custom_status_code():
     from fastapi import HTTPException
 
-    with pytest.raises(HTTPException) as exc_info:
-        with zabbix_call(status=502):
-            raise RuntimeError("upstream error")
+    with pytest.raises(HTTPException) as exc_info, zabbix_call(status=502):
+        raise RuntimeError("upstream error")
     assert exc_info.value.status_code == 502
 
 
 def test_zabbix_call_does_not_catch_other_exceptions():
-    with pytest.raises(ValueError):
-        with zabbix_call():
-            raise ValueError("not a zabbix error")
+    with pytest.raises(ValueError), zabbix_call():
+        raise ValueError("not a zabbix error")
 
 
 def test_zabbix_call_detail_contains_error_message():
     from fastapi import HTTPException
 
-    with pytest.raises(HTTPException) as exc_info:
-        with zabbix_call():
-            raise RuntimeError("No permissions")
+    with pytest.raises(HTTPException) as exc_info, zabbix_call():
+        raise RuntimeError("No permissions")
     assert "No permissions" in str(exc_info.value.detail)
 
 

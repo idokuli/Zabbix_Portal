@@ -38,7 +38,9 @@ export const NotificationHistoryTab = () => {
   const [severityFilter, setSeverityFilter] = useState<number | "">("");
 
   const load = useCallback((silent = false) => {
-    if (!silent) setLoading(true);
+    if (!silent) {
+      setLoading(true);
+    }
     setFetchError("");
     api
       .getNotifHistory()

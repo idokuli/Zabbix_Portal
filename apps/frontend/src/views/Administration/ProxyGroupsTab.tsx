@@ -48,7 +48,9 @@ export const ProxyGroupsTab = ({
 
   const load = useCallback(
     async (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       try {
         const r = await api.listProxyGroups();
         setItems(r.proxy_groups);
@@ -66,7 +68,9 @@ export const ProxyGroupsTab = ({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
   useEffect(() => {
-    if (tick > 0) void load(true);
+    if (tick > 0) {
+      void load(true);
+    }
   }, [tick]);
 
   const onAdd = async () => {
@@ -85,7 +89,9 @@ export const ProxyGroupsTab = ({
   };
 
   const onDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget) {
+      return;
+    }
     try {
       await api.deleteProxyGroup(deleteTarget.proxygroupid);
       showToast("Proxy group deleted.", "success");

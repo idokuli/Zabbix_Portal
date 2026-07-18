@@ -38,7 +38,7 @@ class MacrosMixin:
             ]
         except Exception as e:
             logger.exception("list_global_macros failed")
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def create_global_macro(
         self, macro: str, value: str, description: str = "", macro_type: int = 0
@@ -53,11 +53,9 @@ class MacrosMixin:
             )
             return result["globalmacroids"][0]
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
-    def update_global_macro(
-        self, globalmacroid: str, value: str, description: str = ""
-    ) -> bool:
+    def update_global_macro(self, globalmacroid: str, value: str, description: str = "") -> bool:
         if not self.zapi:
             raise RuntimeError("Zabbix not connected")
         try:
@@ -66,7 +64,7 @@ class MacrosMixin:
             )
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def delete_global_macro(self, globalmacroid: str) -> bool:
         if not self.zapi:
@@ -75,4 +73,4 @@ class MacrosMixin:
             self.zapi.usermacro.deleteglobal([globalmacroid])
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e

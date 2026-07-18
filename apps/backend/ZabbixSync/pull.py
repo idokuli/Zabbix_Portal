@@ -2,7 +2,8 @@
 
 import logging
 import secrets
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
+from collections.abc import Callable
 
 from ZabbixSync.constants import (
     DEFAULT_GROUP,
@@ -79,8 +80,8 @@ class SyncPullMixin:
                 output=["userid", self._ufield, type_field],
                 selectUsrgrps=["usrgrpid", "name"],
             )
-        except Exception as exc:
-            logger.error("ZabbixSync.pull_users: failed to list Zabbix users: %r", exc)
+        except Exception:
+            logger.exception("ZabbixSync.pull_users: failed to list Zabbix users")
             return
 
         portal_teams = {t["name"]: t["id"] for t in um.list_teams()}
@@ -129,41 +130,13 @@ class SyncPullMixin:
                 team_id,
             )
 
-    def full_sync(self) -> None:
-        """Periodic bidirectional sync covering users, groups, and host assignments.
-
-        Runs in the background thread every ZABBIX_SYNC_INTERVAL seconds.
-
-        What it does:
-          Users   — import new Zabbix users not yet in portal;
-                    remove portal users deleted from Zabbix (root users protected).
-          Groups  — import new Zabbix user groups as portal teams.
-          Hosts   — sync Zabbix host group memberships to portal host assignments.
-          Items / Triggers — read directly from Zabbix per request; no sync needed.
-        """
-        if not self.zapi:
-            return
+    def _sync_users_import(self, zabbix_users: list[dict]) -> None:
+        """Import new Zabbix users not yet in the portal, and update role/team on
+        existing Zabbix-sourced users when Zabbix's own group membership changed."""
         import User_Management as um
         from Auth import hash_password
 
-        type_field = "roleid" if self._zabbix_major >= 6 else "type"
         roleid_to_type = {v: k for k, v in self._roleids.items()}
-
-        # ── 1. Fetch current Zabbix state ─────────────────────────────────────
-        try:
-            zabbix_users = self.zapi.user.get(
-                output=["userid", self._ufield, type_field],
-                selectUsrgrps=["usrgrpid", "name"],
-            )
-        except Exception as exc:
-            logger.error("ZabbixSync.full_sync: failed to fetch users: %r", exc)
-            return
-
-        zabbix_usernames = {
-            u.get(self._ufield, "").strip().lower() for u in zabbix_users
-        }
-
-        # ── 2. Users: import new ones and update changed existing ones ───────
         try:
             portal_teams = {t["name"]: t["id"] for t in um.list_teams()}
             portal_users = {u["username"].lower(): u for u in um.list_users()}
@@ -200,10 +173,7 @@ class SyncPullMixin:
                     if existing.get("source") != "zabbix":
                         continue
                     current_roles = set(existing.get("roles") or [])
-                    if (
-                        current_roles != set(roles)
-                        or existing.get("team_id") != team_id
-                    ):
+                    if current_roles != set(roles) or existing.get("team_id") != team_id:
                         um.update_user_profile(existing["id"], roles, team_id)
                         logger.info(
                             "ZabbixSync: updated %r → roles=%s, team_id=%s.",
@@ -224,12 +194,16 @@ class SyncPullMixin:
                         "ZabbixSync: auto-imported new Zabbix user %r → portal.",
                         username,
                     )
-        except Exception as exc:
-            logger.error("ZabbixSync.full_sync: user import failed: %r", exc)
+        except Exception:
+            logger.exception("ZabbixSync.full_sync: user import failed")
 
-        # ── 3. Users: remove portal users deleted from Zabbix ─────────────────
-        # Only remove users that were originally imported from Zabbix (source='zabbix').
-        # Local and LDAP JIT-provisioned users are not managed by Zabbix and must not be deleted.
+    @staticmethod
+    def _sync_users_removed(zabbix_usernames: set[str]) -> None:
+        """Remove portal users deleted from Zabbix. Only removes users that were
+        originally imported from Zabbix (source='zabbix') — local and LDAP
+        JIT-provisioned users are not managed by Zabbix and must not be deleted."""
+        import User_Management as um
+
         try:
             for u in um.list_users():
                 if "root" in (u.get("roles") or []):
@@ -242,15 +216,19 @@ class SyncPullMixin:
                         "ZabbixSync: removed portal user %r — deleted from Zabbix.",
                         u["username"],
                     )
-        except Exception as exc:
-            logger.error("ZabbixSync.full_sync: user deletion sync failed: %r", exc)
+        except Exception:
+            logger.exception("ZabbixSync.full_sync: user deletion sync failed")
 
-        # ── 4. Groups: import new Zabbix user groups as portal teams; remove deleted ──
+    def _sync_groups(self) -> None:
+        """Import new Zabbix user groups as portal teams; remove portal teams
+        whose Zabbix user group was deleted."""
+        if not self.zapi:
+            return
+        import User_Management as um
+
         try:
             zabbix_groups = self.zapi.usergroup.get(output=["usrgrpid", "name"])
-            zabbix_group_names = {
-                zg["name"].strip() for zg in zabbix_groups if zg.get("name")
-            }
+            zabbix_group_names = {zg["name"].strip() for zg in zabbix_groups if zg.get("name")}
             portal_team_list = um.list_teams()
             portal_team_names = {t["name"] for t in portal_team_list}
 
@@ -261,9 +239,7 @@ class SyncPullMixin:
                     continue
                 if name not in portal_team_names:
                     um.create_team(name)
-                    logger.info(
-                        "ZabbixSync: imported new Zabbix group %r as portal team.", name
-                    )
+                    logger.info("ZabbixSync: imported new Zabbix group %r as portal team.", name)
 
             # Remove portal teams whose Zabbix user group was deleted
             for team in portal_team_list:
@@ -276,10 +252,16 @@ class SyncPullMixin:
                         "ZabbixSync: removed portal team %r — Zabbix group deleted.",
                         name,
                     )
-        except Exception as exc:
-            logger.error("ZabbixSync.full_sync: group sync failed: %r", exc)
+        except Exception:
+            logger.exception("ZabbixSync.full_sync: group sync failed")
 
-        # ── 5. Hosts: sync Zabbix host group membership → portal assignments ──
+    def _sync_host_assignments(self) -> None:
+        """Sync Zabbix host group membership (and "team" tags) → portal host
+        assignments, and remove portal assignments no longer present in Zabbix."""
+        if not self.zapi:
+            return
+        import User_Management as um
+
         try:
             portal_team_map = {t["name"]: t["id"] for t in um.list_teams()}
             zabbix_hosts = self.zapi.host.get(
@@ -323,11 +305,49 @@ class SyncPullMixin:
                             hostname,
                             team_name,
                         )
-        except Exception as exc:
-            logger.error("ZabbixSync.full_sync: host assignment sync failed: %r", exc)
+        except Exception:
+            logger.exception("ZabbixSync.full_sync: host assignment sync failed")
+
+    def full_sync(self) -> None:
+        """Periodic bidirectional sync covering users, groups, and host assignments.
+
+        Runs in the background thread every ZABBIX_SYNC_INTERVAL seconds.
+
+        What it does:
+          Users   — import new Zabbix users not yet in portal;
+                    remove portal users deleted from Zabbix (root users protected).
+          Groups  — import new Zabbix user groups as portal teams.
+          Hosts   — sync Zabbix host group memberships to portal host assignments.
+          Items / Triggers — read directly from Zabbix per request; no sync needed.
+        """
+        if not self.zapi:
+            return
+
+        type_field = "roleid" if self._zabbix_major >= 6 else "type"
+
+        # ── 1. Fetch current Zabbix state ─────────────────────────────────────
+        try:
+            zabbix_users = self.zapi.user.get(
+                output=["userid", self._ufield, type_field],
+                selectUsrgrps=["usrgrpid", "name"],
+            )
+        except Exception:
+            logger.exception("ZabbixSync.full_sync: failed to fetch users")
+            return
+
+        zabbix_usernames = {u.get(self._ufield, "").strip().lower() for u in zabbix_users}
+
+        # ── 2. Users: import new ones and update changed existing ones ───────
+        self._sync_users_import(zabbix_users)
+        # ── 3. Users: remove portal users deleted from Zabbix ─────────────────
+        self._sync_users_removed(zabbix_usernames)
+        # ── 4. Groups: import new Zabbix user groups as portal teams; remove deleted ──
+        self._sync_groups()
+        # ── 5. Hosts: sync Zabbix host group membership → portal assignments ──
+        self._sync_host_assignments()
 
         if self._on_sync:
             try:
                 self._on_sync()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("ZabbixSync: on_sync callback failed: %s", exc)

@@ -43,7 +43,9 @@ export const AuditLogTab = () => {
 
   const load = useCallback(
     (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       api
         .getAuditLog({ limit: 200, hours })
         .then((r) => setData(r.entries))

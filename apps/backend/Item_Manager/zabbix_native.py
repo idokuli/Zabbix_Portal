@@ -36,9 +36,7 @@ class ZabbixNativeItemsMixin:
         if not self.zapi:
             return None, "Zabbix API not connected."
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found."
             host_id = host_data[0]["hostid"]
@@ -70,7 +68,7 @@ class ZabbixNativeItemsMixin:
             )
             return item_id, None
         except Exception as e:
-            logger.error("add_internal_item(%r) failed: %r", hostname, e)
+            logger.exception("add_internal_item(%r) failed", hostname)
             return None, zabbix_err(e)
 
     def add_trapper_item(
@@ -90,9 +88,7 @@ class ZabbixNativeItemsMixin:
         if not self.zapi:
             return None, "Zabbix API not connected."
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found."
             host_id = host_data[0]["hostid"]
@@ -122,7 +118,7 @@ class ZabbixNativeItemsMixin:
             )
             return item_id, None
         except Exception as e:
-            logger.error("add_trapper_item(%r) failed: %r", hostname, e)
+            logger.exception("add_trapper_item(%r) failed", hostname)
             return None, zabbix_err(e)
 
     def add_external_item(
@@ -143,9 +139,7 @@ class ZabbixNativeItemsMixin:
         if not self.zapi:
             return None, "Zabbix API not connected."
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found."
             host_id = host_data[0]["hostid"]
@@ -182,7 +176,7 @@ class ZabbixNativeItemsMixin:
             )
             return item_id, None
         except Exception as e:
-            logger.error("add_external_item(%r) failed: %r", hostname, e)
+            logger.exception("add_external_item(%r) failed", hostname)
             return None, zabbix_err(e)
 
     def add_calculated_item(
@@ -206,9 +200,7 @@ class ZabbixNativeItemsMixin:
         if not formula.strip():
             return None, "Formula is required."
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found."
             host_id = host_data[0]["hostid"]
@@ -241,7 +233,7 @@ class ZabbixNativeItemsMixin:
             )
             return item_id, None
         except Exception as e:
-            logger.error("add_calculated_item(%r) failed: %r", hostname, e)
+            logger.exception("add_calculated_item(%r) failed", hostname)
             return None, zabbix_err(e)
 
     def add_dependent_item(
@@ -263,9 +255,7 @@ class ZabbixNativeItemsMixin:
         if not master_itemid:
             return None, "master_itemid is required."
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found."
             host_id = host_data[0]["hostid"]
@@ -295,7 +285,7 @@ class ZabbixNativeItemsMixin:
             )
             return item_id, None
         except Exception as e:
-            logger.error("add_dependent_item(%r) failed: %r", hostname, e)
+            logger.exception("add_dependent_item(%r) failed", hostname)
             return None, zabbix_err(e)
 
     def add_zabbix_script_item(
@@ -321,9 +311,7 @@ class ZabbixNativeItemsMixin:
         if not params.strip():
             return None, "Script code is required."
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found."
             host_id = host_data[0]["hostid"]
@@ -364,7 +352,7 @@ class ZabbixNativeItemsMixin:
             )
             return item_id, None
         except Exception as e:
-            logger.error("add_zabbix_script_item(%r) failed: %r", hostname, e)
+            logger.exception("add_zabbix_script_item(%r) failed", hostname)
             return None, zabbix_err(e)
 
     def add_browser_item(
@@ -390,9 +378,7 @@ class ZabbixNativeItemsMixin:
         if not params.strip():
             return None, "Browser script code is required."
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found."
             host_id = host_data[0]["hostid"]
@@ -433,5 +419,5 @@ class ZabbixNativeItemsMixin:
             )
             return item_id, None
         except Exception as e:
-            logger.error("add_browser_item(%r) failed: %r", hostname, e)
+            logger.exception("add_browser_item(%r) failed", hostname)
             return None, zabbix_err(e)

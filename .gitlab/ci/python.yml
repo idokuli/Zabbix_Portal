@@ -29,7 +29,7 @@ backend:lint:
       echo "[$(date '+%H:%M:%S')] Lint passed."
   rules:
     - if: $CI_COMMIT_TAG
-
+    - if: $FORCE_BUILD == "1"  # allow manual force-build from any branch
 # ── Type-check (mypy) ─────────────────────────────────────────────────────────
 backend:typecheck:
   extends: .backend_base
@@ -47,6 +47,7 @@ backend:typecheck:
       echo "[$(date '+%H:%M:%S')] Type check passed."
   rules:
     - if: $CI_COMMIT_TAG
+    - if: $FORCE_BUILD == "1"  # allow manual force-build from any branch
 
 # ── Build & push Docker image ─────────────────────────────────────────────────
 backend:docker:build:
@@ -89,4 +90,4 @@ backend:docker:build:
     expire_in: 1 week
   rules:
     - if: $CI_COMMIT_TAG =~ /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)/
-    - if: $FORCE_APPS  # allow manual force-build from any branch
+    - if: $FORCE_BUILD == "1"  # allow manual force-build from any branch

@@ -21,9 +21,9 @@ def create_team(name: str, description: str = "") -> dict | None:
             row = dict(cur.fetchone())
         conn.commit()
         return row
-    except Exception as exc:
+    except Exception:
         conn.rollback()
-        logger.error("create_team failed: %r", exc)
+        logger.exception("create_team failed")
         return None
     finally:
         conn.close()
@@ -35,8 +35,8 @@ def list_teams() -> list[dict]:
         with conn.cursor() as cur:
             cur.execute("SELECT id, name, description FROM teams ORDER BY name")
             return [dict(r) for r in cur.fetchall()]
-    except Exception as exc:
-        logger.error("list_teams failed: %r", exc)
+    except Exception:
+        logger.exception("list_teams failed")
         return []
     finally:
         conn.close()
@@ -50,9 +50,9 @@ def delete_team(team_id: int) -> bool:
             deleted = cur.rowcount > 0
         conn.commit()
         return deleted
-    except Exception as exc:
+    except Exception:
         conn.rollback()
-        logger.error("delete_team failed: %r", exc)
+        logger.exception("delete_team failed")
         return False
     finally:
         conn.close()
@@ -90,9 +90,9 @@ def create_user(
                 )
         conn.commit()
         return row
-    except Exception as exc:
+    except Exception:
         conn.rollback()
-        logger.error("create_user failed: %r", exc)
+        logger.exception("create_user failed")
         return None
     finally:
         conn.close()
@@ -108,8 +108,8 @@ def get_user_by_username(username: str) -> dict | None:
             )
             row = cur.fetchone()
             return dict(row) if row else None
-    except Exception as exc:
-        logger.error("get_user_by_username failed: %r", exc)
+    except Exception:
+        logger.exception("get_user_by_username failed")
         return None
     finally:
         conn.close()
@@ -125,8 +125,8 @@ def get_user_by_id(user_id: int) -> dict | None:
             )
             row = cur.fetchone()
             return dict(row) if row else None
-    except Exception as exc:
-        logger.error("get_user_by_id failed: %r", exc)
+    except Exception:
+        logger.exception("get_user_by_id failed")
         return None
     finally:
         conn.close()
@@ -140,9 +140,9 @@ def delete_user(user_id: int) -> bool:
             deleted = cur.rowcount > 0
         conn.commit()
         return deleted
-    except Exception as exc:
+    except Exception:
         conn.rollback()
-        logger.error("delete_user failed: %r", exc)
+        logger.exception("delete_user failed")
         return False
     finally:
         conn.close()
@@ -166,9 +166,9 @@ def assign_host(team_id: int, hostname: str) -> bool:
             )
         conn.commit()
         return True
-    except Exception as exc:
+    except Exception:
         conn.rollback()
-        logger.error("assign_host failed: %r", exc)
+        logger.exception("assign_host failed")
         return False
     finally:
         conn.close()
@@ -187,9 +187,9 @@ def unassign_host(team_id: int, hostname: str) -> bool:
             deleted = cur.rowcount > 0
         conn.commit()
         return deleted
-    except Exception as exc:
+    except Exception:
         conn.rollback()
-        logger.error("unassign_host failed: %r", exc)
+        logger.exception("unassign_host failed")
         return False
     finally:
         conn.close()
@@ -204,9 +204,9 @@ def unassign_host_all(hostname: str) -> bool:
             deleted = cur.rowcount > 0
         conn.commit()
         return deleted
-    except Exception as exc:
+    except Exception:
         conn.rollback()
-        logger.error("unassign_host_all failed: %r", exc)
+        logger.exception("unassign_host_all failed")
         return False
     finally:
         conn.close()
@@ -224,9 +224,9 @@ def add_team_membership(user_id: int, team_id: int) -> bool:
             )
         conn.commit()
         return True
-    except Exception as exc:
+    except Exception:
         conn.rollback()
-        logger.error("add_team_membership failed: %r", exc)
+        logger.exception("add_team_membership failed")
         return False
     finally:
         conn.close()
@@ -244,9 +244,9 @@ def remove_team_membership(user_id: int, team_id: int) -> bool:
             deleted = cur.rowcount > 0
         conn.commit()
         return deleted
-    except Exception as exc:
+    except Exception:
         conn.rollback()
-        logger.error("remove_team_membership failed: %r", exc)
+        logger.exception("remove_team_membership failed")
         return False
     finally:
         conn.close()
@@ -266,8 +266,8 @@ def get_host_teams(hostname: str) -> list[dict]:
                 (hostname,),
             )
             return [dict(r) for r in cur.fetchall()]
-    except Exception as exc:
-        logger.error("get_host_teams failed: %r", exc)
+    except Exception:
+        logger.exception("get_host_teams failed")
         return []
     finally:
         conn.close()
@@ -342,8 +342,8 @@ def get_overview(team_id: int | None = None) -> list[dict]:
                     """
                 )
             return [dict(r) for r in cur.fetchall()]
-    except Exception as exc:
-        logger.error("get_overview failed: %r", exc)
+    except Exception:
+        logger.exception("get_overview failed")
         return []
     finally:
         conn.close()
@@ -360,9 +360,9 @@ def update_password(user_id: int, password_hash: str) -> bool:
             updated = cur.rowcount > 0
         conn.commit()
         return updated
-    except Exception as exc:
+    except Exception:
         conn.rollback()
-        logger.error("update_password failed: %r", exc)
+        logger.exception("update_password failed")
         return False
     finally:
         conn.close()
@@ -389,8 +389,8 @@ def list_users(team_id: int | None = None) -> list[dict]:
                        ORDER BY u.username"""
                 )
             return [dict(r) for r in cur.fetchall()]
-    except Exception as exc:
-        logger.error("list_users failed: %r", exc)
+    except Exception:
+        logger.exception("list_users failed")
         return []
     finally:
         conn.close()
@@ -416,9 +416,9 @@ def update_user_profile(user_id: int, roles: list[str], team_id: int | None) -> 
                 )
         conn.commit()
         return updated
-    except Exception as exc:
+    except Exception:
         conn.rollback()
-        logger.error("update_user_profile failed: %r", exc)
+        logger.exception("update_user_profile failed")
         return False
     finally:
         conn.close()
@@ -446,9 +446,9 @@ def set_team_roles(team_id: int, roles: list[str]) -> bool:
             updated = cur.rowcount > 0
         conn.commit()
         return updated
-    except Exception as exc:
+    except Exception:
         conn.rollback()
-        logger.error("set_team_roles failed: %r", exc)
+        logger.exception("set_team_roles failed")
         return False
     finally:
         conn.close()
@@ -482,12 +482,10 @@ def get_team_hostnames(team_id: int) -> set[str]:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT hostname FROM host_assignments WHERE team_id = %s", (team_id,)
-            )
+            cur.execute("SELECT hostname FROM host_assignments WHERE team_id = %s", (team_id,))
             return {row["hostname"] for row in cur.fetchall()}
-    except Exception as exc:
-        logger.error("get_team_hostnames failed: %r", exc)
+    except Exception:
+        logger.exception("get_team_hostnames failed")
         return set()
     finally:
         conn.close()
@@ -500,8 +498,8 @@ def get_team_name(team_id: int) -> str | None:
             cur.execute("SELECT name FROM teams WHERE id = %s", (team_id,))
             row = cur.fetchone()
             return row["name"] if row else None
-    except Exception as exc:
-        logger.error("get_team_name failed: %r", exc)
+    except Exception:
+        logger.exception("get_team_name failed")
         return None
     finally:
         conn.close()
@@ -551,9 +549,9 @@ def seed_root():
                 )
                 logger.info("Root user password synced from ADMIN_PASSWORD env var.")
         conn.commit()
-    except Exception as exc:
+    except Exception:
         conn.rollback()
-        logger.error("seed_root failed: %r", exc)
+        logger.exception("seed_root failed")
     finally:
         conn.close()
 
@@ -561,9 +559,7 @@ def seed_root():
 # ── Dashboard layouts ──────────────────────────────────────────────────────────
 
 
-def get_dashboard_layout(
-    owner_type: str, owner_id: int, page: str = "dashboard"
-) -> list:
+def get_dashboard_layout(owner_type: str, owner_id: int, page: str = "dashboard") -> list:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -573,8 +569,8 @@ def get_dashboard_layout(
             )
             row = cur.fetchone()
             return row["layout"] if row else []
-    except Exception as exc:
-        logger.error("get_dashboard_layout failed: %r", exc)
+    except Exception:
+        logger.exception("get_dashboard_layout failed")
         return []
     finally:
         conn.close()
@@ -595,9 +591,9 @@ def save_dashboard_layout(
             )
         conn.commit()
         return True
-    except Exception as exc:
+    except Exception:
         conn.rollback()
-        logger.error("save_dashboard_layout failed: %r", exc)
+        logger.exception("save_dashboard_layout failed")
         return False
     finally:
         conn.close()
@@ -618,21 +614,39 @@ def list_dashboard_pages(owner_type: str, owner_id: int, kind: str) -> list[dict
                 (owner_type, owner_id, kind),
             )
             rows = cur.fetchall()
-        pages.extend(
-            {"page": r["page_key"], "name": r["name"], "is_default": False}
-            for r in rows
-        )
+        pages.extend({"page": r["page_key"], "name": r["name"], "is_default": False} for r in rows)
         return pages
-    except Exception as exc:
-        logger.error("list_dashboard_pages failed: %r", exc)
+    except Exception:
+        logger.exception("list_dashboard_pages failed")
         return pages
     finally:
         conn.close()
 
 
-def create_dashboard_page(
-    owner_type: str, owner_id: int, kind: str, name: str
-) -> dict | None:
+def list_all_team_dashboard_pages(kind: str) -> list[dict]:
+    """Every team's custom dashboard pages for `kind`, in a single query
+    (LEFT JOIN teams x dashboard_pages) instead of one query per team."""
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT t.id AS team_id, t.name AS team_name,
+                          dp.page_key, dp.name AS page_name
+                   FROM teams t
+                   LEFT JOIN dashboard_pages dp
+                     ON dp.owner_type = 'team' AND dp.owner_id = t.id AND dp.kind = %s
+                   ORDER BY t.name, dp.created_at ASC""",
+                (kind,),
+            )
+            return [dict(r) for r in cur.fetchall()]
+    except Exception:
+        logger.exception("list_all_team_dashboard_pages failed")
+        return []
+    finally:
+        conn.close()
+
+
+def create_dashboard_page(owner_type: str, owner_id: int, kind: str, name: str) -> dict | None:
     page_key = f"{kind}-{uuid.uuid4().hex[:12]}"
     conn = get_conn()
     try:
@@ -644,9 +658,9 @@ def create_dashboard_page(
             )
         conn.commit()
         return {"page": page_key, "name": name, "is_default": False}
-    except Exception as exc:
+    except Exception:
         conn.rollback()
-        logger.error("create_dashboard_page failed: %r", exc)
+        logger.exception("create_dashboard_page failed")
         return None
     finally:
         conn.close()
@@ -666,17 +680,15 @@ def rename_dashboard_page(
             updated = cur.rowcount > 0
         conn.commit()
         return updated
-    except Exception as exc:
+    except Exception:
         conn.rollback()
-        logger.error("rename_dashboard_page failed: %r", exc)
+        logger.exception("rename_dashboard_page failed")
         return False
     finally:
         conn.close()
 
 
-def delete_dashboard_page(
-    owner_type: str, owner_id: int, kind: str, page_key: str
-) -> bool:
+def delete_dashboard_page(owner_type: str, owner_id: int, kind: str, page_key: str) -> bool:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -692,9 +704,9 @@ def delete_dashboard_page(
             )
         conn.commit()
         return deleted
-    except Exception as exc:
+    except Exception:
         conn.rollback()
-        logger.error("delete_dashboard_page failed: %r", exc)
+        logger.exception("delete_dashboard_page failed")
         return False
     finally:
         conn.close()
@@ -730,16 +742,14 @@ def save_notification_history(user_id: int, entries: list[dict]) -> None:
                     ),
                 )
         conn.commit()
-    except Exception as exc:
+    except Exception:
         conn.rollback()
-        logger.error("save_notification_history failed: %r", exc)
+        logger.exception("save_notification_history failed")
     finally:
         conn.close()
 
 
-def get_notification_history(
-    user_id: int, days: int = NOTIF_RETENTION_DAYS
-) -> list[dict]:
+def get_notification_history(user_id: int, days: int = NOTIF_RETENTION_DAYS) -> list[dict]:
     import time
 
     conn = get_conn()
@@ -755,8 +765,8 @@ def get_notification_history(
                 (user_id, cutoff),
             )
             return [dict(r) for r in cur.fetchall()]
-    except Exception as exc:
-        logger.error("get_notification_history failed: %r", exc)
+    except Exception:
+        logger.exception("get_notification_history failed")
         return []
     finally:
         conn.close()

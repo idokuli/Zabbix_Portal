@@ -179,7 +179,9 @@ export const RolesTab = ({
 
   const load = useCallback(
     async (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       try {
         const r = await api.listZabbixRoles();
         setItems(r.roles);
@@ -197,7 +199,9 @@ export const RolesTab = ({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
   useEffect(() => {
-    if (tick > 0) void load(true);
+    if (tick > 0) {
+      void load(true);
+    }
   }, [tick]);
 
   const onAdd = async () => {
@@ -224,7 +228,9 @@ export const RolesTab = ({
     }
   };
   const onEdit = async () => {
-    if (!editTarget) return;
+    if (!editTarget) {
+      return;
+    }
     setSaving(true);
     try {
       await api.updateRole(editTarget.roleid, { name: editName });
@@ -238,7 +244,9 @@ export const RolesTab = ({
     }
   };
   const onDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget) {
+      return;
+    }
     try {
       await api.deleteRole(deleteTarget.roleid);
       showToast("Role deleted.", "success");
@@ -254,7 +262,9 @@ export const RolesTab = ({
   const toggleSection = (items: Array<{ name: string }>, val: boolean) =>
     setForm((f) => {
       const updated = { ...f.ui_access };
-      for (const item of items) updated[item.name] = val;
+      for (const item of items) {
+        updated[item.name] = val;
+      }
       return { ...f, ui_access: updated };
     });
   const sectionAllChecked = (items: Array<{ name: string }>) =>

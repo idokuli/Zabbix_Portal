@@ -30,6 +30,184 @@ import {
   useCommonItemState,
 } from "./shared";
 
+type KeyValuePair = { _key: string; name: string; value: string };
+
+const KeyValueListEditor = ({
+  label,
+  namePlaceholder,
+  addLabel,
+  items,
+  onChange,
+}: {
+  label: string;
+  namePlaceholder: string;
+  addLabel: string;
+  items: KeyValuePair[];
+  onChange: (updater: (prev: KeyValuePair[]) => KeyValuePair[]) => void;
+}) => (
+  <Box>
+    <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+      {label}
+    </Typography>
+    <Stack spacing={1}>
+      {items.map((item, i) => (
+        <Stack key={item._key} direction="row" spacing={1} alignItems="center">
+          <TextField
+            size="small"
+            placeholder={namePlaceholder}
+            value={item.name}
+            sx={{ flex: 1 }}
+            onChange={(e) =>
+              onChange((p) => p.map((r, j) => (j === i ? { ...r, name: e.target.value } : r)))
+            }
+          />
+          <TextField
+            size="small"
+            placeholder="value"
+            value={item.value}
+            sx={{ flex: 2 }}
+            onChange={(e) =>
+              onChange((p) => p.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))
+            }
+          />
+          <ClearIcon
+            fontSize="small"
+            onClick={() => onChange((p) => p.filter((_, j) => j !== i))}
+            sx={{ cursor: "pointer" }}
+          />
+        </Stack>
+      ))}
+      <Button
+        size="small"
+        variant="text"
+        sx={{ alignSelf: "flex-start", fontSize: "0.75rem" }}
+        onClick={() => onChange((p) => [...p, { _key: generateId(), name: "", value: "" }])}
+      >
+        {addLabel}
+      </Button>
+    </Stack>
+  </Box>
+);
+
+const RequestBodyFields = ({
+  postBodyType,
+  onPostBodyTypeChange,
+  postBody,
+  onPostBodyChange,
+}: {
+  postBodyType: number;
+  onPostBodyTypeChange: (v: number) => void;
+  postBody: string;
+  onPostBodyChange: (v: string) => void;
+}) => (
+  <>
+    <TextField
+      select
+      size="small"
+      label="Request body type"
+      value={postBodyType}
+      onChange={(e) => onPostBodyTypeChange(Number(e.target.value))}
+    >
+      <MenuItem value={0}>Raw</MenuItem>
+      <MenuItem value={2}>JSON</MenuItem>
+      <MenuItem value={3}>XML</MenuItem>
+    </TextField>
+    <TextField
+      size="small"
+      label="Request body"
+      value={postBody}
+      onChange={(e) => onPostBodyChange(e.target.value)}
+      multiline
+      minRows={3}
+      placeholder={
+        postBodyType === 2
+          ? '{"key": "value"}'
+          : postBodyType === 3
+            ? "<root><key>value</key></root>"
+            : "raw body content"
+      }
+    />
+  </>
+);
+
+const AuthCredentialFields = ({
+  username,
+  onUsernameChange,
+  password,
+  onPasswordChange,
+}: {
+  username: string;
+  onUsernameChange: (v: string) => void;
+  password: string;
+  onPasswordChange: (v: string) => void;
+}) => (
+  <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+    <TextField
+      size="small"
+      label="Username"
+      value={username}
+      onChange={(e) => onUsernameChange(e.target.value)}
+      fullWidth
+      autoComplete="off"
+    />
+    <TextField
+      size="small"
+      label="Password"
+      type="password"
+      value={password}
+      onChange={(e) => onPasswordChange(e.target.value)}
+      fullWidth
+      autoComplete="new-password"
+    />
+  </Stack>
+);
+
+const RegexPreprocessingFields = ({
+  regexPattern,
+  onRegexPatternChange,
+  regexOutput,
+  onRegexOutputChange,
+  regexNoMatch,
+  onRegexNoMatchChange,
+}: {
+  regexPattern: string;
+  onRegexPatternChange: (v: string) => void;
+  regexOutput: string;
+  onRegexOutputChange: (v: string) => void;
+  regexNoMatch: string;
+  onRegexNoMatchChange: (v: string) => void;
+}) => (
+  <Stack spacing={2}>
+    <TextField
+      size="small"
+      label="Pattern *"
+      value={regexPattern}
+      onChange={(e) => onRegexPatternChange(e.target.value)}
+      placeholder='"status":"(ok|healthy)"'
+      helperText="PCRE regex — use a capture group ( ) to extract a value"
+    />
+    <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+      <TextField
+        size="small"
+        label="Output"
+        value={regexOutput}
+        onChange={(e) => onRegexOutputChange(e.target.value)}
+        fullWidth
+        placeholder="\1"
+        helperText="\1 = first capture group"
+      />
+      <TextField
+        size="small"
+        label="Value if no match"
+        value={regexNoMatch}
+        onChange={(e) => onRegexNoMatchChange(e.target.value)}
+        fullWidth
+        placeholder="0"
+      />
+    </Stack>
+  </Stack>
+);
+
 export const HttpItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: PanelProps) => {
   const [hostname, setHostname] = useState("");
   const [itemName, setItemName] = useState("");
@@ -68,83 +246,109 @@ export const HttpItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
   const [saving, setSaving] = useState(false);
   const common = useCommonItemState();
 
-  const isDisabled = saving || (bulkMode ? !bulkHosts.length : !hostname) || !itemName || !url;
+  const isDisabled = saving || (bulkMode ? bulkHosts.length === 0 : !hostname) || !itemName || !url;
+
+  const submitBulk = async () => {
+    const result = await api.bulkAddItems({
+      hostnames: bulkHosts.map((h) => h.host),
+      item_type: "http",
+      item_name: itemName,
+      url,
+      request_method: method,
+      status_codes: statusCodes,
+      timeout,
+      verify_peer: verifyTLS,
+      follow_redirects: followRedirects,
+      posts: postBody,
+      value_type: valueType,
+      apply_team_tag: common.applyTeamTag,
+    });
+    setBulkResults(result.results);
+    showToast(result.message, result.results.some((r) => r.error) ? "error" : "success");
+  };
+
+  const buildHttpAuthFields = () => ({
+    authtype: authType,
+    username: authType ? authUsername : undefined,
+    password: authType ? authPassword : undefined,
+  });
+
+  const buildHttpRegexFields = () => ({
+    regex_preprocessing: regexEnabled,
+    regex_pattern: regexEnabled ? regexPattern : undefined,
+    regex_output: regexEnabled ? regexOutput : undefined,
+    regex_no_match_value: regexEnabled ? regexNoMatch : undefined,
+  });
+
+  const buildHttpSslFields = () => ({
+    ssl_cert_file: sslCertFile || undefined,
+    ssl_key_file: sslKeyFile || undefined,
+    ssl_key_password: sslKeyFile && sslKeyPassword ? sslKeyPassword : undefined,
+  });
+
+  const buildHeadersAndQueryFields = () => ({
+    headers:
+      headers
+        .filter((h) => h.name)
+        .map((h) => `${h.name}: ${h.value}`)
+        .join("\n") || undefined,
+    query_fields: (() => {
+      const qf = queryFields.filter((q) => q.name).map(({ name, value }) => ({ name, value }));
+      return qf.length > 0 ? qf : undefined;
+    })(),
+  });
+
+  const submitSingle = async () => {
+    await api.addHttpItem({
+      hostname,
+      item_name: itemName,
+      url,
+      request_method: method,
+      status_codes: statusCodes,
+      timeout,
+      verify_peer: verifyTLS,
+      verify_host: verifyHost,
+      follow_redirects: followRedirects,
+      posts: postBody || undefined,
+      post_type: postBodyType,
+      retrieve_mode: retrieveMode,
+      value_type: valueType,
+      ...buildHeadersAndQueryFields(),
+      http_proxy: proxy || undefined,
+      ...buildHttpAuthFields(),
+      ...buildHttpSslFields(),
+      convert_to_json: convertToJson || undefined,
+      allow_traps: allowTraps || undefined,
+      status: enabled ? 0 : 1,
+      ...buildHttpRegexFields(),
+      delay: common.delay,
+      units: common.units || undefined,
+      history: common.history,
+      trends: common.trends,
+      description: common.description || undefined,
+      apply_team_tag: common.applyTeamTag,
+    });
+    showToast("Item added successfully.", "success");
+    setItemName("");
+    setUrl("");
+    setPostBody("");
+    setHeaders([]);
+    setQueryFields([]);
+    setProxy("");
+    setRetrieveMode(0);
+    setPostBodyType(0);
+    common.reset();
+    onSuccess();
+  };
 
   const onSubmit = async () => {
     setSaving(true);
     setBulkResults([]);
     try {
-      const headersStr = headers
-        .filter((h) => h.name)
-        .map((h) => `${h.name}: ${h.value}`)
-        .join("\n");
-      const qf = queryFields.filter((q) => q.name).map(({ name, value }) => ({ name, value }));
       if (bulkMode) {
-        const result = await api.bulkAddItems({
-          hostnames: bulkHosts.map((h) => h.host),
-          item_type: "http",
-          item_name: itemName,
-          url,
-          request_method: method,
-          status_codes: statusCodes,
-          timeout,
-          verify_peer: verifyTLS,
-          follow_redirects: followRedirects,
-          posts: postBody,
-          value_type: valueType,
-          apply_team_tag: common.applyTeamTag,
-        });
-        setBulkResults(result.results);
-        showToast(result.message, result.results.some((r) => r.error) ? "error" : "success");
+        await submitBulk();
       } else {
-        await api.addHttpItem({
-          hostname,
-          item_name: itemName,
-          url,
-          request_method: method,
-          status_codes: statusCodes,
-          timeout,
-          verify_peer: verifyTLS,
-          verify_host: verifyHost,
-          follow_redirects: followRedirects,
-          posts: postBody || undefined,
-          post_type: postBodyType,
-          retrieve_mode: retrieveMode,
-          value_type: valueType,
-          headers: headersStr || undefined,
-          query_fields: qf.length ? qf : undefined,
-          http_proxy: proxy || undefined,
-          authtype: authType,
-          username: authType ? authUsername : undefined,
-          password: authType ? authPassword : undefined,
-          ssl_cert_file: sslCertFile || undefined,
-          ssl_key_file: sslKeyFile || undefined,
-          ssl_key_password: sslKeyFile && sslKeyPassword ? sslKeyPassword : undefined,
-          convert_to_json: convertToJson || undefined,
-          allow_traps: allowTraps || undefined,
-          status: enabled ? 0 : 1,
-          regex_preprocessing: regexEnabled,
-          regex_pattern: regexEnabled ? regexPattern : undefined,
-          regex_output: regexEnabled ? regexOutput : undefined,
-          regex_no_match_value: regexEnabled ? regexNoMatch : undefined,
-          delay: common.delay,
-          units: common.units || undefined,
-          history: common.history,
-          trends: common.trends,
-          description: common.description || undefined,
-          apply_team_tag: common.applyTeamTag,
-        });
-        showToast("Item added successfully.", "success");
-        setItemName("");
-        setUrl("");
-        setPostBody("");
-        setHeaders([]);
-        setQueryFields([]);
-        setProxy("");
-        setRetrieveMode(0);
-        setPostBodyType(0);
-        common.reset();
-        onSuccess();
+        await submitSingle();
       }
     } catch (e) {
       showToast(e instanceof Error ? e.message : String(e), "error");
@@ -189,54 +393,13 @@ export const HttpItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
         placeholder="https://example.com/health"
       />
 
-      <Box>
-        <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
-          Query fields (appended to URL as ?key=value)
-        </Typography>
-        <Stack spacing={1}>
-          {queryFields.map((qf, i) => (
-            <Stack key={qf._key} direction="row" spacing={1} alignItems="center">
-              <TextField
-                size="small"
-                placeholder="name"
-                value={qf.name}
-                sx={{ flex: 1 }}
-                onChange={(e) =>
-                  setQueryFields((p) =>
-                    p.map((r, j) => (j === i ? { ...r, name: e.target.value } : r)),
-                  )
-                }
-              />
-              <TextField
-                size="small"
-                placeholder="value"
-                value={qf.value}
-                sx={{ flex: 2 }}
-                onChange={(e) =>
-                  setQueryFields((p) =>
-                    p.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)),
-                  )
-                }
-              />
-              <ClearIcon
-                fontSize="small"
-                onClick={() => setQueryFields((p) => p.filter((_, j) => j !== i))}
-                sx={{ cursor: "pointer" }}
-              />
-            </Stack>
-          ))}
-          <Button
-            size="small"
-            variant="text"
-            sx={{ alignSelf: "flex-start", fontSize: "0.75rem" }}
-            onClick={() =>
-              setQueryFields((p) => [...p, { _key: generateId(), name: "", value: "" }])
-            }
-          >
-            + Add query field
-          </Button>
-        </Stack>
-      </Box>
+      <KeyValueListEditor
+        label="Query fields (appended to URL as ?key=value)"
+        namePlaceholder="name"
+        addLabel="+ Add query field"
+        items={queryFields}
+        onChange={setQueryFields}
+      />
 
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
         <TextField
@@ -330,80 +493,21 @@ export const HttpItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
       </Stack>
 
       {(method === 1 || method === 2) && (
-        <>
-          <TextField
-            select
-            size="small"
-            label="Request body type"
-            value={postBodyType}
-            onChange={(e) => setPostBodyType(Number(e.target.value))}
-          >
-            <MenuItem value={0}>Raw</MenuItem>
-            <MenuItem value={2}>JSON</MenuItem>
-            <MenuItem value={3}>XML</MenuItem>
-          </TextField>
-          <TextField
-            size="small"
-            label="Request body"
-            value={postBody}
-            onChange={(e) => setPostBody(e.target.value)}
-            multiline
-            minRows={3}
-            placeholder={
-              postBodyType === 2
-                ? '{"key": "value"}'
-                : postBodyType === 3
-                  ? "<root><key>value</key></root>"
-                  : "raw body content"
-            }
-          />
-        </>
+        <RequestBodyFields
+          postBodyType={postBodyType}
+          onPostBodyTypeChange={setPostBodyType}
+          postBody={postBody}
+          onPostBodyChange={setPostBody}
+        />
       )}
 
-      <Box>
-        <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
-          Request headers
-        </Typography>
-        <Stack spacing={1}>
-          {headers.map((h, i) => (
-            <Stack key={h._key} direction="row" spacing={1} alignItems="center">
-              <TextField
-                size="small"
-                placeholder="Header name"
-                value={h.name}
-                sx={{ flex: 1 }}
-                onChange={(e) =>
-                  setHeaders((p) => p.map((r, j) => (j === i ? { ...r, name: e.target.value } : r)))
-                }
-              />
-              <TextField
-                size="small"
-                placeholder="Value"
-                value={h.value}
-                sx={{ flex: 2 }}
-                onChange={(e) =>
-                  setHeaders((p) =>
-                    p.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)),
-                  )
-                }
-              />
-              <ClearIcon
-                fontSize="small"
-                onClick={() => setHeaders((p) => p.filter((_, j) => j !== i))}
-                sx={{ cursor: "pointer" }}
-              />
-            </Stack>
-          ))}
-          <Button
-            size="small"
-            variant="text"
-            sx={{ alignSelf: "flex-start", fontSize: "0.75rem" }}
-            onClick={() => setHeaders((p) => [...p, { _key: generateId(), name: "", value: "" }])}
-          >
-            + Add header
-          </Button>
-        </Stack>
-      </Box>
+      <KeyValueListEditor
+        label="Request headers"
+        namePlaceholder="Header name"
+        addLabel="+ Add header"
+        items={headers}
+        onChange={setHeaders}
+      />
 
       <TextField
         size="small"
@@ -464,25 +568,12 @@ export const HttpItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
         <MenuItem value={2}>NTLM (Windows)</MenuItem>
       </TextField>
       {authType > 0 && (
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-          <TextField
-            size="small"
-            label="Username"
-            value={authUsername}
-            onChange={(e) => setAuthUsername(e.target.value)}
-            fullWidth
-            autoComplete="off"
-          />
-          <TextField
-            size="small"
-            label="Password"
-            type="password"
-            value={authPassword}
-            onChange={(e) => setAuthPassword(e.target.value)}
-            fullWidth
-            autoComplete="new-password"
-          />
-        </Stack>
+        <AuthCredentialFields
+          username={authUsername}
+          onUsernameChange={setAuthUsername}
+          password={authPassword}
+          onPasswordChange={setAuthPassword}
+        />
       )}
 
       <Divider />
@@ -495,35 +586,14 @@ export const HttpItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
         }
       />
       {regexEnabled && (
-        <Stack spacing={2}>
-          <TextField
-            size="small"
-            label="Pattern *"
-            value={regexPattern}
-            onChange={(e) => setRegexPattern(e.target.value)}
-            placeholder='"status":"(ok|healthy)"'
-            helperText="PCRE regex — use a capture group ( ) to extract a value"
-          />
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-            <TextField
-              size="small"
-              label="Output"
-              value={regexOutput}
-              onChange={(e) => setRegexOutput(e.target.value)}
-              fullWidth
-              placeholder="\1"
-              helperText="\1 = first capture group"
-            />
-            <TextField
-              size="small"
-              label="Value if no match"
-              value={regexNoMatch}
-              onChange={(e) => setRegexNoMatch(e.target.value)}
-              fullWidth
-              placeholder="0"
-            />
-          </Stack>
-        </Stack>
+        <RegexPreprocessingFields
+          regexPattern={regexPattern}
+          onRegexPatternChange={setRegexPattern}
+          regexOutput={regexOutput}
+          onRegexOutputChange={setRegexOutput}
+          regexNoMatch={regexNoMatch}
+          onRegexNoMatchChange={setRegexNoMatch}
+        />
       )}
 
       <Divider />

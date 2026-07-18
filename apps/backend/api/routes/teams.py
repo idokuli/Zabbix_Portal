@@ -18,9 +18,7 @@ router = APIRouter(tags=["Teams"])
 def teams_overview(current_user: dict = Depends(get_current_user)):
     # root and auditor see all teams; everyone else sees only their own
     roles = current_user.get("roles", [])
-    team_filter = (
-        None if ("root" in roles or "auditor" in roles) else live_team_id(current_user)
-    )
+    team_filter = None if ("root" in roles or "auditor" in roles) else live_team_id(current_user)
     return {"teams": um.get_overview(team_id=team_filter)}
 
 
@@ -56,16 +54,9 @@ def delete_team(team_id: int, current_user: dict = Depends(require_root)):
     summary="Assign host to team",
     status_code=201,
 )
-def assign_host(
-    team_id: int, data: HostAssignRequest, current_user: dict = Depends(require_admin)
-):
-    if (
-        "root" not in current_user.get("roles", [])
-        and live_team_id(current_user) != team_id
-    ):
-        raise HTTPException(
-            status_code=403, detail="You can only assign hosts to your own team."
-        )
+def assign_host(team_id: int, data: HostAssignRequest, current_user: dict = Depends(require_admin)):
+    if "root" not in current_user.get("roles", []) and live_team_id(current_user) != team_id:
+        raise HTTPException(status_code=403, detail="You can only assign hosts to your own team.")
     if not um.assign_host(team_id, data.hostname):
         raise HTTPException(status_code=400, detail="Failed to assign host.")
     team_name = um.get_team_name(team_id)
@@ -75,19 +66,10 @@ def assign_host(
     return {"message": "Host assigned."}
 
 
-@router.delete(
-    "/teams/{team_id}/hosts/{hostname}", tags=["Teams"], summary="Remove host from team"
-)
-def unassign_host(
-    team_id: int, hostname: str, current_user: dict = Depends(require_admin)
-):
-    if (
-        "root" not in current_user.get("roles", [])
-        and live_team_id(current_user) != team_id
-    ):
-        raise HTTPException(
-            status_code=403, detail="You can only remove hosts from your own team."
-        )
+@router.delete("/teams/{team_id}/hosts/{hostname}", tags=["Teams"], summary="Remove host from team")
+def unassign_host(team_id: int, hostname: str, current_user: dict = Depends(require_admin)):
+    if "root" not in current_user.get("roles", []) and live_team_id(current_user) != team_id:
+        raise HTTPException(status_code=403, detail="You can only remove hosts from your own team.")
     team_name = um.get_team_name(team_id)
     if not um.unassign_host(team_id, hostname):
         raise HTTPException(status_code=404, detail="Host assignment not found.")
@@ -106,16 +88,9 @@ def unassign_host(
     summary="Add existing user to a team",
     status_code=201,
 )
-def add_team_member(
-    team_id: int, data: MemberRequest, current_user: dict = Depends(require_admin)
-):
-    if (
-        "root" not in current_user.get("roles", [])
-        and live_team_id(current_user) != team_id
-    ):
-        raise HTTPException(
-            status_code=403, detail="You can only manage your own team's members."
-        )
+def add_team_member(team_id: int, data: MemberRequest, current_user: dict = Depends(require_admin)):
+    if "root" not in current_user.get("roles", []) and live_team_id(current_user) != team_id:
+        raise HTTPException(status_code=403, detail="You can only manage your own team's members.")
     if not um.add_team_membership(data.user_id, team_id):
         raise HTTPException(status_code=400, detail="Failed to add member.")
     user = um.get_user_by_id(data.user_id)
@@ -130,16 +105,9 @@ def add_team_member(
     tags=["Teams"],
     summary="Remove a user from a team (membership only)",
 )
-def remove_team_member(
-    team_id: int, user_id: int, current_user: dict = Depends(require_admin)
-):
-    if (
-        "root" not in current_user.get("roles", [])
-        and live_team_id(current_user) != team_id
-    ):
-        raise HTTPException(
-            status_code=403, detail="You can only manage your own team's members."
-        )
+def remove_team_member(team_id: int, user_id: int, current_user: dict = Depends(require_admin)):
+    if "root" not in current_user.get("roles", []) and live_team_id(current_user) != team_id:
+        raise HTTPException(status_code=403, detail="You can only manage your own team's members.")
     if not um.remove_team_membership(user_id, team_id):
         raise HTTPException(status_code=404, detail="Membership not found.")
     return {"message": "Member removed from team."}
@@ -157,9 +125,7 @@ def set_team_roles(
     from Auth import can_grant_roles
 
     if not can_grant_roles(current_user.get("roles", []), body.roles):
-        raise HTTPException(
-            status_code=403, detail="Cannot grant roles higher than your own."
-        )
+        raise HTTPException(status_code=403, detail="Cannot grant roles higher than your own.")
     if not um.set_team_roles(team_id, body.roles):
         raise HTTPException(status_code=404, detail="Team not found.")
     return {"ok": True}

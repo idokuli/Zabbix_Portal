@@ -47,9 +47,8 @@ def _bot():
 def test_top_triggers_success():
     mock, app = _bot()
     mock.get_top_triggers.return_value = [{"description": "High CPU"}]
-    with patch("api.routes.reports.report_bot", mock):
-        with TestClient(app) as c:
-            r = c.get("/reports/top-triggers")
+    with patch("api.routes.reports.report_bot", mock), TestClient(app) as c:
+        r = c.get("/reports/top-triggers")
     assert r.status_code == 200
     assert "triggers" in r.json()
 
@@ -57,18 +56,16 @@ def test_top_triggers_success():
 def test_top_triggers_zabbix_error():
     mock, app = _bot()
     mock.get_top_triggers.side_effect = RuntimeError("err")
-    with patch("api.routes.reports.report_bot", mock):
-        with TestClient(app) as c:
-            r = c.get("/reports/top-triggers")
+    with patch("api.routes.reports.report_bot", mock), TestClient(app) as c:
+        r = c.get("/reports/top-triggers")
     assert r.status_code == 502
 
 
 def test_audit_log_success():
     mock, app = _bot()
     mock.get_audit_log.return_value = []
-    with patch("api.routes.reports.report_bot", mock):
-        with TestClient(app) as c:
-            r = c.get("/reports/audit-log")
+    with patch("api.routes.reports.report_bot", mock), TestClient(app) as c:
+        r = c.get("/reports/audit-log")
     assert r.status_code == 200
     assert "entries" in r.json()
 
@@ -76,18 +73,16 @@ def test_audit_log_success():
 def test_audit_log_zabbix_error():
     mock, app = _bot()
     mock.get_audit_log.side_effect = RuntimeError("err")
-    with patch("api.routes.reports.report_bot", mock):
-        with TestClient(app) as c:
-            r = c.get("/reports/audit-log")
+    with patch("api.routes.reports.report_bot", mock), TestClient(app) as c:
+        r = c.get("/reports/audit-log")
     assert r.status_code == 502
 
 
 def test_action_log_success():
     mock, app = _bot()
     mock.get_action_log.return_value = []
-    with patch("api.routes.reports.report_bot", mock):
-        with TestClient(app) as c:
-            r = c.get("/reports/action-log")
+    with patch("api.routes.reports.report_bot", mock), TestClient(app) as c:
+        r = c.get("/reports/action-log")
     assert r.status_code == 200
     assert "entries" in r.json()
 
@@ -95,18 +90,16 @@ def test_action_log_success():
 def test_action_log_zabbix_error():
     mock, app = _bot()
     mock.get_action_log.side_effect = RuntimeError("err")
-    with patch("api.routes.reports.report_bot", mock):
-        with TestClient(app) as c:
-            r = c.get("/reports/action-log")
+    with patch("api.routes.reports.report_bot", mock), TestClient(app) as c:
+        r = c.get("/reports/action-log")
     assert r.status_code == 502
 
 
 def test_availability_success():
     mock, app = _bot()
     mock.get_availability.return_value = []
-    with patch("api.routes.reports.report_bot", mock):
-        with TestClient(app) as c:
-            r = c.get("/reports/availability")
+    with patch("api.routes.reports.report_bot", mock), TestClient(app) as c:
+        r = c.get("/reports/availability")
     assert r.status_code == 200
     assert "hosts" in r.json()
 
@@ -114,18 +107,16 @@ def test_availability_success():
 def test_availability_zabbix_error():
     mock, app = _bot()
     mock.get_availability.side_effect = RuntimeError("err")
-    with patch("api.routes.reports.report_bot", mock):
-        with TestClient(app) as c:
-            r = c.get("/reports/availability")
+    with patch("api.routes.reports.report_bot", mock), TestClient(app) as c:
+        r = c.get("/reports/availability")
     assert r.status_code == 502
 
 
 def test_notifications_success():
     mock, app = _bot()
     mock.get_notification_history.return_value = []
-    with patch("api.routes.reports.report_bot", mock):
-        with TestClient(app) as c:
-            r = c.get("/reports/notifications")
+    with patch("api.routes.reports.report_bot", mock), TestClient(app) as c:
+        r = c.get("/reports/notifications")
     assert r.status_code == 200
     assert "notifications" in r.json()
 
@@ -133,7 +124,6 @@ def test_notifications_success():
 def test_notifications_zabbix_error():
     mock, app = _bot()
     mock.get_notification_history.side_effect = RuntimeError("err")
-    with patch("api.routes.reports.report_bot", mock):
-        with TestClient(app) as c:
-            r = c.get("/reports/notifications")
+    with patch("api.routes.reports.report_bot", mock), TestClient(app) as c:
+        r = c.get("/reports/notifications")
     assert r.status_code == 502

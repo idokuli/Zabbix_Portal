@@ -63,7 +63,9 @@ export const ActionsPanel = ({
 
   const load = useCallback(
     async (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       try {
         const r = await api.listActions(eventsource);
         setItems(r.actions);
@@ -82,7 +84,9 @@ export const ActionsPanel = ({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
   useEffect(() => {
-    if (tick > 0) void load(true);
+    if (tick > 0) {
+      void load(true);
+    }
   }, [tick]);
 
   const onSave = async () => {
@@ -101,7 +105,9 @@ export const ActionsPanel = ({
   };
 
   const onDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget) {
+      return;
+    }
     try {
       await api.deleteAction(deleteTarget.actionid);
       showToast("Action deleted.", "success");

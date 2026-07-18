@@ -12,6 +12,142 @@ import {
   useCommonItemState,
 } from "./shared";
 
+const SnmpV3Fields = ({
+  v3SecName,
+  setV3SecName,
+  v3SecLevel,
+  setV3SecLevel,
+  v3AuthProto,
+  setV3AuthProto,
+  v3AuthPass,
+  setV3AuthPass,
+  v3PrivProto,
+  setV3PrivProto,
+  v3PrivPass,
+  setV3PrivPass,
+  v3Context,
+  setV3Context,
+}: {
+  v3SecName: string;
+  setV3SecName: (v: string) => void;
+  v3SecLevel: number;
+  setV3SecLevel: (v: number) => void;
+  v3AuthProto: number;
+  setV3AuthProto: (v: number) => void;
+  v3AuthPass: string;
+  setV3AuthPass: (v: string) => void;
+  v3PrivProto: number;
+  setV3PrivProto: (v: number) => void;
+  v3PrivPass: string;
+  setV3PrivPass: (v: string) => void;
+  v3Context: string;
+  setV3Context: (v: string) => void;
+}) => (
+  <>
+    <TextField
+      size="small"
+      label="Security name"
+      value={v3SecName}
+      onChange={(e) => setV3SecName(e.target.value)}
+    />
+    <TextField
+      select
+      size="small"
+      label="Security level"
+      value={v3SecLevel}
+      onChange={(e) => setV3SecLevel(Number(e.target.value))}
+    >
+      <MenuItem value={0}>noAuthNoPriv</MenuItem>
+      <MenuItem value={1}>authNoPriv</MenuItem>
+      <MenuItem value={2}>authPriv</MenuItem>
+    </TextField>
+    {v3SecLevel >= 1 && (
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+        <TextField
+          select
+          size="small"
+          label="Auth protocol"
+          value={v3AuthProto}
+          onChange={(e) => setV3AuthProto(Number(e.target.value))}
+          fullWidth
+        >
+          <MenuItem value={0}>MD5</MenuItem>
+          <MenuItem value={1}>SHA1</MenuItem>
+          <MenuItem value={2}>SHA224</MenuItem>
+          <MenuItem value={3}>SHA256</MenuItem>
+          <MenuItem value={4}>SHA384</MenuItem>
+          <MenuItem value={5}>SHA512</MenuItem>
+        </TextField>
+        <TextField
+          size="small"
+          label="Auth passphrase"
+          type="password"
+          value={v3AuthPass}
+          onChange={(e) => setV3AuthPass(e.target.value)}
+          fullWidth
+          autoComplete="new-password"
+        />
+      </Stack>
+    )}
+    {v3SecLevel === 2 && (
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+        <TextField
+          select
+          size="small"
+          label="Priv protocol"
+          value={v3PrivProto}
+          onChange={(e) => setV3PrivProto(Number(e.target.value))}
+          fullWidth
+        >
+          <MenuItem value={0}>DES</MenuItem>
+          <MenuItem value={1}>AES128</MenuItem>
+          <MenuItem value={2}>AES192</MenuItem>
+          <MenuItem value={3}>AES256</MenuItem>
+        </TextField>
+        <TextField
+          size="small"
+          label="Priv passphrase"
+          type="password"
+          value={v3PrivPass}
+          onChange={(e) => setV3PrivPass(e.target.value)}
+          fullWidth
+          autoComplete="new-password"
+        />
+      </Stack>
+    )}
+    <TextField
+      size="small"
+      label="Context name (optional)"
+      value={v3Context}
+      onChange={(e) => setV3Context(e.target.value)}
+    />
+  </>
+);
+
+const buildSnmpv3Fields = (
+  version: number,
+  v3SecLevel: number,
+  v3SecName: string,
+  v3AuthProto: number,
+  v3AuthPass: string,
+  v3PrivProto: number,
+  v3PrivPass: string,
+  v3Context: string,
+) => {
+  if (version !== 3) {
+    return {};
+  }
+  return {
+    snmpv3_securityname: v3SecName,
+    snmpv3_securitylevel: v3SecLevel,
+    snmpv3_authprotocol: v3SecLevel >= 1 ? v3AuthProto : undefined,
+    snmpv3_authpassphrase: v3SecLevel >= 1 ? v3AuthPass : undefined,
+    snmpv3_privprotocol: v3SecLevel === 2 ? v3PrivProto : undefined,
+    snmpv3_privpassphrase: v3SecLevel === 2 ? v3PrivPass : undefined,
+    snmpv3_contextname: v3Context,
+  };
+};
+
 export const SnmpPanel = ({ hosts, hostsLoading, showToast, onSuccess }: PanelProps) => {
   const [hostname, setHostname] = useState("");
   const [itemName, setItemName] = useState("");
@@ -41,13 +177,16 @@ export const SnmpPanel = ({ hosts, hostsLoading, showToast, onSuccess }: PanelPr
         snmp_version: version,
         value_type: valueType,
         snmp_community: version < 3 ? community : undefined,
-        snmpv3_securityname: version === 3 ? v3SecName : undefined,
-        snmpv3_securitylevel: version === 3 ? v3SecLevel : undefined,
-        snmpv3_authprotocol: version === 3 && v3SecLevel >= 1 ? v3AuthProto : undefined,
-        snmpv3_authpassphrase: version === 3 && v3SecLevel >= 1 ? v3AuthPass : undefined,
-        snmpv3_privprotocol: version === 3 && v3SecLevel === 2 ? v3PrivProto : undefined,
-        snmpv3_privpassphrase: version === 3 && v3SecLevel === 2 ? v3PrivPass : undefined,
-        snmpv3_contextname: version === 3 ? v3Context : undefined,
+        ...buildSnmpv3Fields(
+          version,
+          v3SecLevel,
+          v3SecName,
+          v3AuthProto,
+          v3AuthPass,
+          v3PrivProto,
+          v3PrivPass,
+          v3Context,
+        ),
         delay: common.delay,
         units: common.units || undefined,
         history: common.history,
@@ -133,85 +272,22 @@ export const SnmpPanel = ({ hosts, hostsLoading, showToast, onSuccess }: PanelPr
         />
       )}
       {version === 3 && (
-        <>
-          <TextField
-            size="small"
-            label="Security name"
-            value={v3SecName}
-            onChange={(e) => setV3SecName(e.target.value)}
-          />
-          <TextField
-            select
-            size="small"
-            label="Security level"
-            value={v3SecLevel}
-            onChange={(e) => setV3SecLevel(Number(e.target.value))}
-          >
-            <MenuItem value={0}>noAuthNoPriv</MenuItem>
-            <MenuItem value={1}>authNoPriv</MenuItem>
-            <MenuItem value={2}>authPriv</MenuItem>
-          </TextField>
-          {v3SecLevel >= 1 && (
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField
-                select
-                size="small"
-                label="Auth protocol"
-                value={v3AuthProto}
-                onChange={(e) => setV3AuthProto(Number(e.target.value))}
-                fullWidth
-              >
-                <MenuItem value={0}>MD5</MenuItem>
-                <MenuItem value={1}>SHA1</MenuItem>
-                <MenuItem value={2}>SHA224</MenuItem>
-                <MenuItem value={3}>SHA256</MenuItem>
-                <MenuItem value={4}>SHA384</MenuItem>
-                <MenuItem value={5}>SHA512</MenuItem>
-              </TextField>
-              <TextField
-                size="small"
-                label="Auth passphrase"
-                type="password"
-                value={v3AuthPass}
-                onChange={(e) => setV3AuthPass(e.target.value)}
-                fullWidth
-                autoComplete="new-password"
-              />
-            </Stack>
-          )}
-          {v3SecLevel === 2 && (
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField
-                select
-                size="small"
-                label="Priv protocol"
-                value={v3PrivProto}
-                onChange={(e) => setV3PrivProto(Number(e.target.value))}
-                fullWidth
-              >
-                <MenuItem value={0}>DES</MenuItem>
-                <MenuItem value={1}>AES128</MenuItem>
-                <MenuItem value={2}>AES192</MenuItem>
-                <MenuItem value={3}>AES256</MenuItem>
-              </TextField>
-              <TextField
-                size="small"
-                label="Priv passphrase"
-                type="password"
-                value={v3PrivPass}
-                onChange={(e) => setV3PrivPass(e.target.value)}
-                fullWidth
-                autoComplete="new-password"
-              />
-            </Stack>
-          )}
-          <TextField
-            size="small"
-            label="Context name (optional)"
-            value={v3Context}
-            onChange={(e) => setV3Context(e.target.value)}
-          />
-        </>
+        <SnmpV3Fields
+          v3SecName={v3SecName}
+          setV3SecName={setV3SecName}
+          v3SecLevel={v3SecLevel}
+          setV3SecLevel={setV3SecLevel}
+          v3AuthProto={v3AuthProto}
+          setV3AuthProto={setV3AuthProto}
+          v3AuthPass={v3AuthPass}
+          setV3AuthPass={setV3AuthPass}
+          v3PrivProto={v3PrivProto}
+          setV3PrivProto={setV3PrivProto}
+          v3PrivPass={v3PrivPass}
+          setV3PrivPass={setV3PrivPass}
+          v3Context={v3Context}
+          setV3Context={setV3Context}
+        />
       )}
       <Divider />
       <CommonFields

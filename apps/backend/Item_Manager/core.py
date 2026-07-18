@@ -1,7 +1,8 @@
 """Core item CRUD: generic agent items, listing, lookup, deletion, update."""
 
 import logging
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
 
 if TYPE_CHECKING:
     from zabbix_utils import ZabbixAPI
@@ -20,9 +21,7 @@ class CoreItemsMixin:
     def _pick_interface(self, interfaces: list[dict], iface_type: str) -> dict:
         """Prefer a host interface of the given Zabbix type (1=agent, 2=SNMP, 3=IPMI,
         4=JMX); fall back to the first interface if the host has none of that type."""
-        return next(
-            (i for i in interfaces if str(i.get("type")) == iface_type), interfaces[0]
-        )
+        return next((i for i in interfaces if str(i.get("type")) == iface_type), interfaces[0])
 
     def add_item(
         self,
@@ -48,9 +47,7 @@ class CoreItemsMixin:
             return None, "Zabbix API not connected."
 
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found in Zabbix."
 
@@ -99,7 +96,7 @@ class CoreItemsMixin:
 
         except Exception as e:
             msg = str(e)
-            logger.error("add_item(%r, %r) failed: %r", hostname, item_name, e)
+            logger.exception("add_item(%r, %r) failed", hostname, item_name)
             return None, msg
 
     def list_items(self, hostname: str, include_inherited: bool = False) -> list[dict]:
@@ -107,9 +104,7 @@ class CoreItemsMixin:
         if not self.zapi:
             return []
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return []
             kwargs: dict = dict(
@@ -119,10 +114,9 @@ class CoreItemsMixin:
             )
             if not include_inherited:
                 kwargs["inherited"] = False
-            items = self.zapi.item.get(**kwargs)
-            return items
-        except Exception as e:
-            logger.error("list_items(%r) failed: %r", hostname, e)
+            return self.zapi.item.get(**kwargs)
+        except Exception:
+            logger.exception("list_items(%r) failed", hostname)
             return []
 
     def get_item_hostname(self, itemid: str) -> str:
@@ -130,9 +124,7 @@ class CoreItemsMixin:
         if not self.zapi:
             return ""
         try:
-            items = self.zapi.item.get(
-                itemids=[itemid], output=["itemid"], selectHosts=["host"]
-            )
+            items = self.zapi.item.get(itemids=[itemid], output=["itemid"], selectHosts=["host"])
             if items and items[0].get("hosts"):
                 return items[0]["hosts"][0]["host"]
         except Exception as exc:
@@ -147,8 +139,8 @@ class CoreItemsMixin:
             self.zapi.item.delete([itemid])
             logger.info("Deleted item ID %s.", itemid)
             return True
-        except Exception as e:
-            logger.error("delete_item(%s) failed: %r", itemid, e)
+        except Exception:
+            logger.exception("delete_item(%s) failed", itemid)
             return False
 
     def update_item(
@@ -174,7 +166,7 @@ class CoreItemsMixin:
             self.zapi.item.update(**params)
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def list_all_items(
         self,
@@ -222,9 +214,7 @@ class CoreItemsMixin:
             sortorder="ASC",
         )
         if hostname:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return []
             kwargs["hostids"] = host_data[0]["hostid"]
@@ -253,9 +243,7 @@ class CoreItemsMixin:
                 }
             )
         # Custom items (templateid=0 = created directly, not from template) come first
-        result.sort(
-            key=lambda x: (0 if str(x["templateid"]) == "0" else 1, x["name"].lower())
-        )
+        result.sort(key=lambda x: (0 if str(x["templateid"]) == "0" else 1, x["name"].lower()))
         logger.info(
             "list_all_items: returned %d items (search=%r, host=%r).",
             len(result),
@@ -268,38 +256,33 @@ class CoreItemsMixin:
     # the only types this UI's Agent item panel creates (see add_item(), type=0).
     _AGENT_ITEM_TYPES = {"0", "7"}
 
-    def get_all_item_keys(self) -> list[dict]:
-        """Return Zabbix-agent-type item keys defined in Zabbix templates, grouped
-        by template name. Also includes delay, units, history, trends, description
-        so the UI can pre-fill the add-item form when the user selects a known
-        template key. Only used by the Agent item panel, so results are restricted
-        to agent-type template items (type 0/7) — SNMP/HTTP/trapper/etc. keys from
-        other item types aren't valid for the agent items this endpoint feeds.
+    def get_all_item_keys(self, hostname: str) -> list[dict]:
+        """Return Zabbix-agent-type item keys defined in templates linked to
+        `hostname`, grouped by template name. Also includes delay, units, history,
+        trends, description so the UI can pre-fill the add-item form when the user
+        selects a known template key. Only used by the Agent item panel, so results
+        are restricted to agent-type template items (type 0/7) — SNMP/HTTP/trapper/
+        etc. keys from other item types aren't valid for the agent items this
+        endpoint feeds. Scoped to the host's own templates (e.g. a Linux host only
+        offers keys from "Linux by Zabbix agent"-style templates it's linked to)
+        rather than every template in the whole Zabbix instance.
         """
         if not self.zapi:
             return []
         try:
-            templates = self.zapi.template.get(output=["templateid", "name"])
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output="extend")
+            if not host_data:
+                logger.debug("get_all_item_keys: no Zabbix host matching %r.", hostname)
+                return []
+            host_id = host_data[0]["hostid"]
+
+            templates = self.zapi.template.get(output="extend", hostids=[host_id])
             if not templates:
                 return []
             template_ids = [t["templateid"] for t in templates]
             template_name_map = {t["templateid"]: t["name"] for t in templates}
 
-            items = self.zapi.item.get(
-                output=[
-                    "name",
-                    "key_",
-                    "value_type",
-                    "hostid",
-                    "delay",
-                    "units",
-                    "history",
-                    "trends",
-                    "description",
-                    "type",
-                ],
-                hostids=template_ids,
-            )
+            items = self.zapi.item.get(output="extend", hostids=template_ids)
             seen_keys: set[str] = set()
             result = []
             for item in items:
@@ -326,8 +309,8 @@ class CoreItemsMixin:
             result.sort(key=lambda x: (x["group"], x["key_"]))
             logger.info("get_all_item_keys: returned %d unique keys.", len(result))
             return result
-        except Exception as e:
-            logger.error("get_all_item_keys failed: %r", e)
+        except Exception:
+            logger.exception("get_all_item_keys failed")
             return []
 
     def list_template_items(self, templateid: str) -> list[dict]:
@@ -357,8 +340,8 @@ class CoreItemsMixin:
                 }
                 for i in items
             ]
-        except Exception as e:
-            logger.error("list_template_items(%r) failed: %r", templateid, e)
+        except Exception:
+            logger.exception("list_template_items(%r) failed", templateid)
             return []
 
     def add_item_to_template(
@@ -394,10 +377,8 @@ class CoreItemsMixin:
                 kwargs["description"] = description
             result = self.zapi.item.create(**kwargs)
             item_id = result["itemids"][0]
-            logger.info(
-                "Added item %r to template ID %s (ID: %s).", name, templateid, item_id
-            )
+            logger.info("Added item %r to template ID %s (ID: %s).", name, templateid, item_id)
             return item_id, None
         except Exception as e:
-            logger.error("add_item_to_template(%r, %r) failed: %r", templateid, name, e)
+            logger.exception("add_item_to_template(%r, %r) failed", templateid, name)
             return None, str(e)

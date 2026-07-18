@@ -1,14 +1,20 @@
+import { SEVERITIES } from "../severity";
+
+const BEEPS: Record<number, { beeps: number; freq: number }> = {
+  5: { beeps: 3, freq: 880 },
+  4: { beeps: 2, freq: 740 },
+  3: { beeps: 2, freq: 587 },
+  2: { beeps: 1, freq: 440 },
+  1: { beeps: 1, freq: 330 },
+  0: { beeps: 1, freq: 330 },
+};
+
 export const SEV: Record<
   number,
   { label: string; color: string; bg: string; beeps: number; freq: number }
-> = {
-  5: { label: "Critical", color: "#B71C1C", bg: "rgba(183,28,28,0.15)", beeps: 3, freq: 880 },
-  4: { label: "High", color: "#F44336", bg: "rgba(244,67,54,0.13)", beeps: 2, freq: 740 },
-  3: { label: "Medium", color: "#FF5722", bg: "rgba(255,87,34,0.12)", beeps: 2, freq: 587 },
-  2: { label: "Low", color: "#FFC107", bg: "rgba(255,193,7,0.11)", beeps: 1, freq: 440 },
-  1: { label: "Info", color: "#2196F3", bg: "rgba(33,150,243,0.1)", beeps: 1, freq: 330 },
-  0: { label: "None", color: "#9E9E9E", bg: "rgba(158,158,158,0.1)", beeps: 1, freq: 330 },
-};
+> = Object.fromEntries(
+  SEVERITIES.map((s) => [s.value, { label: s.label, color: s.color, bg: s.bg, ...BEEPS[s.value] }]),
+);
 
 export const getSev = (n: number) => SEV[n] ?? SEV[0];
 
@@ -49,7 +55,9 @@ export const SOUND_PRESETS: Record<string, SoundPreset> = {
     label: "Beep",
     play: (ctx, severity) => {
       const { beeps, freq } = getSev(severity);
-      for (let i = 0; i < beeps; i++) tone(ctx, { freq, start: i * 0.28, dur: 0.22 });
+      for (let i = 0; i < beeps; i++) {
+        tone(ctx, { freq, start: i * 0.28, dur: 0.22 });
+      }
     },
   },
   chime: {
@@ -76,7 +84,7 @@ export const SOUND_PRESETS: Record<string, SoundPreset> = {
     label: "Alarm",
     play: (ctx, severity) => {
       const pulses = Math.min(5, 2 + severity);
-      for (let i = 0; i < pulses; i++)
+      for (let i = 0; i < pulses; i++) {
         tone(ctx, {
           freq: i % 2 ? 660 : 880,
           start: i * 0.16,
@@ -84,6 +92,7 @@ export const SOUND_PRESETS: Record<string, SoundPreset> = {
           type: "square",
           peak: 0.28,
         });
+      }
     },
   },
 };
@@ -95,7 +104,9 @@ export const playAlertSound = (severity: number, presetKey: string = DEFAULT_SOU
     const AudioCtx =
       window.AudioContext ??
       (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return;
+    if (!AudioCtx) {
+      return;
+    }
     const ctx = new AudioCtx();
     (SOUND_PRESETS[presetKey] ?? SOUND_PRESETS[DEFAULT_SOUND_PRESET]).play(ctx, severity);
   } catch {

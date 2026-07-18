@@ -50,7 +50,9 @@ export const ProxiesTab = ({
 
   const load = useCallback(
     async (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       try {
         const [r, g] = await Promise.all([api.listProxies(), api.listProxyGroups()]);
         setItems(r.proxies);
@@ -69,7 +71,9 @@ export const ProxiesTab = ({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
   useEffect(() => {
-    if (tick > 0) void load(true);
+    if (tick > 0) {
+      void load(true);
+    }
   }, [tick]);
 
   const onAdd = async () => {
@@ -87,7 +91,9 @@ export const ProxiesTab = ({
     }
   };
   const onEdit = async () => {
-    if (!editTarget) return;
+    if (!editTarget) {
+      return;
+    }
     setSaving(true);
     try {
       await api.updateProxy(editTarget.proxyid, editForm);
@@ -101,7 +107,9 @@ export const ProxiesTab = ({
     }
   };
   const onDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget) {
+      return;
+    }
     try {
       await api.deleteProxy(deleteTarget.proxyid);
       showToast("Proxy deleted.", "success");

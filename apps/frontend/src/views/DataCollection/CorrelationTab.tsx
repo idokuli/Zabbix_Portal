@@ -75,7 +75,9 @@ export const CorrelationTab = ({
 
   const load = useCallback(
     async (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       try {
         const r = await api.listCorrelations();
         setItems(r.correlations);
@@ -94,7 +96,9 @@ export const CorrelationTab = ({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
   useEffect(() => {
-    if (tick > 0) void load(true);
+    if (tick > 0) {
+      void load(true);
+    }
   }, [tick]);
 
   const onSave = async () => {
@@ -121,7 +125,9 @@ export const CorrelationTab = ({
   };
 
   const onDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget) {
+      return;
+    }
     try {
       await api.deleteCorrelation(deleteTarget.correlationid);
       showToast("Correlation deleted.", "success");

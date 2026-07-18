@@ -1,5 +1,4 @@
 "use client";
-import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
 import { Box, Typography } from "@mui/material";
 import type { AlertEvent } from "../../app/api";
 
@@ -13,23 +12,22 @@ export const AlertEventRow = ({ event }: { event: AlertEvent }) => (
     sx={{
       display: "flex",
       alignItems: "center",
-      gap: 1.5,
+      gap: 1.25,
       py: 1,
       "&:not(:last-child)": { borderBottom: "1px solid", borderColor: "divider" },
     }}
   >
-    <NotificationsActiveOutlinedIcon sx={{ fontSize: 16, color: "warning.main", flexShrink: 0 }} />
+    <Box
+      sx={{
+        width: 8,
+        height: 8,
+        borderRadius: "50%",
+        bgcolor: "warning.main",
+        flexShrink: 0,
+      }}
+    />
     <Box sx={{ flex: 1, minWidth: 0 }}>
-      <Typography
-        variant="body2"
-        sx={{
-          fontSize: "0.78rem",
-          fontWeight: 600,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
-        }}
-      >
+      <Typography variant="body2" sx={{ fontWeight: 500 }} noWrap>
         {event.item_name}
       </Typography>
       <Typography variant="caption" color="text.secondary">
@@ -37,10 +35,7 @@ export const AlertEventRow = ({ event }: { event: AlertEvent }) => (
         {event.threshold}
       </Typography>
     </Box>
-    <Typography
-      variant="caption"
-      sx={{ color: "text.disabled", flexShrink: 0, fontSize: "0.68rem" }}
-    >
+    <Typography variant="caption" sx={{ color: "text.disabled", flexShrink: 0 }}>
       {formatEventTime(event.fired_at)}
     </Typography>
   </Box>

@@ -46,7 +46,9 @@ export const AddGraphDialog = ({
   const [loadingGraphs, setLoadingGraphs] = useState(false);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
     setFilterTeamId("");
     setSelectedHostId("");
     setGraphSearch("");

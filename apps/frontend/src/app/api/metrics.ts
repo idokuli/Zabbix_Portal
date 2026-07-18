@@ -71,9 +71,15 @@ export const metricsApi = {
     }>(`/metrics/acknowledgements?limit=${limit}`),
   getProblemHistory: (params: { hours?: number; severityMin?: number; limit?: number } = {}) => {
     const q = new URLSearchParams();
-    if (params.hours != null) q.set("hours", String(params.hours));
-    if (params.severityMin != null) q.set("severity_min", String(params.severityMin));
-    if (params.limit != null) q.set("limit", String(params.limit));
+    if (params.hours != null) {
+      q.set("hours", String(params.hours));
+    }
+    if (params.severityMin != null) {
+      q.set("severity_min", String(params.severityMin));
+    }
+    if (params.limit != null) {
+      q.set("limit", String(params.limit));
+    }
     return apiFetch<{
       problems: {
         eventid: string;

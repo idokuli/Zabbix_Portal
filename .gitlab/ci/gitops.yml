@@ -38,7 +38,7 @@ yamllint:
     - echo "── yamllint passed."
   rules:
     - if: $CI_COMMIT_TAG
-    - if: $FORCE_APPS
+    - if: $FORCE_BUILD == "1"
 
 # ── Helm lint (charts now live in the GitOps repo — lint is a separate step there)
 # Kept here as a lightweight sanity check if HELM_CHANGED is set and HELM_IMAGE
@@ -62,7 +62,7 @@ helm:lint:
       echo "you add chart linting to the GitOps repo's own pipeline."
   rules:
     - if: $CI_COMMIT_TAG
-    - if: $FORCE_APPS
+    - if: $FORCE_BUILD == "1"
 
 # =============================================================================
 # push-image-tags — update environments/<env>/values.yaml in GitOps repo
@@ -166,7 +166,7 @@ push-image-tags:
 
   rules:
     - if: $CI_COMMIT_TAG
-    - if: $FORCE_APPS
+    - if: $FORCE_BUILD == "1"
 
 # =============================================================================
 # argocd:bootstrap — create/update ArgoCD Application via the ArgoCD CLI.
@@ -204,6 +204,8 @@ push-image-tags:
     cat "$MANIFEST_FILE"
     [ -s "$MANIFEST_FILE" ] || { echo "ERROR: manifest JSON is empty — yq conversion failed"; exit 1; }
 
+    APP_NAME="$(yq e '.metadata.name' "gitops-repo/argocd/$APP_MANIFEST")"
+
     # ── Upsert the ArgoCD Application via REST API ───────────────────────
     echo "ARGOCD_TOKEN set: $([ -n "$ARGOCD_TOKEN" ] && echo YES || echo 'NO — will 401')"
     echo "ARGOCD_SERVER: $ARGOCD_SERVER"
@@ -217,6 +219,16 @@ push-image-tags:
 
     if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
       ok "ArgoCD Application applied (HTTP $HTTP_CODE). App should now appear in ArgoCD."
+      if [ "$AUTO_SYNC" = "true" ]; then
+        ok "This environment auto-syncs — no further action needed."
+      else
+        echo ""
+        echo "⚠️  REMINDER: this environment does NOT auto-sync."
+        echo "   The upsert above only applied the Application definition — it did not deploy anything."
+        echo "   Review the diff in ArgoCD, then sync it yourself:"
+        echo "     argocd app sync ${APP_NAME}"
+        echo "   ...or click Sync on '${APP_NAME}' in the ArgoCD UI."
+      fi
     else
       echo "ERROR: ArgoCD API returned HTTP $HTTP_CODE"
       echo "Response: $(cat "$RESPONSE_FILE")"
@@ -241,11 +253,12 @@ argocd:bootstrap:staging:
     ARGOCD_SERVER: $STAGING_ARGOCD_SERVER
     APP_MANIFEST: application-staging.yaml
     ARGOCD_TOKEN: $STAGING_ARGOCD_TOKEN
+    AUTO_SYNC: "true"
   script:
     - *bootstrap_script
   rules:
     - if: $CI_COMMIT_TAG
-    - if: $FORCE_APPS
+    - if: $FORCE_BUILD == "1"
 
 argocd:bootstrap:production:
   extends: .bootstrap_base
@@ -253,12 +266,13 @@ argocd:bootstrap:production:
     ARGOCD_SERVER: $PROD_ARGOCD_SERVER
     APP_MANIFEST: application-production.yaml
     ARGOCD_TOKEN: $PROD_ARGOCD_TOKEN
+    AUTO_SYNC: "false"
   script:
     - *bootstrap_script
   rules:
     - if: $CI_COMMIT_TAG
       when: manual
-    - if: $FORCE_APPS
+    - if: $FORCE_BUILD == "1"
       when: manual
 
 argocd:bootstrap:dr:
@@ -267,10 +281,11 @@ argocd:bootstrap:dr:
     ARGOCD_SERVER: $DR_ARGOCD_SERVER
     APP_MANIFEST: application-dr.yaml
     ARGOCD_TOKEN: $DR_ARGOCD_TOKEN
+    AUTO_SYNC: "false"
   script:
     - *bootstrap_script
   rules:
     - if: $CI_COMMIT_TAG
       when: manual
-    - if: $FORCE_APPS
+    - if: $FORCE_BUILD == "1"
       when: manual

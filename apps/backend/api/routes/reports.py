@@ -61,8 +61,4 @@ def reports_notifications(
     _user=Depends(get_current_user),
 ):
     with zabbix_call(status=502):
-        return {
-            "notifications": report_bot.get_notification_history(
-                hours=hours, limit=limit
-            )
-        }
+        return {"notifications": report_bot.get_notification_history(hours=hours, limit=limit)}

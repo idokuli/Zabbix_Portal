@@ -92,7 +92,7 @@ class Services_Manager(Zabbix_Base):
             )
             return result["serviceids"][0]
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def delete_service(self, serviceid: str) -> bool:
         if not self.zapi:
@@ -101,7 +101,7 @@ class Services_Manager(Zabbix_Base):
             self.zapi.service.delete([serviceid])
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def update_service(
         self,
@@ -123,7 +123,7 @@ class Services_Manager(Zabbix_Base):
             self.zapi.service.update(**params)
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     # ── SLA ────────────────────────────────────────────────────────────
 
@@ -191,7 +191,7 @@ class Services_Manager(Zabbix_Base):
             )
             return result["slaids"][0]
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def delete_sla(self, slaid: str) -> bool:
         if not self.zapi:
@@ -200,7 +200,7 @@ class Services_Manager(Zabbix_Base):
             self.zapi.sla.delete([slaid])
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def get_sla_report(self, slaid: str, periods: int = 3) -> list[dict]:
         if not self.zapi:
@@ -231,9 +231,7 @@ class Services_Manager(Zabbix_Base):
             raise RuntimeError("Zabbix not connected")
         try:
             http_key = f"health.http[{self._hm_slug(name)}]"
-            if self.zapi.item.get(
-                hostids=[hostid], filter={"key_": http_key}, output=["itemid"]
-            ):
+            if self.zapi.item.get(hostids=[hostid], filter={"key_": http_key}, output=["itemid"]):
                 raise RuntimeError(
                     "A health monitor with a similar name already exists on this host."
                 )
@@ -285,7 +283,7 @@ class Services_Manager(Zabbix_Base):
         except RuntimeError:
             raise
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def list_health_monitors(self, hostid: str | None = None) -> list[dict]:
         if not self.zapi:
@@ -331,7 +329,7 @@ class Services_Manager(Zabbix_Base):
 
             now = time.time()
             result = []
-            for item, config in zip(items, configs):
+            for item, config in zip(items, configs, strict=True):
                 state = int(item.get("state", 0))
                 lastclock = int(item.get("lastclock") or 0)
                 lastvalue = item.get("lastvalue", "") or ""
@@ -372,15 +370,13 @@ class Services_Manager(Zabbix_Base):
             return result
         except Exception as e:
             logger.exception("list_health_monitors failed")
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def delete_health_monitor(self, itemid: str) -> bool:
         if not self.zapi:
             raise RuntimeError("Zabbix not connected")
         try:
-            items = self.zapi.item.get(
-                itemids=[itemid], output=["itemid", "description"]
-            )
+            items = self.zapi.item.get(itemids=[itemid], output=["itemid", "description"])
             if not items:
                 raise RuntimeError("Item not found")
             try:
@@ -401,4 +397,4 @@ class Services_Manager(Zabbix_Base):
         except RuntimeError:
             raise
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e

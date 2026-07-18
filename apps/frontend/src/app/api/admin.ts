@@ -317,9 +317,7 @@ export const adminApi = {
   deleteMacro: (globalmacroid: string) =>
     apiFetch<{ ok: boolean }>(`/macros/${globalmacroid}`, { method: "DELETE" }),
   getQueue: () =>
-    apiFetch<{ items: Array<Record<string, string>>; total: number; error?: string }>(
-      "/admin/queue",
-    ),
+    apiFetch<{ items: Record<string, string>[]; total: number; error?: string }>("/admin/queue"),
   getAdminSettings: () => apiFetch<Record<string, string>>("/admin/settings"),
   updateHousekeeping: (payload: Record<string, string | number>) =>
     apiFetch<{ ok: boolean }>("/admin/housekeeping", {

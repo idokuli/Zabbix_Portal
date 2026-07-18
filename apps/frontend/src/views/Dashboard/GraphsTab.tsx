@@ -13,8 +13,6 @@ import {
   Chip,
   Divider,
   IconButton,
-  MenuItem,
-  Select,
   Skeleton,
   Snackbar,
   Tooltip,
@@ -37,10 +35,12 @@ import ReactGridLayout, { WidthProvider } from "react-grid-layout";
 import {
   type AlertEvent,
   type DashboardGraph,
+  type DashboardScope,
   type Problem,
   type WidgetConfig,
   api,
 } from "../../app/api";
+import { LayoutScopeSelect } from "../../app/components/LayoutScopeSelect";
 import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { DashboardPageManager } from "../../components/DashboardPageManager";
@@ -66,8 +66,9 @@ export const GraphsTab = () => {
   const tick = useRefreshTick();
   const [widgets, setWidgets] = useState<WidgetConfig[]>([]);
   const [isDirty, setIsDirty] = useState(false);
-  const [saveScope, setSaveScope] = useState<"user" | "team">("user");
+  const [saveScope, setSaveScope] = useState<DashboardScope>("user");
   const [page, setPage] = useState("dashboard");
+  const [allTeamId, setAllTeamId] = useState<number | undefined>(undefined);
   const [addOpen, setAddOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -137,7 +138,9 @@ export const GraphsTab = () => {
           const o = prev[i];
           return o && (w.x !== o.x || w.y !== o.y || w.w !== o.w || w.h !== o.h);
         });
-        if (moved) setIsDirty(true);
+        if (moved) {
+          setIsDirty(true);
+        }
         return next;
       });
     },
@@ -177,6 +180,9 @@ export const GraphsTab = () => {
   }, []);
 
   const saveLayout = useCallback(async () => {
+    if (saveScope === "all") {
+      return;
+    }
     setSaving(true);
     try {
       await api.saveDashboardLayout(saveScope, widgets, page);
@@ -189,10 +195,11 @@ export const GraphsTab = () => {
   }, [saveScope, widgets, page]);
 
   const handlePageChange = useCallback(
-    (newPage: string) => {
+    (newPage: string, teamId?: number) => {
       setPage(newPage);
+      setAllTeamId(teamId);
       api
-        .getDashboardLayout(saveScope, newPage)
+        .getDashboardLayout(saveScope, newPage, teamId)
         .then((res) => {
           setWidgets(res.widgets ?? []);
           setIsDirty(false);
@@ -213,6 +220,7 @@ export const GraphsTab = () => {
   }));
 
   const existingIds = widgets.map((w) => w.graphid);
+  const isAllScope = saveScope === "all";
 
   if (!loaded) {
     return (
@@ -246,15 +254,20 @@ export const GraphsTab = () => {
         <Box sx={{ flex: 1 }} />
 
         {/* Add graph */}
-        <Button
-          size="small"
-          variant="outlined"
-          startIcon={<AddIcon sx={{ fontSize: 16 }} />}
-          onClick={() => setAddOpen(true)}
-          sx={{ fontSize: "0.75rem", height: 28, px: 1.5 }}
-        >
-          Add Graph
-        </Button>
+        <Tooltip title={isAllScope ? "Read-only across teams" : ""}>
+          <span>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<AddIcon sx={{ fontSize: 16 }} />}
+              onClick={() => setAddOpen(true)}
+              disabled={isAllScope}
+              sx={{ fontSize: "0.75rem", height: 28, px: 1.5 }}
+            >
+              Add Graph
+            </Button>
+          </span>
+        </Tooltip>
 
         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
 
@@ -263,6 +276,7 @@ export const GraphsTab = () => {
           kind="dashboard"
           scope={saveScope}
           page={page}
+          teamId={allTeamId}
           onPageChange={handlePageChange}
         />
 
@@ -272,12 +286,17 @@ export const GraphsTab = () => {
         <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
           Layout:
         </Typography>
-        <Select
-          size="small"
-          value={saveScope}
-          onChange={(e) => {
-            const newScope = e.target.value as "user" | "team";
+        <LayoutScopeSelect
+          scope={saveScope}
+          onChange={(newScope) => {
+            const wasAllScope = saveScope === "all";
             setSaveScope(newScope);
+            if (newScope === "all" || wasAllScope) {
+              // `page`/`allTeamId` aren't valid for the new scope yet —
+              // DashboardPageManager's page-list effect (keyed on scope) will pick
+              // a valid page and call onPageChange, which fetches the right layout.
+              return;
+            }
             api
               .getDashboardLayout(newScope, page)
               .then((res) => {
@@ -286,26 +305,24 @@ export const GraphsTab = () => {
               })
               .catch(() => {});
           }}
-          sx={{
-            fontSize: "0.72rem",
-            height: 28,
-            "& .MuiSelect-select": { py: 0, px: 1, lineHeight: "28px" },
-          }}
+        />
+        <Tooltip
+          title={
+            isAllScope
+              ? "Read-only across teams"
+              : saving
+                ? "Saving…"
+                : isDirty
+                  ? "Save layout"
+                  : "Layout saved"
+          }
         >
-          <MenuItem value="user" sx={{ fontSize: "0.78rem" }}>
-            Mine
-          </MenuItem>
-          <MenuItem value="team" sx={{ fontSize: "0.78rem" }}>
-            Team
-          </MenuItem>
-        </Select>
-        <Tooltip title={saving ? "Saving…" : isDirty ? "Save layout" : "Layout saved"}>
           <span>
             <IconButton
               size="small"
               color={isDirty ? "warning" : "default"}
               onClick={saveLayout}
-              disabled={!isDirty || saving}
+              disabled={!isDirty || saving || isAllScope}
             >
               <SaveIcon sx={{ fontSize: 18 }} />
             </IconButton>
@@ -346,6 +363,8 @@ export const GraphsTab = () => {
           cols={12}
           rowHeight={80}
           draggableHandle=".drag-handle"
+          isDraggable={!isAllScope}
+          isResizable={!isAllScope}
           onLayoutChange={handleLayoutChange}
           style={{ minHeight: 200 }}
         >
@@ -353,8 +372,8 @@ export const GraphsTab = () => {
             <div key={w.i}>
               <WidgetCard
                 widget={w}
-                onRemove={() => removeWidget(w.i)}
-                onUpdate={(updates) => updateWidget(w.i, updates)}
+                onRemove={() => !isAllScope && removeWidget(w.i)}
+                onUpdate={(updates) => !isAllScope && updateWidget(w.i, updates)}
                 alertEvents={allAlertEvents}
                 problems={allProblems.filter((p) => p.hostname === w.hostName)}
               />

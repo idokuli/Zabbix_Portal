@@ -281,7 +281,7 @@ All paths require a `Bearer` JWT unless noted. "Operator+" = root / team_lead / 
 | Method | Path                     | Auth      | Description |
 | ------ | ------------------------ | --------- | ----------- |
 | GET    | `/items`                 | Yes       | List all items across all hosts (`?search=`) |
-| GET    | `/items/keys`            | Yes       | List all item keys from Zabbix templates |
+| GET    | `/items/keys`            | Yes       | List agent item keys from templates linked to a host (`?hostname=`, team-restricted) |
 | GET    | `/items/{hostname}`      | Yes       | List items for a host |
 | POST   | `/items`                 | Operator+ | Add a Zabbix agent item to a host |
 | POST   | `/items/bulk`            | Operator+ | Add the same item to multiple hosts |

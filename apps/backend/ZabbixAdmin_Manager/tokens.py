@@ -35,9 +35,7 @@ class TokensMixin:
             try:
                 uids = list({t["userid"] for t in tokens})
                 users = (
-                    self.zapi.user.get(output=["userid", "username"], userids=uids)
-                    if uids
-                    else []
+                    self.zapi.user.get(output=["userid", "username"], userids=uids) if uids else []
                 )
                 uid_map = {u["userid"]: u.get("username", "") for u in users}
             except Exception:
@@ -56,9 +54,7 @@ class TokensMixin:
                 for t in tokens
             ]
         except Exception as e:
-            logger.warning(
-                "list_api_tokens failed (may need Super Admin rights): %s", e
-            )
+            logger.warning("list_api_tokens failed (may need Super Admin rights): %s", e)
             return []
 
     def create_api_token(
@@ -76,7 +72,7 @@ class TokensMixin:
             token_value = gen[0]["token"] if gen else None
             return tokenid, token_value
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def delete_api_token(self, tokenid: str) -> bool:
         if not self.zapi:
@@ -85,4 +81,4 @@ class TokensMixin:
             self.zapi.token.delete([tokenid])
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e

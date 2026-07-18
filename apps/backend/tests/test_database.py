@@ -188,9 +188,7 @@ def test_init_db_creates_pool_and_commits(mock_conn_fixture):
     original = Database._pool
     try:
         with (
-            patch(
-                "Database.psycopg2.pool.ThreadedConnectionPool", return_value=mock_pool
-            ),
+            patch("Database.psycopg2.pool.ThreadedConnectionPool", return_value=mock_pool),
             patch("Database.get_conn", return_value=conn),
         ):
             Database.init_db()
@@ -210,9 +208,7 @@ def test_init_db_rolls_back_on_error(mock_conn_fixture):
     original = Database._pool
     try:
         with (
-            patch(
-                "Database.psycopg2.pool.ThreadedConnectionPool", return_value=mock_pool
-            ),
+            patch("Database.psycopg2.pool.ThreadedConnectionPool", return_value=mock_pool),
             patch("Database.get_conn", return_value=conn),
         ):
             with pytest.raises(Exception, match="schema error"):

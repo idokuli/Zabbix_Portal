@@ -33,9 +33,7 @@ class Metrics_Manager(Zabbix_Base):
             return {}
         try:
             # Zabbix 6.2+ renamed selectGroups → selectHostGroups on host.get.
-            groups_field = (
-                "selectHostGroups" if self._zabbix_version >= (6, 2) else "selectGroups"
-            )
+            groups_field = "selectHostGroups" if self._zabbix_version >= (6, 2) else "selectGroups"
             groups_key = "hostgroups" if self._zabbix_version >= (6, 2) else "groups"
             hosts = self.zapi.host.get(output=["hostid"], **{groups_field: ["name"]})
             result: dict[str, list[str]] = {}
@@ -43,8 +41,8 @@ class Metrics_Manager(Zabbix_Base):
                 groups_list = h.get(groups_key) or h.get("groups") or []
                 result[h["hostid"]] = [g["name"] for g in groups_list]
             return result
-        except Exception as e:
-            logger.error("_fetch_host_group_map failed: %r", e)
+        except Exception:
+            logger.exception("_fetch_host_group_map failed")
             return {}
 
     def _fetch_problems(self) -> list[dict]:
@@ -102,13 +100,11 @@ class Metrics_Manager(Zabbix_Base):
             # Sort highest severity first, then most recent within same severity
             result.sort(key=lambda x: (-x["severity"], -x["clock"]))
             return result
-        except Exception as e:
-            logger.error("get_problems failed: %r", e)
+        except Exception:
+            logger.exception("get_problems failed")
             return []
 
-    def acknowledge_problem(
-        self, eventid: str, username: str = "portal", note: str = ""
-    ) -> bool:
+    def acknowledge_problem(self, eventid: str, username: str = "portal", note: str = "") -> bool:
         """Acknowledge a Zabbix problem event. Returns True on success."""
         if not self.zapi:
             return False
@@ -124,8 +120,8 @@ class Metrics_Manager(Zabbix_Base):
             )
             self._invalidate("problems")
             return True
-        except Exception as e:
-            logger.error("acknowledge_problem failed for eventid=%s: %r", eventid, e)
+        except Exception:
+            logger.exception("acknowledge_problem failed for eventid=%s", eventid)
             return False
 
     def get_problem_history(
@@ -184,9 +180,7 @@ class Metrics_Manager(Zabbix_Base):
 
             # Fetch resolution times: r_eventid points to the recovery event; its
             # clock is the resolution timestamp. Batch all non-zero r_eventids.
-            recovery_ids = [
-                e["r_eventid"] for e in events if e.get("r_eventid", "0") != "0"
-            ]
+            recovery_ids = [e["r_eventid"] for e in events if e.get("r_eventid", "0") != "0"]
             recovery_clock: dict[str, int] = {}
             if recovery_ids:
                 rec_events = self.zapi.event.get(
@@ -217,9 +211,7 @@ class Metrics_Manager(Zabbix_Base):
                         userids=list(all_userids),
                         output=["userid", "username"],
                     )
-                    userid_to_username = {
-                        u["userid"]: u["username"] for u in zabbix_users
-                    }
+                    userid_to_username = {u["userid"]: u["username"] for u in zabbix_users}
                 except Exception as exc:
                     logger.debug("Failed to enrich ack user list: %s", exc)
 
@@ -245,9 +237,7 @@ class Metrics_Manager(Zabbix_Base):
 
                 acks = e.get("acknowledges") or []
                 raw_userid = acks[-1].get("userid", "") if acks else ""
-                ack_user = (
-                    userid_to_username.get(raw_userid, raw_userid) if acks else None
-                )
+                ack_user = userid_to_username.get(raw_userid, raw_userid) if acks else None
                 ack_note = acks[-1].get("message", "") if acks else ""
                 ack_time = int(acks[-1].get("clock", 0)) if acks else None
 
@@ -257,9 +247,7 @@ class Metrics_Manager(Zabbix_Base):
                         "name": e.get("name", ""),
                         "hostname": hostname,
                         "severity": int(e.get("severity", 0)),
-                        "severity_name": SEVERITY_NAMES.get(
-                            str(e.get("severity", "0")), "Unknown"
-                        ),
+                        "severity_name": SEVERITY_NAMES.get(str(e.get("severity", "0")), "Unknown"),
                         "clock": clock,
                         "r_clock": r_clock,
                         "resolved": resolved,
@@ -271,8 +259,8 @@ class Metrics_Manager(Zabbix_Base):
                     }
                 )
             return result
-        except Exception as exc:
-            logger.error("get_problem_history failed: %r", exc)
+        except Exception:
+            logger.exception("get_problem_history failed")
             return []
 
     def get_item_history(self, itemid: str, minutes: int = 360) -> dict:
@@ -318,8 +306,7 @@ class Metrics_Manager(Zabbix_Base):
                     sortorder="ASC",
                 )
                 points = [
-                    {"clock": int(t["clock"]), "value": float(t["value_avg"])}
-                    for t in trends
+                    {"clock": int(t["clock"]), "value": float(t["value_avg"])} for t in trends
                 ]
             else:
                 # Periods ≤ 24 h: raw history.  Fetch DESC (most-recent first) so
@@ -345,6 +332,6 @@ class Metrics_Manager(Zabbix_Base):
                 "units": item.get("units", ""),
                 "hostname": hostname,
             }
-        except Exception as e:
-            logger.error("get_item_history failed: %r", e)
+        except Exception:
+            logger.exception("get_item_history failed")
             return {"history": [], "item_name": "", "units": "", "hostname": ""}

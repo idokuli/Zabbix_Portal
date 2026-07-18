@@ -25,17 +25,13 @@ import {
 import { useCallback, useState } from "react";
 import { api } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
+import { SEVERITIES } from "../../app/severity";
 import { TimeBar, fmtTs } from "./shared";
 import { useReportLoader } from "./useReportLoader";
 
-const SEV_COLORS: Record<number, string> = {
-  5: "#B71C1C",
-  4: "#F44336",
-  3: "#FF5722",
-  2: "#FFC107",
-  1: "#2196F3",
-  0: "#9E9E9E",
-};
+const SEV_COLORS: Record<number, string> = Object.fromEntries(
+  SEVERITIES.map((s) => [s.value, s.color]),
+);
 
 export const TopTriggersTab = () => {
   const [hours, setHours] = useState(24);
@@ -55,7 +51,9 @@ export const TopTriggersTab = () => {
 
   const load = useCallback(
     (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       api
         .getTopTriggers({ limit: 100, severity_min: severityMin, hours })
         .then((r) => setData(r.triggers))

@@ -54,9 +54,7 @@ def test_add_internal_item_host_not_found(mgr):
 def test_add_internal_item_with_team(mgr):
     _mock_host(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["2"]}
-    item_id, err = mgr.add_internal_item(
-        "h1", "Uptime", "system.uptime", team_name="ops"
-    )
+    item_id, err = mgr.add_internal_item("h1", "Uptime", "system.uptime", team_name="ops")
     assert item_id == "2"
     call_kwargs = mgr.zapi.item.create.call_args[1]
     assert call_kwargs["tags"] == [{"tag": "team", "value": "ops"}]
@@ -129,9 +127,7 @@ def test_add_external_item_zapi_none(mgr):
 def test_add_calculated_item_success(mgr):
     _mock_host(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["5"]}
-    item_id, err = mgr.add_calculated_item(
-        "h1", "Avg CPU", "avg.cpu", "avg(last_value(...))"
-    )
+    item_id, err = mgr.add_calculated_item("h1", "Avg CPU", "avg.cpu", "avg(last_value(...))")
     assert item_id == "5"
     assert err is None
 
@@ -179,9 +175,7 @@ def test_add_dependent_item_zapi_none(mgr):
 def test_add_zabbix_script_item_success(mgr):
     _mock_host(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["7"]}
-    item_id, err = mgr.add_zabbix_script_item(
-        "h1", "Script item", "script.key", "return 1;"
-    )
+    item_id, err = mgr.add_zabbix_script_item("h1", "Script item", "script.key", "return 1;")
     assert item_id == "7"
     assert err is None
 

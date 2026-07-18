@@ -25,7 +25,7 @@ export const QueueTab = ({
   showToast,
 }: { showToast: (m: string, s: "success" | "error") => void }) => {
   const [data, setData] = useState<{
-    items: Array<Record<string, string>>;
+    items: Record<string, string>[];
     total: number;
     error?: string;
   } | null>(null);
@@ -34,7 +34,9 @@ export const QueueTab = ({
 
   const load = useCallback(
     async (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       try {
         setData(await api.getQueue());
       } catch (e) {
@@ -51,20 +53,27 @@ export const QueueTab = ({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
   useEffect(() => {
-    if (tick > 0) void load(true);
+    if (tick > 0) {
+      void load(true);
+    }
   }, [tick]);
 
   const fmtNext = (ts: string | number) => {
     const t = typeof ts === "string" ? Number.parseInt(ts, 10) : ts;
-    if (!t || t <= 0) return "—";
+    if (!t || t <= 0) {
+      return "—";
+    }
     const diff = t - Math.floor(Date.now() / 1000);
-    if (diff < 0)
+    if (diff < 0) {
       return (
         <Typography component="span" variant="caption" color="error.main">
           overdue {Math.abs(diff)}s
         </Typography>
       );
-    if (diff < 60) return `in ${diff}s`;
+    }
+    if (diff < 60) {
+      return `in ${diff}s`;
+    }
     return `in ${Math.floor(diff / 60)}m ${diff % 60}s`;
   };
 

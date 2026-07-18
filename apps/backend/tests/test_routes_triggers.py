@@ -70,9 +70,7 @@ def client_restricted(mock_bot):
 
     with (
         patch("api.routes.triggers.item_bot", mock_bot),
-        patch(
-            "api.routes.triggers.team_hostname_filter", return_value={"allowed-host"}
-        ),
+        patch("api.routes.triggers.team_hostname_filter", return_value={"allowed-host"}),
         TestClient(make_app(router, user=FAKE_MEMBER)) as c,
     ):
         yield c, mock_bot

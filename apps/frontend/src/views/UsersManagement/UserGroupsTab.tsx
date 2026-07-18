@@ -81,7 +81,9 @@ export const UserGroupsTab = ({
 
   const load = useCallback(
     async (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       try {
         const r = await api.listUserGroups();
         setItems(r.groups);
@@ -99,7 +101,9 @@ export const UserGroupsTab = ({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
   useEffect(() => {
-    if (tick > 0) void load(true);
+    if (tick > 0) {
+      void load(true);
+    }
   }, [tick]);
 
   const openAdd = async () => {
@@ -128,14 +132,14 @@ export const UserGroupsTab = ({
         gui_access: form.gui_access,
         users_status: form.users_status,
         debug_mode: form.debug_mode,
-        userids: form.userids.length ? form.userids : undefined,
-        hostgroup_rights: form.hostgroup_rights.length ? form.hostgroup_rights : undefined,
-        templategroup_rights: form.templategroup_rights.length
-          ? form.templategroup_rights
-          : undefined,
-        tag_filters: form.tag_filters.length
-          ? form.tag_filters.map(({ groupid, tag, value }) => ({ groupid, tag, value }))
-          : undefined,
+        userids: form.userids.length > 0 ? form.userids : undefined,
+        hostgroup_rights: form.hostgroup_rights.length > 0 ? form.hostgroup_rights : undefined,
+        templategroup_rights:
+          form.templategroup_rights.length > 0 ? form.templategroup_rights : undefined,
+        tag_filters:
+          form.tag_filters.length > 0
+            ? form.tag_filters.map(({ groupid, tag, value }) => ({ groupid, tag, value }))
+            : undefined,
       });
       showToast("User group created.", "success");
       setAddOpen(false);
@@ -148,7 +152,9 @@ export const UserGroupsTab = ({
   };
 
   const onDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget) {
+      return;
+    }
     try {
       await api.deleteUserGroup(deleteTarget.usrgrpid);
       showToast("User group deleted.", "success");
@@ -160,7 +166,9 @@ export const UserGroupsTab = ({
   };
 
   const addHGRight = (rights: HGRight[], setRights: (r: HGRight[]) => void, id: string) => {
-    if (!id || rights.some((r) => r.id === id)) return;
+    if (!id || rights.some((r) => r.id === id)) {
+      return;
+    }
     setRights([...rights, { id, permission: 2 }]);
   };
   const removeRight = (rights: HGRight[], setRights: (r: HGRight[]) => void, id: string) =>

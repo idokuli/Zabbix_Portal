@@ -165,9 +165,17 @@ def test_delete_template_item_not_found(client):
 def test_list_item_keys_ok(client):
     c, bot = client
     bot.get_all_item_keys.return_value = ["system.cpu.load", "agent.ping"]
-    r = c.get("/items/keys")
+    r = c.get("/items/keys?hostname=myhost")
     assert r.status_code == 200
     assert "items" in r.json()
+    bot.get_all_item_keys.assert_called_once_with("myhost")
+
+
+def test_list_item_keys_forbidden_for_other_team_host(client):
+    c, bot = client
+    with patch("api.routes.items.team_hostname_filter", return_value={"otherhost"}):
+        r = c.get("/items/keys?hostname=myhost")
+    assert r.status_code == 403
 
 
 # ── list_items ────────────────────────────────────────────────────────────────

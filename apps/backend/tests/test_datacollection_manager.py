@@ -200,9 +200,7 @@ def test_list_correlations_zapi_none(mgr):
 
 
 def test_get_template_group_members_returns_list(mgr):
-    mgr.zapi.template.get.return_value = [
-        {"templateid": "10", "name": "Linux", "description": ""}
-    ]
+    mgr.zapi.template.get.return_value = [{"templateid": "10", "name": "Linux", "description": ""}]
     result = mgr.get_template_group_members("1")
     assert result[0]["templateid"] == "10"
 
@@ -263,9 +261,7 @@ def test_set_template_group_members_zapi_none(mgr):
 
 
 def test_get_host_group_members_returns_list(mgr):
-    mgr.zapi.host.get.return_value = [
-        {"hostid": "5", "host": "h1", "name": "h1", "status": "0"}
-    ]
+    mgr.zapi.host.get.return_value = [{"hostid": "5", "host": "h1", "name": "h1", "status": "0"}]
     result = mgr.get_host_group_members("2")
     assert result[0]["hostid"] == "5"
     assert result[0]["status"] == 0
@@ -660,9 +656,7 @@ def test_create_maintenance_error(mgr):
     import time
 
     now = int(time.time())
-    mid, err = mgr.create_maintenance(
-        "X", 0, now, now + 3600, hostids=["1"], groupids=[]
-    )
+    mid, err = mgr.create_maintenance("X", 0, now, now + 3600, hostids=["1"], groupids=[])
     assert mid is None
     assert err is not None
 

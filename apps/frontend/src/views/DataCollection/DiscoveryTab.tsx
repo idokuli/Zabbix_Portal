@@ -64,7 +64,9 @@ export const DiscoveryTab = ({
 
   const load = useCallback(
     async (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       try {
         const r = await api.listDiscoveryRules();
         setRules(r.rules);
@@ -83,7 +85,9 @@ export const DiscoveryTab = ({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
   useEffect(() => {
-    if (tick > 0) void load(true);
+    if (tick > 0) {
+      void load(true);
+    }
   }, [tick]);
 
   const onSave = async () => {
@@ -102,7 +106,9 @@ export const DiscoveryTab = ({
   };
 
   const onDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget) {
+      return;
+    }
     try {
       await api.deleteDiscoveryRule(deleteTarget.druleid);
       showToast("Discovery rule deleted.", "success");
@@ -266,7 +272,7 @@ export const DiscoveryTab = ({
             variant="contained"
             onClick={onSave}
             disabled={
-              saving || !form.name.trim() || !form.iprange.trim() || !form.check_types.length
+              saving || !form.name.trim() || !form.iprange.trim() || form.check_types.length === 0
             }
           >
             {saving ? <CircularProgress size={14} /> : "Create"}

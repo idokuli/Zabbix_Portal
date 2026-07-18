@@ -36,13 +36,311 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { type Host, api } from "../../app/api";
 import { ConfirmDelete } from "../../app/components/ConfirmDelete";
 import { AddTriggerDialog } from "./AddTriggerDialog";
 import { BulkTriggerDialog } from "./BulkTriggerDialog";
 import { EditTriggerDialog } from "./EditTriggerDialog";
 import { SEVERITY_CONFIG, SeverityChip, type TriggerRow, timeAgo } from "./shared";
+
+const WHITESPACE_RE = /\s+/;
+
+type TriggerRowItemProps = {
+  t: TriggerRow;
+  isExpanded: boolean;
+  hostAvailable: string;
+  onToggleExpand: () => void;
+  onEdit: (t: TriggerRow) => void;
+  onDeleteRequest: (t: TriggerRow) => void;
+};
+
+const TriggerRowItem = ({
+  t,
+  isExpanded,
+  hostAvailable,
+  onToggleExpand,
+  onEdit,
+  onDeleteRequest,
+}: TriggerRowItemProps) => {
+  const severity = SEVERITY_CONFIG.find((s) => s.severity === t.priority) ?? SEVERITY_CONFIG[0];
+  return (
+    <>
+      <TableRow hover onClick={onToggleExpand} sx={{ cursor: "pointer" }}>
+        {/* Expand arrow */}
+        <TableCell sx={{ width: 28, pr: 0 }}>
+          <IconButton size="small" sx={{ p: 0.25 }}>
+            {isExpanded ? (
+              <KeyboardArrowDownIcon sx={{ fontSize: 16 }} />
+            ) : (
+              <KeyboardArrowRightIcon sx={{ fontSize: 16 }} />
+            )}
+          </IconButton>
+        </TableCell>
+        <TableCell>
+          <Typography variant="body2">{t.description}</Typography>
+        </TableCell>
+        <TableCell sx={{ maxWidth: 300 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              fontFamily: "monospace",
+              fontSize: "0.7rem",
+              color: "text.secondary",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {t.expression}
+          </Typography>
+        </TableCell>
+        <TableCell>
+          <SeverityChip priority={t.priority} />
+        </TableCell>
+        <TableCell>
+          {hostAvailable === "2" ? (
+            <Tooltip
+              title="Host agent is unreachable — this state is stale and may be incorrect"
+              placement="top"
+            >
+              <Chip
+                label="No data"
+                size="small"
+                variant="filled"
+                sx={{
+                  height: 18,
+                  fontSize: "0.65rem",
+                  fontWeight: 600,
+                  bgcolor: "#6E7681",
+                  color: "#fff",
+                }}
+              />
+            </Tooltip>
+          ) : (
+            <Tooltip
+              title={t.lastchange ? `Since ${timeAgo(t.lastchange)}` : "No state change recorded"}
+              placement="top"
+            >
+              <Chip
+                label={t.value === 1 ? "PROBLEM" : "OK"}
+                size="small"
+                variant="filled"
+                sx={{
+                  height: 18,
+                  fontSize: "0.65rem",
+                  fontWeight: 700,
+                  bgcolor: t.value === 1 ? "error.main" : "success.main",
+                  color: "#fff",
+                }}
+              />
+            </Tooltip>
+          )}
+        </TableCell>
+        <TableCell>
+          <Chip
+            label={t.status === 0 ? "Enabled" : "Disabled"}
+            size="small"
+            color={t.status === 0 ? "success" : "default"}
+            variant="outlined"
+            sx={{ height: 18, fontSize: "0.65rem" }}
+          />
+        </TableCell>
+        <TableCell>
+          <Stack direction="row" spacing={0.5}>
+            <Tooltip title="Edit trigger">
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(t);
+                }}
+              >
+                <EditOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Delete trigger">
+              <IconButton
+                size="small"
+                color="error"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteRequest(t);
+                }}
+              >
+                <DeleteOutlineIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        </TableCell>
+      </TableRow>
+
+      {/* Expanded detail row */}
+      <TableRow>
+        <TableCell colSpan={7} sx={{ py: 0, border: isExpanded ? undefined : "none" }}>
+          <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+            <Box
+              sx={{
+                px: 3,
+                py: 1.5,
+                bgcolor: "action.hover",
+                borderRadius: 1,
+                my: 0.5,
+              }}
+            >
+              <Typography
+                variant="caption"
+                sx={{
+                  fontWeight: 700,
+                  color: "text.secondary",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.07em",
+                  fontSize: "0.6rem",
+                }}
+              >
+                Trigger details
+              </Typography>
+              <Box sx={{ display: "flex", gap: 4, mt: 0.75, flexWrap: "wrap" }}>
+                <Box>
+                  <Typography variant="caption" color="text.disabled">
+                    Severity
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontSize: "0.8rem",
+                      color: severity.color,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {severity.label}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.disabled">
+                    Last state change
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
+                    {t.lastchange ? new Date(t.lastchange * 1000).toLocaleString() : "Never"}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.disabled">
+                    State
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontSize: "0.8rem",
+                      fontWeight: 600,
+                      color: t.value === 1 ? "error.main" : "success.main",
+                    }}
+                  >
+                    {t.value === 1 ? "PROBLEM" : "OK"}
+                  </Typography>
+                </Box>
+              </Box>
+              <Box
+                sx={{
+                  mt: 1,
+                  px: 1.5,
+                  py: 0.75,
+                  bgcolor: "background.paper",
+                  borderRadius: 1,
+                  borderLeft: "3px solid",
+                  borderColor: "divider",
+                }}
+              >
+                <Typography variant="caption" color="text.disabled">
+                  Expression
+                </Typography>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontFamily: "monospace",
+                    fontSize: "0.78rem",
+                    wordBreak: "break-all",
+                    mt: 0.25,
+                  }}
+                >
+                  {t.expression}
+                </Typography>
+              </Box>
+            </Box>
+          </Collapse>
+        </TableCell>
+      </TableRow>
+    </>
+  );
+};
+
+type TriggerTableBodyProps = {
+  loading: boolean;
+  filtered: TriggerRow[];
+  totalCount: number;
+  expandedTriggerId: string | null;
+  hostAvailable: string;
+  onToggleExpand: (id: string) => void;
+  onEdit: (t: TriggerRow) => void;
+  onDeleteRequest: (t: TriggerRow) => void;
+};
+
+const TriggerTableBody = ({
+  loading,
+  filtered,
+  totalCount,
+  expandedTriggerId,
+  hostAvailable,
+  onToggleExpand,
+  onEdit,
+  onDeleteRequest,
+}: TriggerTableBodyProps) => {
+  if (loading) {
+    return (
+      <>
+        {Array.from({ length: 5 }).map((_, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length anonymous skeleton placeholders, never reordered
+          <TableRow key={i}>
+            {Array.from({ length: 7 }).map((__, j) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length anonymous skeleton placeholders, never reordered
+              <TableCell key={j}>
+                <Skeleton variant="text" />
+              </TableCell>
+            ))}
+          </TableRow>
+        ))}
+      </>
+    );
+  }
+  if (filtered.length === 0) {
+    return (
+      <TableRow>
+        <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+          <Typography variant="body2" color="text.secondary">
+            {totalCount === 0
+              ? "No triggers found for this host."
+              : "No triggers match the search."}
+          </Typography>
+        </TableCell>
+      </TableRow>
+    );
+  }
+  return (
+    <>
+      {filtered.map((t) => (
+        <TriggerRowItem
+          key={t.triggerid}
+          t={t}
+          isExpanded={expandedTriggerId === t.triggerid}
+          hostAvailable={hostAvailable}
+          onToggleExpand={() => onToggleExpand(t.triggerid)}
+          onEdit={onEdit}
+          onDeleteRequest={onDeleteRequest}
+        />
+      ))}
+    </>
+  );
+};
 
 export const Triggers = () => {
   // ── Table / host state ───────────────────────────────────────────────
@@ -160,35 +458,40 @@ export const Triggers = () => {
       .finally(() => setFormHostItemsLoading(false));
   }, [formHost]);
 
+  const canAddTrigger =
+    !!(formHost && formItemKey && formName) &&
+    (isStringItem ? formPattern !== "" : formThreshold !== "");
+
+  const buildAddTriggerPayload = () =>
+    isStringItem
+      ? {
+          hostname: formHost,
+          item_key: formItemKey,
+          trigger_name: formName,
+          severity: formSeverity,
+          string_pattern: formPattern,
+          match_type: formMatchType,
+          event_name: formEventName || undefined,
+          comments: formComments || undefined,
+        }
+      : {
+          hostname: formHost,
+          item_key: formItemKey,
+          trigger_name: formName,
+          operator: formOperator,
+          threshold: Number(formThreshold),
+          severity: formSeverity,
+          event_name: formEventName || undefined,
+          comments: formComments || undefined,
+        };
+
   const handleAdd = async () => {
-    if (!formHost || !formItemKey || !formName) return;
-    if (isStringItem && formPattern === "") return;
-    if (!isStringItem && formThreshold === "") return;
+    if (!canAddTrigger) {
+      return;
+    }
     setSaving(true);
     try {
-      await api.addTrigger(
-        isStringItem
-          ? {
-              hostname: formHost,
-              item_key: formItemKey,
-              trigger_name: formName,
-              severity: formSeverity,
-              string_pattern: formPattern,
-              match_type: formMatchType,
-              event_name: formEventName || undefined,
-              comments: formComments || undefined,
-            }
-          : {
-              hostname: formHost,
-              item_key: formItemKey,
-              trigger_name: formName,
-              operator: formOperator,
-              threshold: Number(formThreshold),
-              severity: formSeverity,
-              event_name: formEventName || undefined,
-              comments: formComments || undefined,
-            },
-      );
+      await api.addTrigger(buildAddTriggerPayload());
       showToast("Trigger created.", "success");
       setAddOpen(false);
       setFormHost("");
@@ -202,7 +505,9 @@ export const Triggers = () => {
       setFormMatchType("like");
       setFormSeverity(2);
       setFormComments("");
-      if (formHost === selectedHost) void loadTriggers(selectedHost);
+      if (formHost === selectedHost) {
+        void loadTriggers(selectedHost);
+      }
     } catch (e) {
       showToast(e instanceof Error ? e.message : String(e), "error");
     } finally {
@@ -233,7 +538,9 @@ export const Triggers = () => {
   };
 
   const handleEdit = async () => {
-    if (!editTrigger) return;
+    if (!editTrigger) {
+      return;
+    }
     setEditSaving(true);
     try {
       await api.updateTrigger(editTrigger.triggerid, {
@@ -255,7 +562,7 @@ export const Triggers = () => {
   };
 
   const filtered = triggers.filter((t) => {
-    const words = search.toLowerCase().split(/\s+/).filter(Boolean);
+    const words = search.toLowerCase().split(WHITESPACE_RE).filter(Boolean);
     const desc = t.description.toLowerCase();
     const expr = t.expression.toLowerCase();
     return words.length === 0 || words.every((w) => desc.includes(w) || expr.includes(w));
@@ -264,9 +571,7 @@ export const Triggers = () => {
   return (
     <Stack spacing={3}>
       <Box>
-        <Typography variant="h5" sx={{ fontWeight: 700 }}>
-          Triggers
-        </Typography>
+        <Typography variant="subtitle1">Triggers</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
           Manage and monitor Zabbix triggers across all hosts.
         </Typography>
@@ -362,13 +667,7 @@ export const Triggers = () => {
             )}
 
             {/* Triggers table */}
-            {!selectedHost ? (
-              <Box sx={{ py: 6, textAlign: "center" }}>
-                <Typography variant="body2" color="text.secondary">
-                  Select a host to view its triggers.
-                </Typography>
-              </Box>
-            ) : (
+            {selectedHost ? (
               <>
                 <TableContainer sx={{ maxHeight: 520 }}>
                   <Table size="small" stickyHeader>
@@ -398,261 +697,18 @@ export const Triggers = () => {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {loading ? (
-                        Array.from({ length: 5 }).map((_, i) => (
-                          // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length anonymous skeleton placeholders, never reordered
-                          <TableRow key={i}>
-                            {Array.from({ length: 7 }).map((__, j) => (
-                              // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length anonymous skeleton placeholders, never reordered
-                              <TableCell key={j}>
-                                <Skeleton variant="text" />
-                              </TableCell>
-                            ))}
-                          </TableRow>
-                        ))
-                      ) : filtered.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
-                            <Typography variant="body2" color="text.secondary">
-                              {triggers.length === 0
-                                ? "No triggers found for this host."
-                                : "No triggers match the search."}
-                            </Typography>
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        filtered.map((t) => {
-                          const isExpanded = expandedTriggerId === t.triggerid;
-                          const severity =
-                            SEVERITY_CONFIG.find((s) => s.severity === t.priority) ??
-                            SEVERITY_CONFIG[0];
-                          return (
-                            <React.Fragment key={t.triggerid}>
-                              <TableRow
-                                hover
-                                onClick={() =>
-                                  setExpandedTriggerId(isExpanded ? null : t.triggerid)
-                                }
-                                sx={{ cursor: "pointer" }}
-                              >
-                                {/* Expand arrow */}
-                                <TableCell sx={{ width: 28, pr: 0 }}>
-                                  <IconButton size="small" sx={{ p: 0.25 }}>
-                                    {isExpanded ? (
-                                      <KeyboardArrowDownIcon sx={{ fontSize: 16 }} />
-                                    ) : (
-                                      <KeyboardArrowRightIcon sx={{ fontSize: 16 }} />
-                                    )}
-                                  </IconButton>
-                                </TableCell>
-                                <TableCell>
-                                  <Typography variant="body2">{t.description}</Typography>
-                                </TableCell>
-                                <TableCell sx={{ maxWidth: 300 }}>
-                                  <Typography
-                                    variant="body2"
-                                    sx={{
-                                      fontFamily: "monospace",
-                                      fontSize: "0.7rem",
-                                      color: "text.secondary",
-                                      whiteSpace: "nowrap",
-                                      overflow: "hidden",
-                                      textOverflow: "ellipsis",
-                                    }}
-                                  >
-                                    {t.expression}
-                                  </Typography>
-                                </TableCell>
-                                <TableCell>
-                                  <SeverityChip priority={t.priority} />
-                                </TableCell>
-                                <TableCell>
-                                  {hostAvailable === "2" ? (
-                                    <Tooltip
-                                      title="Host agent is unreachable — this state is stale and may be incorrect"
-                                      placement="top"
-                                    >
-                                      <Chip
-                                        label="No data"
-                                        size="small"
-                                        variant="filled"
-                                        sx={{
-                                          height: 18,
-                                          fontSize: "0.65rem",
-                                          fontWeight: 700,
-                                          bgcolor: "#78716C",
-                                          color: "#fff",
-                                        }}
-                                      />
-                                    </Tooltip>
-                                  ) : (
-                                    <Tooltip
-                                      title={
-                                        t.lastchange
-                                          ? `Since ${timeAgo(t.lastchange)}`
-                                          : "No state change recorded"
-                                      }
-                                      placement="top"
-                                    >
-                                      <Chip
-                                        label={t.value === 1 ? "PROBLEM" : "OK"}
-                                        size="small"
-                                        variant="filled"
-                                        sx={{
-                                          height: 18,
-                                          fontSize: "0.65rem",
-                                          fontWeight: 700,
-                                          bgcolor: t.value === 1 ? "error.main" : "success.main",
-                                          color: "#fff",
-                                        }}
-                                      />
-                                    </Tooltip>
-                                  )}
-                                </TableCell>
-                                <TableCell>
-                                  <Chip
-                                    label={t.status === 0 ? "Enabled" : "Disabled"}
-                                    size="small"
-                                    color={t.status === 0 ? "success" : "default"}
-                                    variant="outlined"
-                                    sx={{ height: 18, fontSize: "0.65rem" }}
-                                  />
-                                </TableCell>
-                                <TableCell>
-                                  <Stack direction="row" spacing={0.5}>
-                                    <Tooltip title="Edit trigger">
-                                      <IconButton
-                                        size="small"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          openEdit(t);
-                                        }}
-                                      >
-                                        <EditOutlinedIcon fontSize="small" />
-                                      </IconButton>
-                                    </Tooltip>
-                                    <Tooltip title="Delete trigger">
-                                      <IconButton
-                                        size="small"
-                                        color="error"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setConfirmDeleteTrigger(t);
-                                        }}
-                                      >
-                                        <DeleteOutlineIcon fontSize="small" />
-                                      </IconButton>
-                                    </Tooltip>
-                                  </Stack>
-                                </TableCell>
-                              </TableRow>
-
-                              {/* Expanded detail row */}
-                              <TableRow key={`${t.triggerid}-detail`}>
-                                <TableCell
-                                  colSpan={7}
-                                  sx={{ py: 0, border: isExpanded ? undefined : "none" }}
-                                >
-                                  <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                                    <Box
-                                      sx={{
-                                        px: 3,
-                                        py: 1.5,
-                                        bgcolor: "action.hover",
-                                        borderRadius: 1,
-                                        my: 0.5,
-                                      }}
-                                    >
-                                      <Typography
-                                        variant="caption"
-                                        sx={{
-                                          fontWeight: 700,
-                                          color: "text.secondary",
-                                          textTransform: "uppercase",
-                                          letterSpacing: "0.07em",
-                                          fontSize: "0.6rem",
-                                        }}
-                                      >
-                                        Trigger details
-                                      </Typography>
-                                      <Box
-                                        sx={{ display: "flex", gap: 4, mt: 0.75, flexWrap: "wrap" }}
-                                      >
-                                        <Box>
-                                          <Typography variant="caption" color="text.disabled">
-                                            Severity
-                                          </Typography>
-                                          <Typography
-                                            variant="body2"
-                                            sx={{
-                                              fontSize: "0.8rem",
-                                              color: severity.color,
-                                              fontWeight: 600,
-                                            }}
-                                          >
-                                            {severity.label}
-                                          </Typography>
-                                        </Box>
-                                        <Box>
-                                          <Typography variant="caption" color="text.disabled">
-                                            Last state change
-                                          </Typography>
-                                          <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
-                                            {t.lastchange
-                                              ? new Date(t.lastchange * 1000).toLocaleString()
-                                              : "Never"}
-                                          </Typography>
-                                        </Box>
-                                        <Box>
-                                          <Typography variant="caption" color="text.disabled">
-                                            State
-                                          </Typography>
-                                          <Typography
-                                            variant="body2"
-                                            sx={{
-                                              fontSize: "0.8rem",
-                                              fontWeight: 600,
-                                              color: t.value === 1 ? "error.main" : "success.main",
-                                            }}
-                                          >
-                                            {t.value === 1 ? "PROBLEM" : "OK"}
-                                          </Typography>
-                                        </Box>
-                                      </Box>
-                                      <Box
-                                        sx={{
-                                          mt: 1,
-                                          px: 1.5,
-                                          py: 0.75,
-                                          bgcolor: "background.paper",
-                                          borderRadius: 1,
-                                          borderLeft: "3px solid",
-                                          borderColor: "divider",
-                                        }}
-                                      >
-                                        <Typography variant="caption" color="text.disabled">
-                                          Expression
-                                        </Typography>
-                                        <Typography
-                                          variant="body2"
-                                          sx={{
-                                            fontFamily: "monospace",
-                                            fontSize: "0.78rem",
-                                            wordBreak: "break-all",
-                                            mt: 0.25,
-                                          }}
-                                        >
-                                          {t.expression}
-                                        </Typography>
-                                      </Box>
-                                    </Box>
-                                  </Collapse>
-                                </TableCell>
-                              </TableRow>
-                            </React.Fragment>
-                          );
-                        })
-                      )}
+                      <TriggerTableBody
+                        loading={loading}
+                        filtered={filtered}
+                        totalCount={triggers.length}
+                        expandedTriggerId={expandedTriggerId}
+                        hostAvailable={hostAvailable}
+                        onToggleExpand={(id) =>
+                          setExpandedTriggerId(expandedTriggerId === id ? null : id)
+                        }
+                        onEdit={openEdit}
+                        onDeleteRequest={setConfirmDeleteTrigger}
+                      />
                     </TableBody>
                   </Table>
                 </TableContainer>
@@ -662,6 +718,12 @@ export const Triggers = () => {
                     : `${filtered.length} of ${triggers.length} trigger${triggers.length !== 1 ? "s" : ""}`}
                 </Typography>
               </>
+            ) : (
+              <Box sx={{ py: 6, textAlign: "center" }}>
+                <Typography variant="body2" color="text.secondary">
+                  Select a host to view its triggers.
+                </Typography>
+              </Box>
             )}
           </Stack>
         </CardContent>
@@ -697,7 +759,9 @@ export const Triggers = () => {
         saving={saving}
         onItemSelected={(item) => {
           setFormItemValueType(item.value_type);
-          if (!formName) setFormName(`${item.name} alert`);
+          if (!formName) {
+            setFormName(`${item.name} alert`);
+          }
         }}
         onAdd={() => void handleAdd()}
       />

@@ -44,7 +44,9 @@ export const AddMetricDialog = ({
   const [itemSearch, setItemSearch] = useState("");
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
     api.listHosts().then((res) => setHosts(res.hosts));
     setSelectedHost("");
     setItems([]);
@@ -52,7 +54,9 @@ export const AddMetricDialog = ({
   }, [open]);
 
   useEffect(() => {
-    if (!selectedHost) return;
+    if (!selectedHost) {
+      return;
+    }
     setItemsLoading(true);
     setItems([]);
     setItemSearch("");
@@ -99,76 +103,81 @@ export const AddMetricDialog = ({
           </FormControl>
         </Box>
         <Divider />
-        {!selectedHost ? (
+        {selectedHost ? (
+          itemsLoading ? (
+            <Box sx={{ p: 2 }}>
+              {Array.from({ length: 4 }).map((_, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: skeleton
+                <Skeleton key={i} variant="text" height={48} sx={{ mb: 0.5 }} />
+              ))}
+            </Box>
+          ) : (
+            <>
+              <Box sx={{ p: 2, pb: 1 }}>
+                <TextField
+                  size="small"
+                  fullWidth
+                  placeholder="Search items…"
+                  value={itemSearch}
+                  onChange={(e) => setItemSearch(e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <ShowChartOutlinedIcon sx={{ fontSize: 16, color: "text.disabled" }} />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Box>
+              <Divider />
+              {filteredItems.length === 0 ? (
+                <Box sx={{ py: 6, textAlign: "center" }}>
+                  <Typography color="text.secondary" variant="body2">
+                    {itemSearch ? "No items match your search" : "No numeric items on this host"}
+                  </Typography>
+                </Box>
+              ) : (
+                <List dense sx={{ maxHeight: 360, overflowY: "auto" }}>
+                  {filteredItems.map((item) => {
+                    const added = existingIds.includes(item.itemid);
+                    return (
+                      <ListItem key={item.itemid} sx={{ opacity: added ? 0.45 : 1 }}>
+                        <ListItemText
+                          primary={item.name}
+                          secondary={item.key_}
+                          primaryTypographyProps={{ fontSize: "0.82rem", fontWeight: 500 }}
+                          secondaryTypographyProps={{
+                            fontSize: "0.72rem",
+                            fontFamily: "monospace",
+                          }}
+                        />
+                        <ListItemSecondaryAction>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            disabled={added}
+                            onClick={() => {
+                              onAdd(selectedHost, item);
+                              onClose();
+                            }}
+                            sx={{ fontSize: "0.72rem", minWidth: 60 }}
+                          >
+                            {added ? "Added" : "Add"}
+                          </Button>
+                        </ListItemSecondaryAction>
+                      </ListItem>
+                    );
+                  })}
+                </List>
+              )}
+            </>
+          )
+        ) : (
           <Box sx={{ py: 6, textAlign: "center" }}>
             <Typography color="text.secondary" variant="body2">
               Select a host to see its items
             </Typography>
           </Box>
-        ) : itemsLoading ? (
-          <Box sx={{ p: 2 }}>
-            {Array.from({ length: 4 }).map((_, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: skeleton
-              <Skeleton key={i} variant="text" height={48} sx={{ mb: 0.5 }} />
-            ))}
-          </Box>
-        ) : (
-          <>
-            <Box sx={{ p: 2, pb: 1 }}>
-              <TextField
-                size="small"
-                fullWidth
-                placeholder="Search items…"
-                value={itemSearch}
-                onChange={(e) => setItemSearch(e.target.value)}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <ShowChartOutlinedIcon sx={{ fontSize: 16, color: "text.disabled" }} />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-            </Box>
-            <Divider />
-            {filteredItems.length === 0 ? (
-              <Box sx={{ py: 6, textAlign: "center" }}>
-                <Typography color="text.secondary" variant="body2">
-                  {itemSearch ? "No items match your search" : "No numeric items on this host"}
-                </Typography>
-              </Box>
-            ) : (
-              <List dense sx={{ maxHeight: 360, overflowY: "auto" }}>
-                {filteredItems.map((item) => {
-                  const added = existingIds.includes(item.itemid);
-                  return (
-                    <ListItem key={item.itemid} sx={{ opacity: added ? 0.45 : 1 }}>
-                      <ListItemText
-                        primary={item.name}
-                        secondary={item.key_}
-                        primaryTypographyProps={{ fontSize: "0.82rem", fontWeight: 500 }}
-                        secondaryTypographyProps={{ fontSize: "0.72rem", fontFamily: "monospace" }}
-                      />
-                      <ListItemSecondaryAction>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          disabled={added}
-                          onClick={() => {
-                            onAdd(selectedHost, item);
-                            onClose();
-                          }}
-                          sx={{ fontSize: "0.72rem", minWidth: 60 }}
-                        >
-                          {added ? "Added" : "Add"}
-                        </Button>
-                      </ListItemSecondaryAction>
-                    </ListItem>
-                  );
-                })}
-              </List>
-            )}
-          </>
         )}
       </DialogContent>
     </Dialog>

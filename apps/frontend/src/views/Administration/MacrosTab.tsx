@@ -57,7 +57,9 @@ export const MacrosTab = ({
 
   const load = useCallback(
     async (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       try {
         const r = await api.listMacros();
         setItems(r.macros);
@@ -75,7 +77,9 @@ export const MacrosTab = ({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
   useEffect(() => {
-    if (tick > 0) void load(true);
+    if (tick > 0) {
+      void load(true);
+    }
   }, [tick]);
 
   const onSave = async () => {
@@ -99,7 +103,9 @@ export const MacrosTab = ({
     }
   };
   const onDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget) {
+      return;
+    }
     try {
       await api.deleteMacro(deleteTarget.globalmacroid);
       showToast("Macro deleted.", "success");

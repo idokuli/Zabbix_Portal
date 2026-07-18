@@ -24,9 +24,7 @@ def trigger_sync(current_user: dict = Depends(require_root)):
     return {"message": "Sync complete."}
 
 
-@router.get(
-    "/sync/debug/{team_name}", tags=["Status"], summary="Show Zabbix state for a team"
-)
+@router.get("/sync/debug/{team_name}", tags=["Status"], summary="Show Zabbix state for a team")
 def debug_team_sync(team_name: str, current_user: dict = Depends(require_root)):
     """Returns the Zabbix user group, host group, permissions, and hosts for a team."""
     if not sync_bot.zapi:
@@ -78,7 +76,7 @@ async def sse_events(request: Request, current_user: dict = Depends(get_current_
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=25.0)
                     yield f"data: {event}\n\n"
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     yield ": keepalive\n\n"
         finally:
             with sync_lock:

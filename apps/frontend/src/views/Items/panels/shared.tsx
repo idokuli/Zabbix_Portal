@@ -96,7 +96,7 @@ export const MultiHostSelect = ({
       <TextField
         {...params}
         label={label}
-        placeholder={value.length ? "" : "Select hosts…"}
+        placeholder={value.length > 0 ? "" : "Select hosts…"}
         InputProps={{
           ...params.InputProps,
           endAdornment: (
@@ -360,7 +360,7 @@ export const useCommonItemState = () => {
     const parts = customIntervals
       .filter((ci) => (ci.type === "scheduling" ? ci.interval : ci.interval && ci.period))
       .map((ci) => (ci.type === "flexible" ? `${ci.interval}/${ci.period}` : ci.interval));
-    return parts.length ? `${delay};${parts.join(";")}` : delay;
+    return parts.length > 0 ? `${delay};${parts.join(";")}` : delay;
   };
 
   const reset = () => {
@@ -445,7 +445,9 @@ export const InlineItemsList = ({
   skip = false,
 }: { hostname: string; skip?: boolean }) => {
   const { items, loading } = useInlineItems(hostname, skip);
-  if (!hostname || skip) return null;
+  if (!hostname || skip) {
+    return null;
+  }
   return (
     <Box>
       <Divider sx={{ mb: 1 }} />

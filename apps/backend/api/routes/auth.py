@@ -5,7 +5,7 @@ from Auth import create_token, get_current_user, hash_password, verify_password
 import User_Management as um
 from api.limiter import limiter
 from api.schemas import LoginRequest
-from ldap_auth import LdapUserNotFound, authenticate_ldap, is_ldap_enabled
+from ldap_auth import LdapUserNotFoundError, authenticate_ldap, is_ldap_enabled
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Auth"])
@@ -23,30 +23,22 @@ def login(request: Request, data: LoginRequest):
     ldap_display_name: str = ""
     if not user and ldap_on:
         try:
-            ldap_authenticated, ldap_display_name = authenticate_ldap(
-                data.username, data.password
-            )
-        except LdapUserNotFound:
+            ldap_authenticated, ldap_display_name = authenticate_ldap(data.username, data.password)
+        except LdapUserNotFoundError:
             ldap_authenticated = False
         except RuntimeError as e:
-            raise HTTPException(
-                status_code=503, detail=f"LDAP configuration error: {e}"
-            )
+            raise HTTPException(status_code=503, detail=f"LDAP configuration error: {e}") from e
 
         if ldap_authenticated:
             user = um.create_user(
                 username=data.username,
-                password_hash=hash_password(
-                    secrets.token_hex(32)
-                ),  # unusable local password
+                password_hash=hash_password(secrets.token_hex(32)),  # unusable local password
                 roles=["operator"],
                 source="ldap",
                 display_name=ldap_display_name,
             )
             if not user:
-                raise HTTPException(
-                    status_code=500, detail="Failed to provision user account."
-                )
+                raise HTTPException(status_code=500, detail="Failed to provision user account.")
             logger.info(
                 "JIT-provisioned LDAP user %r (display_name=%r) with roles=['operator'].",
                 data.username,
@@ -57,9 +49,7 @@ def login(request: Request, data: LoginRequest):
             raise HTTPException(status_code=401, detail="Invalid username or password.")
 
     if not user:
-        logger.warning(
-            "Failed login attempt for username %r from %s.", data.username, client_ip
-        )
+        logger.warning("Failed login attempt for username %r from %s.", data.username, client_ip)
         raise HTTPException(status_code=401, detail="Invalid username or password.")
 
     # root always uses internal auth — prevents LDAP misconfiguration from locking out the admin.
@@ -72,26 +62,20 @@ def login(request: Request, data: LoginRequest):
         authenticated = ldap_authenticated
     elif ldap_on and not is_root:
         try:
-            authenticated, ldap_display_name = authenticate_ldap(
-                data.username, data.password
-            )
-        except LdapUserNotFound:
+            authenticated, ldap_display_name = authenticate_ldap(data.username, data.password)
+        except LdapUserNotFoundError:
             logger.info(
                 "User %r not in LDAP directory, falling back to local auth.",
                 data.username,
             )
             authenticated = verify_password(data.password, user["password_hash"])
         except RuntimeError as e:
-            raise HTTPException(
-                status_code=503, detail=f"LDAP configuration error: {e}"
-            )
+            raise HTTPException(status_code=503, detail=f"LDAP configuration error: {e}") from e
     else:
         authenticated = verify_password(data.password, user["password_hash"])
 
     if not authenticated:
-        logger.warning(
-            "Failed login attempt for username %r from %s.", data.username, client_ip
-        )
+        logger.warning("Failed login attempt for username %r from %s.", data.username, client_ip)
         raise HTTPException(status_code=401, detail="Invalid username or password.")
 
     # Use the freshest display_name: from this login's LDAP response, or whatever is stored in DB.

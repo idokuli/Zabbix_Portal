@@ -9,17 +9,25 @@ import {
 } from "../../lib/soundLibrary";
 import { DEFAULT_SOUND_PRESET, SOUND_PRESETS, playAlertSound } from "./alertSounds";
 
+const FILE_EXTENSION_RE = /\.[^.]+$/;
+
 export const useSoundSettings = () => {
   const [soundEnabled, setSoundEnabled] = useState(() => {
-    if (typeof window === "undefined") return true;
+    if (typeof window === "undefined") {
+      return true;
+    }
     return localStorage.getItem("alertSound") !== "false";
   });
   const [desktopNotifEnabled, setDesktopNotifEnabled] = useState(() => {
-    if (typeof window === "undefined" || !("Notification" in window)) return false;
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      return false;
+    }
     return localStorage.getItem("desktopNotif") === "true" && Notification.permission === "granted";
   });
   const [soundPreset, setSoundPreset] = useState(() => {
-    if (typeof window === "undefined") return DEFAULT_SOUND_PRESET;
+    if (typeof window === "undefined") {
+      return DEFAULT_SOUND_PRESET;
+    }
     return localStorage.getItem("alertSoundPreset") ?? DEFAULT_SOUND_PRESET;
   });
   const [customSounds, setCustomSounds] = useState<CustomSound[]>([]);
@@ -38,9 +46,15 @@ export const useSoundSettings = () => {
   desktopNotifRef.current = desktopNotifEnabled;
 
   const showDesktopNotification = useCallback((title: string, body: string) => {
-    if (!desktopNotifRef.current) return;
-    if (typeof window === "undefined" || !("Notification" in window)) return;
-    if (Notification.permission !== "granted") return;
+    if (!desktopNotifRef.current) {
+      return;
+    }
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      return;
+    }
+    if (Notification.permission !== "granted") {
+      return;
+    }
     try {
       const n = new Notification(title, { body, icon: "/favicon.svg", tag: title });
       n.onclick = () => {
@@ -53,7 +67,9 @@ export const useSoundSettings = () => {
   }, []);
 
   const toggleDesktopNotif = useCallback(() => {
-    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      return;
+    }
     if (desktopNotifEnabled) {
       setDesktopNotifEnabled(false);
       localStorage.setItem("desktopNotif", "false");
@@ -64,7 +80,9 @@ export const useSoundSettings = () => {
       localStorage.setItem("desktopNotif", "true");
       return;
     }
-    if (Notification.permission === "denied") return;
+    if (Notification.permission === "denied") {
+      return;
+    }
     void Notification.requestPermission().then((perm) => {
       if (perm === "granted") {
         setDesktopNotifEnabled(true);
@@ -182,8 +200,10 @@ export const useSoundSettings = () => {
 
   const handleCustomFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    const name = file.name.replace(/\.[^.]+$/, "");
+    if (!file) {
+      return;
+    }
+    const name = file.name.replace(FILE_EXTENSION_RE, "");
     addSound(name, file)
       .then((id) => {
         reloadCustomSounds();

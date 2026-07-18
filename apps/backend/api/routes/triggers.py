@@ -7,9 +7,7 @@ from api.schemas import BulkTriggerRequest, TriggerRequest, TriggerUpdateRequest
 router = APIRouter(tags=["Triggers"])
 
 
-@router.get(
-    "/triggers", tags=["Triggers"], summary="List all triggers across all hosts"
-)
+@router.get("/triggers", tags=["Triggers"], summary="List all triggers across all hosts")
 def list_all_triggers(
     search: str = Query(default=""),
     hostname: str = Query(default=""),
@@ -18,19 +16,15 @@ def list_all_triggers(
 ):
     allowed = team_hostname_filter(current_user)
     try:
-        triggers = item_bot.list_all_triggers(
-            search=search, hostname=hostname, limit=limit
-        )
+        triggers = item_bot.list_all_triggers(search=search, hostname=hostname, limit=limit)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=zabbix_err(e))
+        raise HTTPException(status_code=502, detail=zabbix_err(e)) from e
     if allowed is not None:
         triggers = [t for t in triggers if t["hostname"] in allowed]
     return {"triggers": triggers, "total": len(triggers)}
 
 
-@router.get(
-    "/triggers/{hostname}", tags=["Triggers"], summary="List triggers for a host"
-)
+@router.get("/triggers/{hostname}", tags=["Triggers"], summary="List triggers for a host")
 def list_triggers(hostname: str, current_user: dict = Depends(get_current_user)):
     allowed = team_hostname_filter(current_user)
     if allowed is not None and hostname not in allowed:
@@ -39,21 +33,15 @@ def list_triggers(hostname: str, current_user: dict = Depends(get_current_user))
     return {"triggers": triggers, "host_available": host_available}
 
 
-@router.delete(
-    "/triggers/{triggerid}", tags=["Triggers"], summary="Delete trigger by ID"
-)
+@router.delete("/triggers/{triggerid}", tags=["Triggers"], summary="Delete trigger by ID")
 def delete_trigger(triggerid: str, current_user: dict = Depends(require_operator)):
     allowed = team_hostname_filter(current_user)
     if allowed is not None:
         hostname = item_bot.get_trigger_hostname(triggerid)
         if not hostname or hostname not in allowed:
-            raise HTTPException(
-                status_code=403, detail="Trigger not assigned to your team."
-            )
+            raise HTTPException(status_code=403, detail="Trigger not assigned to your team.")
     if not item_bot.delete_trigger(triggerid):
-        raise HTTPException(
-            status_code=404, detail="Trigger not found or could not be deleted."
-        )
+        raise HTTPException(status_code=404, detail="Trigger not found or could not be deleted.")
     return {"message": "Trigger deleted."}
 
 
@@ -71,9 +59,7 @@ def update_trigger(
     if allowed is not None:
         hostname = item_bot.get_trigger_hostname(triggerid)
         if not hostname or hostname not in allowed:
-            raise HTTPException(
-                status_code=403, detail="Trigger not assigned to your team."
-            )
+            raise HTTPException(status_code=403, detail="Trigger not assigned to your team.")
     try:
         item_bot.update_trigger(
             triggerid,
@@ -85,13 +71,11 @@ def update_trigger(
             comments=data.comments,
         )
     except Exception as e:
-        raise HTTPException(status_code=400, detail=zabbix_err(e))
+        raise HTTPException(status_code=400, detail=zabbix_err(e)) from e
     return {"message": "Trigger updated."}
 
 
-@router.post(
-    "/triggers", tags=["Triggers"], summary="Add Trigger to Item", status_code=201
-)
+@router.post("/triggers", tags=["Triggers"], summary="Add Trigger to Item", status_code=201)
 def add_trigger(data: TriggerRequest, current_user: dict = Depends(require_operator)):
     """Adds a trigger to an existing host item."""
     if data.string_pattern is not None:
@@ -131,9 +115,7 @@ def add_trigger(data: TriggerRequest, current_user: dict = Depends(require_opera
     summary="Bulk Add Trigger to Multiple Hosts",
     status_code=201,
 )
-def bulk_add_triggers(
-    data: BulkTriggerRequest, current_user: dict = Depends(require_operator)
-):
+def bulk_add_triggers(data: BulkTriggerRequest, current_user: dict = Depends(require_operator)):
     """Adds the same trigger to multiple hosts in one call."""
     if not data.hostnames:
         raise HTTPException(status_code=400, detail="hostnames list is empty.")

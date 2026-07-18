@@ -50,7 +50,9 @@ export const HousekeepingTab = ({
 
   const load = useCallback(
     async (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       try {
         const s = await api.getAdminSettings();
         setSettings(s);
@@ -69,12 +71,16 @@ export const HousekeepingTab = ({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
   useEffect(() => {
-    if (tick > 0) void load(true);
+    if (tick > 0) {
+      void load(true);
+    }
   }, [tick]);
 
   const current = (key: string) => edited[key] ?? settings[key] ?? "";
   const onSave = async () => {
-    if (!Object.keys(edited).length) return;
+    if (Object.keys(edited).length === 0) {
+      return;
+    }
     setSaving(true);
     try {
       await api.updateHousekeeping(edited);
@@ -113,7 +119,7 @@ export const HousekeepingTab = ({
             size="small"
             variant="contained"
             onClick={onSave}
-            disabled={saving || !Object.keys(edited).length}
+            disabled={saving || Object.keys(edited).length === 0}
           >
             {saving ? <CircularProgress size={14} /> : "Save changes"}
           </Button>

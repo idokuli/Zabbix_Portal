@@ -50,8 +50,8 @@ class Dashboard_Manager(Zabbix_Base):
             if resp.status_code == 200:
                 self._web_session = session
                 return session
-        except Exception as e:
-            logger.error("Zabbix web login failed: %r", e)
+        except Exception:
+            logger.exception("Zabbix web login failed")
         return None
 
     def _web(self) -> _req.Session | None:
@@ -79,8 +79,8 @@ class Dashboard_Manager(Zabbix_Base):
                 if hosts:
                     g["name"] = f"{g['name']} ({hosts})"
             return graphs
-        except Exception as e:
-            logger.error("get_graphs failed: %r", e)
+        except Exception:
+            logger.exception("get_graphs failed")
             return []
 
     # ── Native graph image proxy ──────────────────────────────────────
@@ -110,8 +110,8 @@ class Dashboard_Manager(Zabbix_Base):
                 ct = resp.headers.get("Content-Type", "")
                 if resp.status_code == 200 and "image" in ct:
                     return resp.content
-            except Exception as e:
-                logger.error("chart2.php request failed: %r", e)
+            except Exception:
+                logger.exception("chart2.php request failed")
             return None
 
         session = self._web()
@@ -144,9 +144,7 @@ class Dashboard_Manager(Zabbix_Base):
                 sortfield="clock",
                 sortorder="ASC",
             )
-            return [
-                {"clock": int(r["clock"]), "value": float(r["value_avg"])} for r in raw
-            ]
+            return [{"clock": int(r["clock"]), "value": float(r["value_avg"])} for r in raw]
         raw = self.zapi.history.get(
             itemids=[itemid],
             history=vtype,
@@ -157,10 +155,7 @@ class Dashboard_Manager(Zabbix_Base):
             sortorder="DESC",
             limit=5000,
         )
-        return [
-            {"clock": int(r["clock"]), "value": float(r["value"])}
-            for r in reversed(raw)
-        ]
+        return [{"clock": int(r["clock"]), "value": float(r["value"])} for r in reversed(raw)]
 
     def get_graph_data(self, graphid: str, minutes: int = 360) -> dict:
         """Return history series for every numeric item in a graph."""
@@ -175,9 +170,7 @@ class Dashboard_Manager(Zabbix_Base):
             if not graphs:
                 return {"graph": {}, "series": []}
             graph = graphs[0]
-            gitems = sorted(
-                graph.get("gitems", []), key=lambda x: int(x.get("sortorder", 0))
-            )
+            gitems = sorted(graph.get("gitems", []), key=lambda x: int(x.get("sortorder", 0)))
             if not gitems:
                 return {
                     "graph": {"graphid": graph["graphid"], "name": graph["name"]},
@@ -205,10 +198,8 @@ class Dashboard_Manager(Zabbix_Base):
                     points = self._fetch_series_points(
                         gi["itemid"], vtype, time_from, time_till, minutes
                     )
-                except Exception as exc:
-                    logger.error(
-                        "history.get failed for item %s: %r", gi["itemid"], exc
-                    )
+                except Exception:
+                    logger.exception("history.get failed for item %s", gi["itemid"])
                     continue
                 color = gi.get("color", "3B82F6")
                 if color and not color.startswith("#"):
@@ -226,8 +217,8 @@ class Dashboard_Manager(Zabbix_Base):
                 "graph": {"graphid": graph["graphid"], "name": graph["name"]},
                 "series": series,
             }
-        except Exception as e:
-            logger.error("get_graph_data failed: %r", e)
+        except Exception:
+            logger.exception("get_graph_data failed")
             return {"graph": {}, "series": []}
 
     # ── All-hosts metrics overview ────────────────────────────────────
@@ -290,8 +281,8 @@ class Dashboard_Manager(Zabbix_Base):
 
                 result.append(entry)
             return result
-        except Exception as e:
-            logger.error("get_hosts_metrics failed: %r", e)
+        except Exception:
+            logger.exception("get_hosts_metrics failed")
             return []
 
     # ── Recently created items ─────────────────────────────────────────
@@ -330,13 +321,11 @@ class Dashboard_Manager(Zabbix_Base):
                         "delay": item["delay"],
                         "lastvalue": item.get("lastvalue", ""),
                         "units": item.get("units", ""),
-                        "lastclock": int(item["lastclock"])
-                        if item.get("lastclock")
-                        else None,
+                        "lastclock": int(item["lastclock"]) if item.get("lastclock") else None,
                         "hostname": hosts[0]["host"] if hosts else "Unknown",
                     }
                 )
             return result
-        except Exception as e:
-            logger.error("get_recent_items failed: %r", e)
+        except Exception:
+            logger.exception("get_recent_items failed")
             return []

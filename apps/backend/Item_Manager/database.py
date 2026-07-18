@@ -2,7 +2,8 @@
 
 import logging
 from Zabbix_Base import zabbix_err
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
+from collections.abc import Callable
 
 if TYPE_CHECKING:
     from zabbix_utils import ZabbixAPI
@@ -150,15 +151,11 @@ class DatabaseItemsMixin:
         if not dsn or not sql_query or not description:
             return None, "DSN, description, and SQL query are all required."
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found."
             host_id = host_data[0]["hostid"]
-            safe_desc = (
-                description.replace(",", "_").replace("]", "_").replace("[", "_")
-            )
+            safe_desc = description.replace(",", "_").replace("]", "_").replace("[", "_")
             item_key = f"db.odbc.select[{safe_desc},{dsn}]"
             if not item_name:
                 item_name = f"ODBC: {description} on {hostname}"
@@ -186,12 +183,10 @@ class DatabaseItemsMixin:
                 kwargs["tags"] = [{"tag": "team", "value": team_name}]
             result = self.zapi.item.create(**kwargs)
             item_id = result["itemids"][0]
-            logger.info(
-                "ODBC item %r added to %r (ID: %s).", item_name, hostname, item_id
-            )
+            logger.info("ODBC item %r added to %r (ID: %s).", item_name, hostname, item_id)
             return item_id, None
         except Exception as e:
-            logger.error("add_db_odbc_item(%r) failed: %r", hostname, e)
+            logger.exception("add_db_odbc_item(%r) failed", hostname)
             return None, zabbix_err(e)
 
     def add_db_agent2_item(

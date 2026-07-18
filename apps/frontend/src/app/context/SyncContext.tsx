@@ -9,6 +9,23 @@ const SyncContext = createContext<SyncContextValue>({ lastSync: 0 });
 
 export const useSync = () => useContext(SyncContext);
 
+const readSyncStream = async (
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  isCancelled: () => boolean,
+  onSync: () => void,
+) => {
+  const decoder = new TextDecoder();
+  while (!isCancelled()) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+    if (decoder.decode(value).includes("data: sync")) {
+      onSync();
+    }
+  }
+};
+
 export const SyncProvider = ({ children }: PropsWithChildren) => {
   const [lastSync, setLastSync] = useState(0);
 
@@ -18,24 +35,26 @@ export const SyncProvider = ({ children }: PropsWithChildren) => {
 
     const connect = async () => {
       const token = getToken();
-      if (!token) return;
+      if (!token) {
+        return;
+      }
       try {
         const res = await fetch("/api/events", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok || !res.body) return;
-        reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        while (!cancelled) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          const text = decoder.decode(value);
-          if (text.includes("data: sync")) {
-            setLastSync(Date.now());
-          }
+        if (!(res.ok && res.body)) {
+          return;
         }
+        reader = res.body.getReader();
+        await readSyncStream(
+          reader,
+          () => cancelled,
+          () => setLastSync(Date.now()),
+        );
       } catch {
-        if (!cancelled) setTimeout(() => void connect(), 3000);
+        if (!cancelled) {
+          setTimeout(() => void connect(), 3000);
+        }
       }
     };
 

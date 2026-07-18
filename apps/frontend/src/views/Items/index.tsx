@@ -67,7 +67,7 @@ import {
 } from "./panels/ServiceFilePanel";
 import { SnmpPanel, SnmpTrapPanel } from "./panels/SnmpPanel";
 import type { PanelProps } from "./panels/shared";
-import type { AllItem, ServerItemKey } from "./shared";
+import type { AllItem } from "./shared";
 
 type ItemType =
   | "agent"
@@ -314,23 +314,13 @@ const ITEM_TYPE_META: {
 const ItemPanel = ({
   itemType,
   panelProps,
-  serverItemKeys,
-  itemKeysLoading,
 }: {
   itemType: ItemType;
   panelProps: PanelProps;
-  serverItemKeys: ServerItemKey[];
-  itemKeysLoading: boolean;
 }) => {
   switch (itemType) {
     case "agent":
-      return (
-        <AgentItemPanel
-          {...panelProps}
-          serverItemKeys={serverItemKeys}
-          itemKeysLoading={itemKeysLoading}
-        />
-      );
+      return <AgentItemPanel {...panelProps} />;
     case "http":
       return <HttpItemPanel {...panelProps} />;
     case "service":
@@ -371,14 +361,187 @@ const ItemPanel = ({
       return <ZabbixScriptItemPanel {...panelProps} />;
     case "browser":
       return <BrowserItemPanel {...panelProps} />;
+    default:
+      return null;
   }
 };
+
+const WHITESPACE_RE = /\s+/;
+
+const matchesItemBrowseFilters = (
+  item: AllItem,
+  browseSearch: string,
+  browseHostFilter: string,
+) => {
+  const words = browseSearch.toLowerCase().split(WHITESPACE_RE).filter(Boolean);
+  const name = item.name.toLowerCase();
+  const key = item.key_.toLowerCase();
+  const matchesSearch =
+    words.length === 0 || words.every((w) => name.includes(w) || key.includes(w));
+  const matchesHost = !browseHostFilter || item.hostname === browseHostFilter;
+  return matchesSearch && matchesHost;
+};
+
+const TemplateItemsTab = ({
+  templateItemSearch,
+  onTemplateItemSearchChange,
+  templatesLoading,
+  selectedTemplateId,
+  onSelectedTemplateIdChange,
+  allTemplates,
+  onReload,
+  templateItemsLoading,
+  tplFiltered,
+  itemTypeNames,
+  valueTypeNames,
+  onEditItem,
+  onDeleteRequest,
+}: {
+  templateItemSearch: string;
+  onTemplateItemSearchChange: (v: string) => void;
+  templatesLoading: boolean;
+  selectedTemplateId: string;
+  onSelectedTemplateIdChange: (v: string) => void;
+  allTemplates: Array<{ templateid: string; name: string }>;
+  onReload: () => void;
+  templateItemsLoading: boolean;
+  tplFiltered: TemplateItem[];
+  itemTypeNames: Record<string, string>;
+  valueTypeNames: Record<string, string>;
+  onEditItem: (item: TemplateItem) => void;
+  onDeleteRequest: (item: TemplateItem) => void;
+}) => (
+  <Card>
+    <CardContent>
+      <Stack spacing={2}>
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <TextField
+            size="small"
+            placeholder="Search items…"
+            value={templateItemSearch}
+            onChange={(e) => onTemplateItemSearchChange(e.target.value)}
+            sx={{ flex: 1 }}
+          />
+          <FormControl size="small" sx={{ minWidth: 300 }}>
+            <InputLabel id="tpl-select-label">
+              {templatesLoading ? "Loading templates…" : "Template"}
+            </InputLabel>
+            <Select
+              labelId="tpl-select-label"
+              label={templatesLoading ? "Loading templates…" : "Template"}
+              value={selectedTemplateId}
+              onChange={(e) => onSelectedTemplateIdChange(e.target.value)}
+            >
+              {allTemplates.map((t) => (
+                <MenuItem key={t.templateid} value={t.templateid}>
+                  {t.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Tooltip title="Reload">
+            <IconButton onClick={onReload} disabled={!selectedTemplateId}>
+              <RouterIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+
+        {!selectedTemplateId && (
+          <Typography color="text.secondary" variant="body2">
+            Select a template to view its items.
+          </Typography>
+        )}
+
+        {templateItemsLoading && <CircularProgress size={24} />}
+
+        {!templateItemsLoading && selectedTemplateId && tplFiltered.length === 0 && (
+          <Typography color="text.secondary" variant="body2">
+            No items found on this template.
+          </Typography>
+        )}
+
+        {!templateItemsLoading && tplFiltered.length > 0 && (
+          <Box sx={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  {["Name", "Key", "Type", "Value type", "Interval", "Status", "Actions"].map(
+                    (h) => (
+                      <th
+                        key={h}
+                        style={{
+                          textAlign: "left",
+                          padding: "6px 10px",
+                          borderBottom: "1px solid rgba(128,128,128,0.2)",
+                          fontSize: 12,
+                          fontWeight: 600,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {h}
+                      </th>
+                    ),
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {tplFiltered.map((item) => (
+                  <tr key={item.itemid}>
+                    <td style={{ padding: "6px 10px", fontSize: 13 }}>{item.name}</td>
+                    <td
+                      style={{
+                        padding: "6px 10px",
+                        fontSize: 12,
+                        fontFamily: "monospace",
+                        color: "rgba(128,128,128,0.9)",
+                      }}
+                    >
+                      {item.key_}
+                    </td>
+                    <td style={{ padding: "6px 10px", fontSize: 12 }}>
+                      {itemTypeNames[item.type] ?? item.type}
+                    </td>
+                    <td style={{ padding: "6px 10px", fontSize: 12 }}>
+                      {valueTypeNames[item.value_type] ?? item.value_type}
+                    </td>
+                    <td style={{ padding: "6px 10px", fontSize: 12 }}>{item.delay}</td>
+                    <td style={{ padding: "6px 10px" }}>
+                      <Chip
+                        label={item.status === "0" ? "Enabled" : "Disabled"}
+                        size="small"
+                        color={item.status === "0" ? "success" : "default"}
+                      />
+                    </td>
+                    <td style={{ padding: "6px 4px", whiteSpace: "nowrap" }}>
+                      <Tooltip title="Edit">
+                        <IconButton size="small" onClick={() => onEditItem(item)}>
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete">
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => onDeleteRequest(item)}
+                        >
+                          <DeleteOutlineIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Box>
+        )}
+      </Stack>
+    </CardContent>
+  </Card>
+);
 
 export const Items = () => {
   const [hosts, setHosts] = useState<Host[]>([]);
   const [hostsLoading, setHostsLoading] = useState(true);
-  const [serverItemKeys, setServerItemKeys] = useState<ServerItemKey[]>([]);
-  const [itemKeysLoading, setItemKeysLoading] = useState(true);
 
   useEffect(() => {
     api
@@ -395,31 +558,6 @@ export const Items = () => {
   const [browseHostFilter, setBrowseHostFilter] = useState("");
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [addItemOpen, setAddItemOpen] = useState(false);
-
-  const openAddDialog = useCallback(() => {
-    setAddItemOpen(true);
-    if (serverItemKeys.length === 0) {
-      api
-        .listItemKeys()
-        .then((r) =>
-          setServerItemKeys(
-            r.items.map((i) => ({
-              key: i.key_,
-              name: i.name,
-              valueType: Number.parseInt(i.value_type, 10),
-              group: i.group,
-              delay: i.delay,
-              units: i.units,
-              history: i.history,
-              trends: i.trends,
-              description: i.description,
-            })),
-          ),
-        )
-        .catch(() => {})
-        .finally(() => setItemKeysLoading(false));
-    }
-  }, [serverItemKeys.length]);
 
   // ── Edit / delete state ───────────────────────────────────────────────
   const [confirmDeleteItem, setConfirmDeleteItem] = useState<AllItem | null>(null);
@@ -498,7 +636,9 @@ export const Items = () => {
   const [confirmDeleteTplItem, setConfirmDeleteTplItem] = useState<TemplateItem | null>(null);
 
   const loadAllTemplates = useCallback(() => {
-    if (allTemplates.length > 0) return;
+    if (allTemplates.length > 0) {
+      return;
+    }
     setTemplatesLoading(true);
     hostsApi
       .listTemplates()
@@ -508,7 +648,9 @@ export const Items = () => {
   }, [allTemplates.length]);
 
   const loadTemplateItems = useCallback((tid: string) => {
-    if (!tid) return;
+    if (!tid) {
+      return;
+    }
     setTemplateItemsLoading(true);
     hostsApi
       .getTemplateItems(tid)
@@ -518,12 +660,17 @@ export const Items = () => {
   }, []);
 
   useEffect(() => {
-    if (mainTab === 1) loadAllTemplates();
+    if (mainTab === 1) {
+      loadAllTemplates();
+    }
   }, [mainTab, loadAllTemplates]);
 
   useEffect(() => {
-    if (selectedTemplateId) loadTemplateItems(selectedTemplateId);
-    else setTemplateItems([]);
+    if (selectedTemplateId) {
+      loadTemplateItems(selectedTemplateId);
+    } else {
+      setTemplateItems([]);
+    }
   }, [selectedTemplateId, loadTemplateItems]);
 
   const ITEM_TYPE_NAMES: Record<string, string> = {
@@ -556,15 +703,7 @@ export const Items = () => {
   };
 
   const browseFiltered = browseItems
-    .filter((item) => {
-      const words = browseSearch.toLowerCase().split(/\s+/).filter(Boolean);
-      const name = item.name.toLowerCase();
-      const key = item.key_.toLowerCase();
-      const matchesSearch =
-        words.length === 0 || words.every((w) => name.includes(w) || key.includes(w));
-      const matchesHost = !browseHostFilter || item.hostname === browseHostFilter;
-      return matchesSearch && matchesHost;
-    })
+    .filter((item) => matchesItemBrowseFilters(item, browseSearch, browseHostFilter))
     .sort((a, b) => (isFavItem(a.itemid) ? 0 : 1) - (isFavItem(b.itemid) ? 0 : 1));
 
   const onDeleteItem = async (itemid: string) => {
@@ -597,9 +736,7 @@ export const Items = () => {
     <Stack spacing={3}>
       <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
         <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700 }}>
-            Items
-          </Typography>
+          <Typography variant="subtitle1">Items</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
             Manage monitoring items and service health monitors.
           </Typography>
@@ -608,7 +745,7 @@ export const Items = () => {
           <Button
             variant="contained"
             startIcon={<PlaylistAddOutlinedIcon />}
-            onClick={openAddDialog}
+            onClick={() => setAddItemOpen(true)}
           >
             Add Item
           </Button>
@@ -666,145 +803,24 @@ export const Items = () => {
       )}
 
       {mainTab === 1 && (
-        <Card>
-          <CardContent>
-            <Stack spacing={2}>
-              <Stack direction="row" spacing={1.5} alignItems="center">
-                <TextField
-                  size="small"
-                  placeholder="Search items…"
-                  value={templateItemSearch}
-                  onChange={(e) => setTemplateItemSearch(e.target.value)}
-                  sx={{ flex: 1 }}
-                />
-                <FormControl size="small" sx={{ minWidth: 300 }}>
-                  <InputLabel id="tpl-select-label">
-                    {templatesLoading ? "Loading templates…" : "Template"}
-                  </InputLabel>
-                  <Select
-                    labelId="tpl-select-label"
-                    label={templatesLoading ? "Loading templates…" : "Template"}
-                    value={selectedTemplateId}
-                    onChange={(e) => setSelectedTemplateId(e.target.value)}
-                  >
-                    {allTemplates.map((t) => (
-                      <MenuItem key={t.templateid} value={t.templateid}>
-                        {t.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <Tooltip title="Reload">
-                  <IconButton
-                    onClick={() => selectedTemplateId && loadTemplateItems(selectedTemplateId)}
-                    disabled={!selectedTemplateId}
-                  >
-                    <RouterIcon fontSize="small" />
-                  </IconButton>
-                </Tooltip>
-              </Stack>
-
-              {!selectedTemplateId && (
-                <Typography color="text.secondary" variant="body2">
-                  Select a template to view its items.
-                </Typography>
-              )}
-
-              {templateItemsLoading && <CircularProgress size={24} />}
-
-              {!templateItemsLoading && selectedTemplateId && tplFiltered.length === 0 && (
-                <Typography color="text.secondary" variant="body2">
-                  No items found on this template.
-                </Typography>
-              )}
-
-              {!templateItemsLoading && tplFiltered.length > 0 && (
-                <Box sx={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead>
-                      <tr>
-                        {["Name", "Key", "Type", "Value type", "Interval", "Status", "Actions"].map(
-                          (h) => (
-                            <th
-                              key={h}
-                              style={{
-                                textAlign: "left",
-                                padding: "6px 10px",
-                                borderBottom: "1px solid rgba(128,128,128,0.2)",
-                                fontSize: 12,
-                                fontWeight: 600,
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {h}
-                            </th>
-                          ),
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {tplFiltered.map((item) => (
-                        <tr key={item.itemid}>
-                          <td style={{ padding: "6px 10px", fontSize: 13 }}>{item.name}</td>
-                          <td
-                            style={{
-                              padding: "6px 10px",
-                              fontSize: 12,
-                              fontFamily: "monospace",
-                              color: "rgba(128,128,128,0.9)",
-                            }}
-                          >
-                            {item.key_}
-                          </td>
-                          <td style={{ padding: "6px 10px", fontSize: 12 }}>
-                            {ITEM_TYPE_NAMES[item.type] ?? item.type}
-                          </td>
-                          <td style={{ padding: "6px 10px", fontSize: 12 }}>
-                            {VALUE_TYPE_NAMES[item.value_type] ?? item.value_type}
-                          </td>
-                          <td style={{ padding: "6px 10px", fontSize: 12 }}>{item.delay}</td>
-                          <td style={{ padding: "6px 10px" }}>
-                            <Chip
-                              label={item.status === "0" ? "Enabled" : "Disabled"}
-                              size="small"
-                              color={item.status === "0" ? "success" : "default"}
-                            />
-                          </td>
-                          <td style={{ padding: "6px 4px", whiteSpace: "nowrap" }}>
-                            <Tooltip title="Edit">
-                              <IconButton
-                                size="small"
-                                onClick={() => {
-                                  setEditTplItem(item);
-                                  setEditTplForm({
-                                    name: item.name,
-                                    delay: item.delay,
-                                    key_: item.key_,
-                                  });
-                                }}
-                              >
-                                <EditIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Delete">
-                              <IconButton
-                                size="small"
-                                color="error"
-                                onClick={() => setConfirmDeleteTplItem(item)}
-                              >
-                                <DeleteOutlineIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </Box>
-              )}
-            </Stack>
-          </CardContent>
-        </Card>
+        <TemplateItemsTab
+          templateItemSearch={templateItemSearch}
+          onTemplateItemSearchChange={setTemplateItemSearch}
+          templatesLoading={templatesLoading}
+          selectedTemplateId={selectedTemplateId}
+          onSelectedTemplateIdChange={setSelectedTemplateId}
+          allTemplates={allTemplates}
+          onReload={() => selectedTemplateId && loadTemplateItems(selectedTemplateId)}
+          templateItemsLoading={templateItemsLoading}
+          tplFiltered={tplFiltered}
+          itemTypeNames={ITEM_TYPE_NAMES}
+          valueTypeNames={VALUE_TYPE_NAMES}
+          onEditItem={(item) => {
+            setEditTplItem(item);
+            setEditTplForm({ name: item.name, delay: item.delay, key_: item.key_ });
+          }}
+          onDeleteRequest={setConfirmDeleteTplItem}
+        />
       )}
 
       {/* ── Add item to template dialog ── */}
@@ -980,7 +996,9 @@ export const Items = () => {
             variant="contained"
             disabled={editTplSaving || !editTplForm.name}
             onClick={async () => {
-              if (!editTplItem) return;
+              if (!editTplItem) {
+                return;
+              }
               setEditTplSaving(true);
               try {
                 const keyChanged = editTplForm.key_ !== editTplItem.key_;
@@ -1008,7 +1026,9 @@ export const Items = () => {
         open={confirmDeleteTplItem !== null}
         name={confirmDeleteTplItem?.name ?? ""}
         onConfirm={async () => {
-          if (!confirmDeleteTplItem) return;
+          if (!confirmDeleteTplItem) {
+            return;
+          }
           try {
             await hostsApi.deleteTemplateItem(selectedTemplateId, confirmDeleteTplItem.itemid);
             showToast("Template item deleted.", "success");
@@ -1049,12 +1069,7 @@ export const Items = () => {
 
             {activeTypeMeta?.alert}
 
-            <ItemPanel
-              itemType={itemType}
-              panelProps={panelProps}
-              serverItemKeys={serverItemKeys}
-              itemKeysLoading={itemKeysLoading}
-            />
+            <ItemPanel itemType={itemType} panelProps={panelProps} />
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -1113,7 +1128,9 @@ export const Items = () => {
             variant="contained"
             disabled={editSaving || !editForm.name.trim() || !editForm.key_.trim()}
             onClick={async () => {
-              if (!editItem) return;
+              if (!editItem) {
+                return;
+              }
               setEditSaving(true);
               try {
                 const keyChanged = editForm.key_ !== editItem.key_;
@@ -1142,7 +1159,9 @@ export const Items = () => {
         open={confirmDeleteItem !== null}
         name={confirmDeleteItem?.name ?? ""}
         onConfirm={async () => {
-          if (!confirmDeleteItem) return;
+          if (!confirmDeleteItem) {
+            return;
+          }
           await onDeleteItem(confirmDeleteItem.itemid);
           setConfirmDeleteItem(null);
         }}

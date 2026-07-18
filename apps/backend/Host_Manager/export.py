@@ -4,6 +4,7 @@ import csv
 import io
 import logging
 from io import BytesIO
+from pathlib import Path
 
 import openpyxl
 
@@ -32,15 +33,11 @@ class HostExportMixin:
         """Returns {proxyid: proxy_name}. Tries the 6.0+ 'name' field, falls back to 'host'."""
         try:
             proxies = self.zapi.proxy.get(output=["proxyid", "name", "host"])  # type: ignore[union-attr,attr-defined]
-            return {
-                p["proxyid"]: (p.get("name") or p.get("host") or "") for p in proxies
-            }
+            return {p["proxyid"]: (p.get("name") or p.get("host") or "") for p in proxies}
         except Exception:
             return {}
 
-    def _fetch_export_rows(
-        self, hostname_filter: set[str] | None = None
-    ) -> list[list[str]]:
+    def _fetch_export_rows(self, hostname_filter: set[str] | None = None) -> list[list[str]]:
         """Returns a list of rows (each a list of str) for the host export."""
         hosts = self.zapi.host.get(  # type: ignore[union-attr,attr-defined]
             output=[
@@ -64,9 +61,9 @@ class HostExportMixin:
         rows: list[list[str]] = []
         for h in hosts:
             interfaces = h.get("interfaces") or []
-            primary = next(
-                (i for i in interfaces if str(i.get("type")) == "1"), None
-            ) or (interfaces[0] if interfaces else None)
+            primary = next((i for i in interfaces if str(i.get("type")) == "1"), None) or (
+                interfaces[0] if interfaces else None
+            )
             ip = primary["ip"] if primary else "N/A"
             port = primary["port"] if primary else "N/A"
             avail = (
@@ -109,18 +106,16 @@ class HostExportMixin:
             if not excel_bytes:
                 return None
 
-            with open(file_path, "wb") as f:
+            with Path(file_path).open("wb") as f:
                 f.write(excel_bytes)
             logger.info("Exported hosts to %r.", file_path)
             return file_path
 
-        except Exception as e:
-            logger.error("export_hosts_to_excel failed: %r", e)
+        except Exception:
+            logger.exception("export_hosts_to_excel failed")
             return None
 
-    def export_hosts_to_excel_bytes(
-        self, hostname_filter: set[str] | None = None
-    ) -> bytes | None:
+    def export_hosts_to_excel_bytes(self, hostname_filter: set[str] | None = None) -> bytes | None:
         """Returns host inventory as .xlsx bytes."""
         if not self.zapi:  # type: ignore[attr-defined]
             logger.error("export_hosts_to_excel_bytes: no Zabbix API connection.")
@@ -136,13 +131,11 @@ class HostExportMixin:
             buf = BytesIO()
             wb.save(buf)
             return buf.getvalue()
-        except Exception as e:
-            logger.error("export_hosts_to_excel_bytes failed: %r", e)
+        except Exception:
+            logger.exception("export_hosts_to_excel_bytes failed")
             return None
 
-    def export_hosts_to_csv_bytes(
-        self, hostname_filter: set[str] | None = None
-    ) -> bytes | None:
+    def export_hosts_to_csv_bytes(self, hostname_filter: set[str] | None = None) -> bytes | None:
         """Returns host inventory as .csv bytes (UTF-8 with BOM for Excel compat)."""
         if not self.zapi:  # type: ignore[attr-defined]
             logger.error("export_hosts_to_csv_bytes: no Zabbix API connection.")
@@ -155,6 +148,6 @@ class HostExportMixin:
             writer.writerows(rows)
             # UTF-8 BOM so Excel opens it correctly without an import wizard
             return ("﻿" + buf.getvalue()).encode("utf-8")
-        except Exception as e:
-            logger.error("export_hosts_to_csv_bytes failed: %r", e)
+        except Exception:
+            logger.exception("export_hosts_to_csv_bytes failed")
             return None

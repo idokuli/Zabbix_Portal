@@ -104,9 +104,7 @@ def test_list_users_returns_source_column():
         "team_name": None,
     }
     mock_conn = MagicMock()
-    mock_conn.cursor.return_value.__enter__.return_value.fetchall.return_value = [
-        fake_row
-    ]
+    mock_conn.cursor.return_value.__enter__.return_value.fetchall.return_value = [fake_row]
 
     with patch("User_Management.get_conn", return_value=mock_conn):
         import User_Management as um

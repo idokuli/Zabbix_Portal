@@ -27,8 +27,8 @@ def get_portal_ldap_config() -> dict | None:
         return None
     try:
         return json.loads(raw)
-    except Exception as exc:
-        logger.error("Failed to parse portal LDAP config from DB: %r", exc)
+    except Exception:
+        logger.exception("Failed to parse portal LDAP config from DB")
         return None
 
 
@@ -81,7 +81,7 @@ def is_ldap_enabled() -> bool:
     return bool(cfg and cfg.get("enabled"))
 
 
-class LdapUserNotFound(Exception):
+class LdapUserNotFoundError(Exception):
     """Raised when the username doesn't exist in the LDAP directory at all."""
 
 
@@ -90,14 +90,14 @@ def _do_ldap_auth(cfg: dict, username: str, password: str) -> tuple[bool, str]:
     Core LDAP auth against a given config dict.
     Returns (True, display_name) on success, (False, "") on wrong password.
     display_name is pulled from AD displayName → cn → falls back to "".
-    Raises LdapUserNotFound if the user doesn't exist in the directory.
+    Raises LdapUserNotFoundError if the user doesn't exist in the directory.
     Raises RuntimeError on connection/config errors.
     """
     try:
         import ldap3
         from ldap3.utils.conv import escape_filter_chars
-    except ImportError:
-        raise RuntimeError("ldap3 is not installed. Run: pip install ldap3")
+    except ImportError as exc:
+        raise RuntimeError("ldap3 is not installed. Run: pip install ldap3") from exc
 
     host = cfg.get("host", "").strip()
     base_dn = cfg.get("base_dn", "").strip()
@@ -143,13 +143,11 @@ def _do_ldap_auth(cfg: dict, username: str, password: str) -> tuple[bool, str]:
             logger.error("LDAP service-account bind failed: %s", err)
             raise RuntimeError(f"LDAP service-account bind failed: {err}")
 
-        service_conn.search(
-            base_dn, search_filter, attributes=["dn", "displayName", "cn"]
-        )
+        service_conn.search(base_dn, search_filter, attributes=["dn", "displayName", "cn"])
         if not service_conn.entries:
             logger.info("LDAP: user %r not found in directory", username)
             service_conn.unbind()
-            raise LdapUserNotFound(username)
+            raise LdapUserNotFoundError(username)
 
         entry = service_conn.entries[0]
         user_dn = entry.entry_dn
@@ -176,23 +174,21 @@ def _do_ldap_auth(cfg: dict, username: str, password: str) -> tuple[bool, str]:
             logger.info("LDAP: authentication succeeded for %r", username)
             return True, display_name
 
-        logger.warning(
-            "LDAP: wrong password for %r: %s", username, user_conn.last_error
-        )
+        logger.warning("LDAP: wrong password for %r: %s", username, user_conn.last_error)
         return False, ""
 
-    except (LdapUserNotFound, RuntimeError):
+    except (LdapUserNotFoundError, RuntimeError):
         raise
     except Exception as exc:
-        logger.error("LDAP: connection error for %r: %s", username, exc)
-        raise RuntimeError(f"LDAP connection error: {exc}")
+        logger.exception("LDAP: connection error for %r", username)
+        raise RuntimeError(f"LDAP connection error: {exc}") from exc
 
 
 def authenticate_ldap(username: str, password: str) -> tuple[bool, str]:
     """
     Validate username/password against the LDAP server stored in portal config.
     Returns (True, display_name) on success, (False, "") on wrong password.
-    Raises LdapUserNotFound when the user isn't in the directory (caller may fall back to local auth).
+    Raises LdapUserNotFoundError when the user isn't in the directory (caller may fall back to local auth).
     Raises RuntimeError on connection/config errors.
     """
     cfg = get_portal_ldap_config()

@@ -36,10 +36,9 @@ variables:
   ARTIFACTORY_REGISTRY: "<your-artifactory-registry>"  # registry path (e.g. artifactory.example.com/docker-local)
 
   # ── Build control ────────────────────────────────────────────────────────
-  # Comma-separated app names to force-build regardless of code changes.
-  # e.g. "backend", "backend,frontend", or "all" to rebuild everything.
+  # Set to "1" to force-build and redeploy every app regardless of code changes.
   # Leave empty ("") for automatic change detection.
-  FORCE_APPS: ""
+  FORCE_BUILD: ""
 
   # ── GitOps repo ───────────────────────────────────────────────────────────
   # HTTPS URL of overwatch-gitops repo (e.g. https://gitlab.example.com/team/overwatch-gitops.git)

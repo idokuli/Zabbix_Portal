@@ -121,9 +121,7 @@ def list_api_tokens(_user=Depends(require_root)):
 @router.post("/api-tokens")
 def create_api_token(body: TokenCreateRequest, _user=Depends(require_root)):
     with zabbix_call():
-        tokenid, token_value = zadmin_bot.create_api_token(
-            body.name, body.userid, body.expires_at
-        )
+        tokenid, token_value = zadmin_bot.create_api_token(body.name, body.userid, body.expires_at)
     return {"tokenid": tokenid, "token": token_value}
 
 
@@ -189,16 +187,12 @@ def list_macros(_user=Depends(get_current_user)):
 @router.post("/macros")
 def create_macro(body: MacroCreateRequest, _user=Depends(require_admin)):
     with zabbix_call():
-        mid = zadmin_bot.create_global_macro(
-            body.macro, body.value, body.description, body.type
-        )
+        mid = zadmin_bot.create_global_macro(body.macro, body.value, body.description, body.type)
     return {"globalmacroid": mid}
 
 
 @router.put("/macros/{globalmacroid}")
-def update_macro(
-    globalmacroid: str, body: MacroUpdateRequest, _user=Depends(require_admin)
-):
+def update_macro(globalmacroid: str, body: MacroUpdateRequest, _user=Depends(require_admin)):
     with zabbix_call():
         zadmin_bot.update_global_macro(globalmacroid, body.value, body.description)
     return {"ok": True}
@@ -245,12 +239,8 @@ def update_auth_settings(body: AuthSettingsUpdateRequest, _user=Depends(require_
 @router.post("/admin/auth/ldap/test")
 def test_ldap_connection(body: LdapTestRequest, _user=Depends(require_root)):
     with zabbix_call():
-        params = body.model_dump(
-            exclude={"test_username", "test_password"}, exclude_none=True
-        )
-        result = zadmin_bot.test_ldap_connection(
-            params, body.test_username, body.test_password
-        )
+        params = body.model_dump(exclude={"test_username", "test_password"}, exclude_none=True)
+        result = zadmin_bot.test_ldap_connection(params, body.test_username, body.test_password)
     return {"result": result}
 
 
@@ -275,9 +265,7 @@ def create_ldap_server(body: LdapServerRequest, _user=Depends(require_root)):
 
 
 @router.put("/admin/auth/ldap/servers/{userdirectoryid}")
-def update_ldap_server(
-    userdirectoryid: str, body: LdapServerRequest, _user=Depends(require_root)
-):
+def update_ldap_server(userdirectoryid: str, body: LdapServerRequest, _user=Depends(require_root)):
     with zabbix_call():
         zadmin_bot.update_ldap_userdirectory(userdirectoryid, body.model_dump())
     return {"ok": True}
@@ -313,9 +301,7 @@ def save_portal_ldap(body: PortalLdapConfigRequest, _user=Depends(require_root))
     if payload.get("enabled"):
         ok, msg = test_portal_ldap_connection(payload)
         if not ok:
-            raise HTTPException(
-                status_code=422, detail=f"LDAP connection test failed: {msg}"
-            )
+            raise HTTPException(status_code=422, detail=f"LDAP connection test failed: {msg}")
     save_portal_ldap_config(payload)
     return {"ok": True}
 
@@ -323,17 +309,13 @@ def save_portal_ldap(body: PortalLdapConfigRequest, _user=Depends(require_root))
 @router.post("/admin/auth/portal-ldap/test")
 def test_portal_ldap(body: PortalLdapTestRequest, _user=Depends(require_root)):
     """Test portal LDAP connectivity and optionally a user bind, without saving."""
-    from ldap_auth import LdapUserNotFound, _do_ldap_auth
+    from ldap_auth import LdapUserNotFoundError, _do_ldap_auth
 
     existing = get_portal_ldap_config() or {}
     payload = body.model_dump()
     cfg = {
         **existing,
-        **{
-            k: v
-            for k, v in payload.items()
-            if k not in ("test_username", "test_password") and v
-        },
+        **{k: v for k, v in payload.items() if k not in ("test_username", "test_password") and v},
     }
     if not cfg.get("bind_password"):
         cfg["bind_password"] = existing.get("bind_password", "")
@@ -353,19 +335,17 @@ def test_portal_ldap(body: PortalLdapTestRequest, _user=Depends(require_root)):
 
     try:
         result = _do_ldap_auth(cfg, test_username, test_password)
-    except LdapUserNotFound:
+    except LdapUserNotFoundError:
         raise HTTPException(
             status_code=422,
             detail=f"User '{test_username}' not found in LDAP directory.",
-        )
+        ) from None
     except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=zabbix_err(e))
+        raise HTTPException(status_code=422, detail=zabbix_err(e)) from e
 
     if result:
         return {
             "ok": True,
             "message": f"Authentication succeeded for '{test_username}'.",
         }
-    raise HTTPException(
-        status_code=422, detail=f"Wrong password for '{test_username}'."
-    )
+    raise HTTPException(status_code=422, detail=f"Wrong password for '{test_username}'.")

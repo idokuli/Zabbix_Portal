@@ -64,15 +64,15 @@ class AuthMixin:
                 selectUsrgrps="count",
                 sortfield="name",
             )
-            default_id = self.zapi.authentication.get(
-                output=["ldap_userdirectoryid"]
-            ).get("ldap_userdirectoryid", "0")
+            default_id = self.zapi.authentication.get(output=["ldap_userdirectoryid"]).get(
+                "ldap_userdirectoryid", "0"
+            )
             for d in directories:
                 d["is_default"] = d["userdirectoryid"] == default_id
                 d["usrgrp_count"] = int(d.pop("usrgrps", 0) or 0)
             return directories
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     @staticmethod
     def _prep_provision_params(params: dict) -> dict:
@@ -104,9 +104,7 @@ class AuthMixin:
             d["bind_password"] = ""
             # Normalise user_groups to flat id list for the frontend.
             for g in d.get("provision_groups") or []:
-                g["user_groups"] = [
-                    ug["usrgrpid"] for ug in (g.get("user_groups") or [])
-                ]
+                g["user_groups"] = [ug["usrgrpid"] for ug in (g.get("user_groups") or [])]
             # Normalise int fields that Zabbix returns as strings.
             for m in d.get("provision_media") or []:
                 for f in ("severity", "active"):
@@ -116,7 +114,7 @@ class AuthMixin:
         except RuntimeError:
             raise
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def create_ldap_userdirectory(self, params: dict) -> str:
         self._require_ldap_multi_server()
@@ -125,7 +123,7 @@ class AuthMixin:
             result = self.zapi.userdirectory.create(idp_type=1, **params)
             return result["userdirectoryids"][0]
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def update_ldap_userdirectory(self, userdirectoryid: str, params: dict) -> bool:
         self._require_ldap_multi_server()
@@ -136,7 +134,7 @@ class AuthMixin:
             self.zapi.userdirectory.update(userdirectoryid=userdirectoryid, **params)
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def delete_ldap_userdirectory(self, userdirectoryid: str) -> bool:
         self._require_ldap_multi_server()
@@ -144,7 +142,7 @@ class AuthMixin:
             self.zapi.userdirectory.delete([userdirectoryid])
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def set_default_ldap_userdirectory(self, userdirectoryid: str) -> bool:
         self._require_ldap_multi_server()
@@ -152,7 +150,7 @@ class AuthMixin:
             self.zapi.authentication.update(ldap_userdirectoryid=userdirectoryid)
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def get_auth_settings(self) -> dict:
         if not self.zapi:
@@ -160,7 +158,7 @@ class AuthMixin:
         try:
             return self.zapi.authentication.get(output="extend")
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def update_auth_settings(self, params: dict) -> bool:
         if not self.zapi:
@@ -173,11 +171,9 @@ class AuthMixin:
             self.zapi.authentication.update(**params)
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
-    def test_ldap_connection(
-        self, params: dict, test_username: str, test_password: str
-    ) -> dict:
+    def test_ldap_connection(self, params: dict, test_username: str, test_password: str) -> dict:
         """Validate LDAP bind/search settings via userdirectory.test (Super Admin only, Zabbix 6.4+).
 
         bind_password is write-only in the Zabbix API, so the New/Edit server
@@ -203,5 +199,5 @@ class AuthMixin:
             )
             return self.zapi.userdirectory.test(**payload)
         except Exception as e:
-            logger.error("userdirectory.test failed: %r", e)
-            raise RuntimeError(str(e))
+            logger.exception("userdirectory.test failed")
+            raise RuntimeError(str(e)) from e

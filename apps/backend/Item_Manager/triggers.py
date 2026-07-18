@@ -43,9 +43,7 @@ class TriggersMixin:
             return None, f"Invalid operator '{operator}'."
 
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found in Zabbix."
 
@@ -67,14 +65,12 @@ class TriggersMixin:
                 create_params["comments"] = comments
             result = self.zapi.trigger.create(**create_params)
             trigger_id = result["triggerids"][0]
-            logger.info(
-                "Trigger %r created on %r (ID: %s).", trigger_name, hostname, trigger_id
-            )
+            logger.info("Trigger %r created on %r (ID: %s).", trigger_name, hostname, trigger_id)
             return trigger_id, None
 
         except Exception as e:
             msg = str(e)
-            logger.error("add_trigger(%r, %r) failed: %r", hostname, trigger_name, e)
+            logger.exception("add_trigger(%r, %r) failed", hostname, trigger_name)
             return None, msg
 
     def add_string_trigger(
@@ -97,9 +93,7 @@ class TriggersMixin:
         if not self.zapi:
             return None, "Zabbix API not connected."
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found in Zabbix."
 
@@ -108,13 +102,9 @@ class TriggersMixin:
             fire_val = "0" if negate else "1"
 
             if self._zabbix_version >= (6, 2):
-                expression = (
-                    f'find(/{hostname}/{item_key},,"{base_fn}","{pattern}")={fire_val}'
-                )
+                expression = f'find(/{hostname}/{item_key},,"{base_fn}","{pattern}")={fire_val}'
             else:
-                expression = (
-                    f'str({{{hostname}:{item_key}.last()}},"{pattern}")={fire_val}'
-                )
+                expression = f'str({{{hostname}:{item_key}.last()}},"{pattern}")={fire_val}'
 
             create_params: dict = {
                 "description": trigger_name,
@@ -135,9 +125,7 @@ class TriggersMixin:
             )
             return trigger_id, None
         except Exception as e:
-            logger.error(
-                "add_string_trigger(%r, %r) failed: %r", hostname, trigger_name, e
-            )
+            logger.exception("add_string_trigger(%r, %r) failed", hostname, trigger_name)
             return None, zabbix_err(e)
 
     def get_trigger_hostname(self, triggerid: str) -> str:
@@ -173,9 +161,9 @@ class TriggersMixin:
             # Zabbix 7.x: availability lives on each interface.
             # Prefer the ZBX agent interface (type=1), fall back to first.
             interfaces = host_data[0].get("interfaces", [])
-            primary = next(
-                (i for i in interfaces if str(i.get("type")) == "1"), None
-            ) or (interfaces[0] if interfaces else None)
+            primary = next((i for i in interfaces if str(i.get("type")) == "1"), None) or (
+                interfaces[0] if interfaces else None
+            )
             host_available = str(primary.get("available", "0")) if primary else "0"
 
             triggers = self.zapi.trigger.get(
@@ -193,8 +181,8 @@ class TriggersMixin:
                 inherited=False,
             )
             return triggers, host_available
-        except Exception as e:
-            logger.error("list_triggers(%r) failed: %r", hostname, e)
+        except Exception:
+            logger.exception("list_triggers(%r) failed", hostname)
             return [], "0"
 
     def update_trigger(
@@ -227,8 +215,8 @@ class TriggersMixin:
             self.zapi.trigger.update(**params)
             logger.info("Updated trigger ID %s.", triggerid)
             return True
-        except Exception as e:
-            logger.error("update_trigger(%s) failed: %r", triggerid, e)
+        except Exception:
+            logger.exception("update_trigger(%s) failed", triggerid)
             raise
 
     def delete_trigger(self, triggerid: str) -> bool:
@@ -239,8 +227,8 @@ class TriggersMixin:
             self.zapi.trigger.delete([triggerid])
             logger.info("Deleted trigger ID %s.", triggerid)
             return True
-        except Exception as e:
-            logger.error("delete_trigger(%s) failed: %r", triggerid, e)
+        except Exception:
+            logger.exception("delete_trigger(%s) failed", triggerid)
             return False
 
     def list_all_triggers(
@@ -268,9 +256,7 @@ class TriggersMixin:
             sortorder="ASC",
         )
         if hostname:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return []
             kwargs["hostids"] = host_data[0]["hostid"]
@@ -280,12 +266,7 @@ class TriggersMixin:
         # Fetch interface availability for each unique host so the UI can flag
         # triggers on unreachable hosts.
         unique_hostids = list(
-            {
-                t.get("hosts", [{}])[0].get("hostid", "")
-                for t in triggers
-                if t.get("hosts")
-            }
-            - {""}
+            {t.get("hosts", [{}])[0].get("hostid", "") for t in triggers if t.get("hosts")} - {""}
         )
         host_avail_map: dict[str, str] = {}
         if unique_hostids:
@@ -297,16 +278,14 @@ class TriggersMixin:
                 )
                 for h in hosts_info:
                     ifaces = h.get("interfaces", [])
-                    primary = next(
-                        (i for i in ifaces if str(i.get("type")) == "1"), None
-                    ) or (ifaces[0] if ifaces else None)
+                    primary = next((i for i in ifaces if str(i.get("type")) == "1"), None) or (
+                        ifaces[0] if ifaces else None
+                    )
                     host_avail_map[h["hostid"]] = (
                         str(primary.get("available", "0")) if primary else "0"
                     )
             except Exception as exc:
-                logger.warning(
-                    "list_all_triggers: could not fetch host availability: %r", exc
-                )
+                logger.warning("list_all_triggers: could not fetch host availability: %r", exc)
 
         result = []
         for t in triggers:
@@ -352,9 +331,7 @@ class TriggersMixin:
         if not self.zapi:
             return None, "Zabbix API not connected."
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found in Zabbix."
             if self._zabbix_version >= (6, 2):
@@ -374,7 +351,7 @@ class TriggersMixin:
             return trigger_id, None
         except Exception as e:
             msg = str(e)
-            logger.error("add_change_trigger(%r, %r) failed: %r", hostname, item_key, e)
+            logger.exception("add_change_trigger(%r, %r) failed", hostname, item_key)
             return None, msg
 
     def add_file_age_trigger(
@@ -396,9 +373,7 @@ class TriggersMixin:
                 "File age triggers require Zabbix 5.4 or newer (now() function not available in older versions).",
             )
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found in Zabbix."
             item_key = f"vfs.file.time[{file_path},modify]"
@@ -417,14 +392,10 @@ class TriggersMixin:
             return trigger_id, None
         except Exception as e:
             msg = str(e)
-            logger.error(
-                "add_file_age_trigger(%r, %r) failed: %r", hostname, file_path, e
-            )
+            logger.exception("add_file_age_trigger(%r, %r) failed", hostname, file_path)
             return None, msg
 
-    def bulk_add_triggers(
-        self, hostnames: list[str], trigger_config: dict
-    ) -> list[dict]:
+    def bulk_add_triggers(self, hostnames: list[str], trigger_config: dict) -> list[dict]:
         """Add the same trigger to multiple hosts. Returns [{hostname, trigger_id, error}]."""
         results = []
         for hostname in hostnames:
@@ -436,9 +407,7 @@ class TriggersMixin:
                 operator=trigger_config.get("operator", ">"),
                 priority=trigger_config.get("priority", 3),
             )
-            results.append(
-                {"hostname": hostname, "trigger_id": trigger_id, "error": err}
-            )
+            results.append({"hostname": hostname, "trigger_id": trigger_id, "error": err})
 
         ok = sum(1 for r in results if not r["error"])
         logger.info("bulk_add_triggers: %d/%d succeeded.", ok, len(hostnames))

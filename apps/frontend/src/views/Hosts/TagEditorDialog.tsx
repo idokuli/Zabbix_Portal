@@ -22,12 +22,10 @@ type EditTag = { _key: string; tag: string; value: string };
 export const TagEditorDialog = ({
   tagHost,
   onClose,
-  isDark,
   onSave,
 }: {
   tagHost: Host | null;
   onClose: () => void;
-  isDark: boolean;
   onSave: (tags: HostTag[]) => Promise<void>;
 }) => {
   const [editTags, setEditTags] = useState<EditTag[]>([]);
@@ -49,7 +47,9 @@ export const TagEditorDialog = ({
   }, [tagHost]);
 
   const addTag = () => {
-    if (!newTagName.trim()) return;
+    if (!newTagName.trim()) {
+      return;
+    }
     setEditTags((prev) => [
       ...prev,
       { _key: generateId(), tag: newTagName.trim(), value: newTagValue.trim() },
@@ -117,10 +117,10 @@ export const TagEditorDialog = ({
                 onDelete={() => setEditTags((prev) => prev.filter((_, j) => j !== i))}
                 sx={{
                   fontSize: "0.72rem",
-                  bgcolor: isDark ? "rgba(59,130,246,0.18)" : "rgba(59,130,246,0.12)",
-                  color: isDark ? "#93C5FD" : "#1D4ED8",
+                  bgcolor: "action.selected",
+                  color: "primary.main",
                   "& .MuiChip-deleteIcon": {
-                    color: isDark ? "#93C5FD" : "#1D4ED8",
+                    color: "primary.main",
                     opacity: 0.7,
                     "&:hover": { opacity: 1 },
                   },
@@ -144,7 +144,9 @@ export const TagEditorDialog = ({
               value={newTagName}
               onChange={(e) => setNewTagName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") addTag();
+                if (e.key === "Enter") {
+                  addTag();
+                }
               }}
               sx={{ flex: 1 }}
             />
@@ -154,7 +156,9 @@ export const TagEditorDialog = ({
               value={newTagValue}
               onChange={(e) => setNewTagValue(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") addTag();
+                if (e.key === "Enter") {
+                  addTag();
+                }
               }}
               sx={{ flex: 1 }}
             />

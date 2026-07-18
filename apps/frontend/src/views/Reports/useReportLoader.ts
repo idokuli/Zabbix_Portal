@@ -17,6 +17,8 @@ export const useReportLoader = (load: (silent?: boolean) => void) => {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
   useEffect(() => {
-    if (tick > 0) load(true);
+    if (tick > 0) {
+      load(true);
+    }
   }, [tick]);
 };

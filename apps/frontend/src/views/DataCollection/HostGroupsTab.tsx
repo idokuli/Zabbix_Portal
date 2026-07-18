@@ -56,7 +56,9 @@ export const HostGroupsTab = ({
 
   const load = useCallback(
     async (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       try {
         const r = await api.listHostGroups();
         setGroups(r.groups);
@@ -77,7 +79,9 @@ export const HostGroupsTab = ({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
   useEffect(() => {
-    if (tick > 0) void load(true);
+    if (tick > 0) {
+      void load(true);
+    }
   }, [tick]);
 
   const openDialog = async (target: HostGroup | null) => {
@@ -123,7 +127,9 @@ export const HostGroupsTab = ({
 
   const onSave = async () => {
     const name = nameInput.trim();
-    if (!name) return;
+    if (!name) {
+      return;
+    }
     setSaving(true);
     try {
       let groupid: string;
@@ -152,7 +158,9 @@ export const HostGroupsTab = ({
   };
 
   const onDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget) {
+      return;
+    }
     try {
       await api.deleteHostGroup(deleteTarget.groupid);
       showToast("Host group deleted.", "success");

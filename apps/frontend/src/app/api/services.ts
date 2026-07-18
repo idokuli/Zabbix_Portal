@@ -70,7 +70,7 @@ export const servicesApi = {
     }),
   deleteSla: (slaid: string) => apiFetch<{ ok: boolean }>(`/sla/${slaid}`, { method: "DELETE" }),
   getSlaReport: (slaid: string, periods?: number) =>
-    apiFetch<{ report: Array<Record<string, unknown>> }>(
+    apiFetch<{ report: Record<string, unknown>[] }>(
       `/sla/${slaid}/report${periods ? `?periods=${periods}` : ""}`,
     ),
   listHealthMonitors: (hostid?: string) =>

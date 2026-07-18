@@ -56,7 +56,9 @@ export const TemplateGroupsTab = ({
 
   const load = useCallback(
     async (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       try {
         const r = await api.listTemplateGroups();
         setGroups(r.groups);
@@ -77,7 +79,9 @@ export const TemplateGroupsTab = ({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
   useEffect(() => {
-    if (tick > 0) void load(true);
+    if (tick > 0) {
+      void load(true);
+    }
   }, [tick]);
 
   const openDialog = async (target: TemplateGroup | null) => {
@@ -121,7 +125,9 @@ export const TemplateGroupsTab = ({
 
   const onSave = async () => {
     const name = nameInput.trim();
-    if (!name) return;
+    if (!name) {
+      return;
+    }
     setSaving(true);
     try {
       let groupid: string;
@@ -150,7 +156,9 @@ export const TemplateGroupsTab = ({
   };
 
   const onDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget) {
+      return;
+    }
     try {
       await api.deleteTemplateGroup(deleteTarget.groupid);
       showToast("Template group deleted.", "success");

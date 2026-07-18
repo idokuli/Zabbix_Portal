@@ -29,6 +29,8 @@ type FormHostItem = {
   delay: string;
 };
 
+const LEADING_NOT_RE = /^not/;
+
 export const AddTriggerDialog = ({
   open,
   onClose,
@@ -117,7 +119,9 @@ export const AddTriggerDialog = ({
             onChange={(e) => {
               setFormItemKey(e.target.value);
               const item = formHostItems.find((i) => i.key_ === e.target.value);
-              if (item) onItemSelected(item);
+              if (item) {
+                onItemSelected(item);
+              }
             }}
           >
             {formHostItemsLoading ? (
@@ -251,7 +255,7 @@ export const AddTriggerDialog = ({
               <span>
                 Expression:{" "}
                 <code>
-                  {`find(/${formHost}/${formItemKey},,"${formMatchType.replace(/^not/, "") || "like"}","${formPattern || "?"}")`}
+                  {`find(/${formHost}/${formItemKey},,"${formMatchType.replace(LEADING_NOT_RE, "") || "like"}","${formPattern || "?"}")`}
                   {formMatchType.startsWith("not") ? "=0" : "=1"}
                 </code>
               </span>

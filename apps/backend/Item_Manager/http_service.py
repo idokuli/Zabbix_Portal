@@ -54,6 +54,63 @@ class HttpServiceItemsMixin:
         "tcp_port": 0,
     }
 
+    @staticmethod
+    def _http_extra_kwargs(
+        *,
+        units: str,
+        description: str,
+        posts: str,
+        post_type: int,
+        headers: str,
+        http_proxy: str,
+        ssl_cert_file: str,
+        ssl_key_file: str,
+        ssl_key_password: str,
+        authtype: int,
+        username: str,
+        password: str,
+        team_name: str,
+        regex_preprocessing: bool,
+        regex_pattern: str,
+        regex_output: str,
+        regex_no_match_value: str,
+    ) -> dict:
+        """Build the optional HTTP-agent-item fields that are only sent when set."""
+        kwargs: dict = {}
+        if units:
+            kwargs["units"] = units
+        if description:
+            kwargs["description"] = description
+        if posts:
+            kwargs["posts"] = posts
+            kwargs["post_type"] = post_type
+        if headers:
+            kwargs["headers"] = headers
+        if http_proxy:
+            kwargs["http_proxy"] = http_proxy
+        if ssl_cert_file:
+            kwargs["ssl_cert_file"] = ssl_cert_file
+        if ssl_key_file:
+            kwargs["ssl_key_file"] = ssl_key_file
+            if ssl_key_password:
+                kwargs["ssl_key_password"] = ssl_key_password
+        if authtype:
+            kwargs["authtype"] = authtype
+            kwargs["username"] = username
+            kwargs["password"] = password
+        if team_name:
+            kwargs["tags"] = [{"tag": "team", "value": team_name}]
+        if regex_preprocessing and regex_pattern:
+            kwargs["preprocessing"] = [
+                {
+                    "type": 5,  # Regular expression
+                    "params": f"{regex_pattern}\n{regex_output}",
+                    "error_handler": 2,  # Custom value on error (no match)
+                    "error_handler_params": regex_no_match_value,
+                }
+            ]
+        return kwargs
+
     def add_http_item(
         self,
         hostname: str,
@@ -75,8 +132,7 @@ class HttpServiceItemsMixin:
         username: str = "",
         password: str = "",
         headers: str = "",  # newline-separated "Name: Value" pairs
-        query_fields: list[dict]
-        | None = None,  # [{name, value}] appended as URL params
+        query_fields: list[dict] | None = None,  # [{name, value}] appended as URL params
         http_proxy: str = "",
         ssl_cert_file: str = "",
         ssl_key_file: str = "",
@@ -98,9 +154,7 @@ class HttpServiceItemsMixin:
         if not self.zapi:
             return None, "Zabbix API not connected."
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found in Zabbix."
             host_id = host_data[0]["hostid"]
@@ -114,9 +168,7 @@ class HttpServiceItemsMixin:
             if query_fields:
                 from urllib.parse import urlencode
 
-                pairs = [
-                    (qf["name"], qf["value"]) for qf in query_fields if qf.get("name")
-                ]
+                pairs = [(qf["name"], qf["value"]) for qf in query_fields if qf.get("name")]
                 if pairs:
                     sep = "&" if "?" in effective_url else "?"
                     effective_url = effective_url + sep + urlencode(pairs)
@@ -143,38 +195,27 @@ class HttpServiceItemsMixin:
                 status=status,
                 interfaceid=0,  # HTTP agent does not require a host interface
             )
-            if units:
-                kwargs["units"] = units
-            if description:
-                kwargs["description"] = description
-            if posts:
-                kwargs["posts"] = posts
-                kwargs["post_type"] = post_type
-            if headers:
-                kwargs["headers"] = headers
-            if http_proxy:
-                kwargs["http_proxy"] = http_proxy
-            if ssl_cert_file:
-                kwargs["ssl_cert_file"] = ssl_cert_file
-            if ssl_key_file:
-                kwargs["ssl_key_file"] = ssl_key_file
-                if ssl_key_password:
-                    kwargs["ssl_key_password"] = ssl_key_password
-            if authtype:
-                kwargs["authtype"] = authtype
-                kwargs["username"] = username
-                kwargs["password"] = password
-            if team_name:
-                kwargs["tags"] = [{"tag": "team", "value": team_name}]
-            if regex_preprocessing and regex_pattern:
-                kwargs["preprocessing"] = [
-                    {
-                        "type": 5,  # Regular expression
-                        "params": f"{regex_pattern}\n{regex_output}",
-                        "error_handler": 2,  # Custom value on error (no match)
-                        "error_handler_params": regex_no_match_value,
-                    }
-                ]
+            kwargs.update(
+                self._http_extra_kwargs(
+                    units=units,
+                    description=description,
+                    posts=posts,
+                    post_type=post_type,
+                    headers=headers,
+                    http_proxy=http_proxy,
+                    ssl_cert_file=ssl_cert_file,
+                    ssl_key_file=ssl_key_file,
+                    ssl_key_password=ssl_key_password,
+                    authtype=authtype,
+                    username=username,
+                    password=password,
+                    team_name=team_name,
+                    regex_preprocessing=regex_preprocessing,
+                    regex_pattern=regex_pattern,
+                    regex_output=regex_output,
+                    regex_no_match_value=regex_no_match_value,
+                )
+            )
 
             result = self.zapi.item.create(**kwargs)
             item_id = result["itemids"][0]
@@ -188,7 +229,7 @@ class HttpServiceItemsMixin:
             return item_id, None
         except Exception as e:
             msg = str(e)
-            logger.error("add_http_item(%r, %r) failed: %r", hostname, url, e)
+            logger.exception("add_http_item(%r, %r) failed", hostname, url)
             return None, msg
 
     def add_service_item(
@@ -211,9 +252,7 @@ class HttpServiceItemsMixin:
         if not self.zapi:
             return None, "Zabbix API not connected."
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found in Zabbix."
             host_id = host_data[0]["hostid"]
@@ -259,9 +298,7 @@ class HttpServiceItemsMixin:
             return item_id, None
         except Exception as e:
             msg = str(e)
-            logger.error(
-                "add_service_item(%r, %r) failed: %r", hostname, service_type, e
-            )
+            logger.exception("add_service_item(%r, %r) failed", hostname, service_type)
             return None, msg
 
     def add_process_item(
@@ -288,9 +325,7 @@ class HttpServiceItemsMixin:
         if not self.zapi:
             return None, "Zabbix API not connected."
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found in Zabbix."
             host_id = host_data[0]["hostid"]
@@ -329,14 +364,14 @@ class HttpServiceItemsMixin:
 
             result = self.zapi.item.create(**kwargs)
             item_id = result["itemids"][0]
-            logger.info(
-                "Process item %r added to %r (ID: %s).", item_name, hostname, item_id
-            )
+            logger.info("Process item %r added to %r (ID: %s).", item_name, hostname, item_id)
 
             if create_trigger:
                 trigger_name = f"{process_name} is not running on {hostname}"
                 if run_as_user:
-                    trigger_name = f"{process_name} (user: {run_as_user}) is not running on {hostname}"
+                    trigger_name = (
+                        f"{process_name} (user: {run_as_user}) is not running on {hostname}"
+                    )
                 _, te = self.add_trigger(
                     hostname,
                     item_key,
@@ -350,9 +385,7 @@ class HttpServiceItemsMixin:
 
             return item_id, None
         except Exception as e:
-            logger.error(
-                "add_process_item(%r, %r) failed: %r", hostname, process_name, e
-            )
+            logger.exception("add_process_item(%r, %r) failed", hostname, process_name)
             return None, str(e)
 
     def add_windows_service_item(
@@ -376,9 +409,7 @@ class HttpServiceItemsMixin:
         if not self.zapi:
             return None, "Zabbix API not connected."
         try:
-            host_data = self.zapi.host.get(
-                filter={"host": [hostname]}, output=["hostid"]
-            )
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
                 return None, f"Host '{hostname}' not found in Zabbix."
             host_id = host_data[0]["hostid"]
@@ -429,13 +460,9 @@ class HttpServiceItemsMixin:
                     priority=trigger_priority,
                 )
                 if te:
-                    logger.warning(
-                        "add_windows_service_item: trigger creation failed: %s", te
-                    )
+                    logger.warning("add_windows_service_item: trigger creation failed: %s", te)
 
             return item_id, None
         except Exception as e:
-            logger.error(
-                "add_windows_service_item(%r, %r) failed: %r", hostname, service_name, e
-            )
+            logger.exception("add_windows_service_item(%r, %r) failed", hostname, service_name)
             return None, str(e)

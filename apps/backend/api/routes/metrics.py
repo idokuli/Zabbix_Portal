@@ -92,9 +92,7 @@ def acknowledge_problem(
 
     username = current_user.get("username", "unknown")
     if not metrics_bot.acknowledge_problem(eventid, username=username, note=body.note):
-        raise HTTPException(
-            status_code=503, detail="Zabbix not connected or acknowledge failed."
-        )
+        raise HTTPException(status_code=503, detail="Zabbix not connected or acknowledge failed.")
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -118,9 +116,7 @@ def acknowledge_problem(
     return {"message": "Problem acknowledged.", "acknowledged_by": username}
 
 
-@router.get(
-    "/metrics/acknowledgements", tags=["Metrics"], summary="Acknowledgement audit log"
-)
+@router.get("/metrics/acknowledgements", tags=["Metrics"], summary="Acknowledgement audit log")
 def list_acknowledgements(
     limit: int = 200,
     current_user: dict = Depends(get_current_user),
@@ -199,17 +195,13 @@ def get_problem_history(
     }
 
 
-@router.get(
-    "/metrics/history/{itemid}", tags=["Metrics"], summary="Item history time-series"
-)
+@router.get("/metrics/history/{itemid}", tags=["Metrics"], summary="Item history time-series")
 def get_item_history(
     itemid: str,
     minutes: int = 360,
     current_user: dict = Depends(get_current_user),
 ):
     if minutes < 1 or minutes > 10080:
-        raise HTTPException(
-            status_code=400, detail="minutes must be between 1 and 10080"
-        )
+        raise HTTPException(status_code=400, detail="minutes must be between 1 and 10080")
     logger.debug("history request: item=%s minutes=%d", itemid, minutes)
     return metrics_bot.get_item_history(itemid, minutes)

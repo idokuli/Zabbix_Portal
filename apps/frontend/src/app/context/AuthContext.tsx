@@ -24,7 +24,9 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
       .then((me) => setUser(me))
       .catch(() => {
         clearToken();
-        if (window.location.pathname !== "/login") window.location.href = "/login";
+        if (window.location.pathname !== "/login") {
+          window.location.href = "/login";
+        }
       })
       .finally(() => setLoading(false));
   }, []);
@@ -52,6 +54,15 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
 
 export const useAuth = () => {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be inside AuthProvider");
+  if (!ctx) {
+    throw new Error("useAuth must be inside AuthProvider");
+  }
   return ctx;
+};
+
+// root/auditor can see every team's data (e.g. the "All Teams" dashboard scope) —
+// mirrors is_global_viewer() in apps/backend/api/deps.py.
+export const useCanViewAllTeams = () => {
+  const { user } = useAuth();
+  return !!user?.roles?.some((r) => r === "root" || r === "auditor");
 };

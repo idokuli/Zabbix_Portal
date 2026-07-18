@@ -42,51 +42,58 @@ export const ScriptPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Panel
   const [saving, setSaving] = useState(false);
   const common = useCommonItemState();
 
-  const isDisabled = saving || (bulkMode ? !bulkHosts.length : !hostname) || !scriptContent;
+  const isDisabled = saving || (bulkMode ? bulkHosts.length === 0 : !hostname) || !scriptContent;
+
+  const submitBulk = async () => {
+    const result = await api.bulkAddItems({
+      hostnames: bulkHosts.map((h) => h.host),
+      item_type: "script",
+      script_type: scriptType,
+      script_mode: scriptMode,
+      script: scriptContent,
+      file_arg: scriptFileArg || undefined,
+      item_name: scriptItemName || undefined,
+      value_type: scriptValueType,
+      apply_team_tag: common.applyTeamTag,
+    });
+    setBulkResults(result.results);
+    showToast(result.message, result.results.some((r) => r.error) ? "error" : "success");
+  };
+
+  const submitSingle = async () => {
+    await api.addScriptItem({
+      hostname,
+      script_type: scriptType,
+      script_mode: scriptMode,
+      script: scriptContent,
+      file_arg: scriptFileArg || undefined,
+      item_name: scriptItemName || undefined,
+      value_type: scriptValueType,
+      delay: common.assembleDelay(),
+      units: common.units || undefined,
+      history: common.history,
+      trends: common.trends,
+      description: common.description || undefined,
+      status: common.enabled ? 0 : 1,
+      timeout: common.timeoutMode === "override" ? common.timeout : undefined,
+      apply_team_tag: common.applyTeamTag,
+    });
+    showToast("Item added successfully.", "success");
+    setScriptContent("");
+    setScriptFileArg("");
+    setScriptItemName("");
+    common.reset();
+    onSuccess();
+  };
 
   const onSubmit = async () => {
     setSaving(true);
     setBulkResults([]);
-    const assembledDelay = common.assembleDelay();
     try {
       if (bulkMode) {
-        const result = await api.bulkAddItems({
-          hostnames: bulkHosts.map((h) => h.host),
-          item_type: "script",
-          script_type: scriptType,
-          script_mode: scriptMode,
-          script: scriptContent,
-          file_arg: scriptFileArg || undefined,
-          item_name: scriptItemName || undefined,
-          value_type: scriptValueType,
-          apply_team_tag: common.applyTeamTag,
-        });
-        setBulkResults(result.results);
-        showToast(result.message, result.results.some((r) => r.error) ? "error" : "success");
+        await submitBulk();
       } else {
-        await api.addScriptItem({
-          hostname,
-          script_type: scriptType,
-          script_mode: scriptMode,
-          script: scriptContent,
-          file_arg: scriptFileArg || undefined,
-          item_name: scriptItemName || undefined,
-          value_type: scriptValueType,
-          delay: assembledDelay,
-          units: common.units || undefined,
-          history: common.history,
-          trends: common.trends,
-          description: common.description || undefined,
-          status: common.enabled ? 0 : 1,
-          timeout: common.timeoutMode === "override" ? common.timeout : undefined,
-          apply_team_tag: common.applyTeamTag,
-        });
-        showToast("Item added successfully.", "success");
-        setScriptContent("");
-        setScriptFileArg("");
-        setScriptItemName("");
-        common.reset();
-        onSuccess();
+        await submitSingle();
       }
     } catch (e) {
       showToast(e instanceof Error ? e.message : String(e), "error");

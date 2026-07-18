@@ -81,7 +81,9 @@ export const MetricConfigDialog = ({
         updates.itemid = item.itemid;
         updates.itemName = item.name;
         updates.hostname = newHostname;
-        if (!title.trim()) updates.customTitle = undefined;
+        if (!title.trim()) {
+          updates.customTitle = undefined;
+        }
       }
     }
     onSave(updates);

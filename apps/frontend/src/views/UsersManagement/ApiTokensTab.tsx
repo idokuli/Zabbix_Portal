@@ -63,7 +63,9 @@ export const ApiTokensTab = ({
 
   const load = useCallback(
     async (silent = false) => {
-      if (!silent) setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       try {
         const [tr, ur] = await Promise.all([api.listApiTokens(), api.listUsers()]);
         setItems(tr.tokens);
@@ -82,7 +84,9 @@ export const ApiTokensTab = ({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick triggers silent auto-refresh
   useEffect(() => {
-    if (tick > 0) void load(true);
+    if (tick > 0) {
+      void load(true);
+    }
   }, [tick]);
 
   const onSave = async () => {
@@ -92,10 +96,13 @@ export const ApiTokensTab = ({
         name: form.name,
         userid: form.userid,
       };
-      if (form.expires_at)
+      if (form.expires_at) {
         payload.expires_at = Math.floor(new Date(form.expires_at).getTime() / 1000);
+      }
       const r = await api.createApiToken(payload);
-      if (r.token) setNewToken(r.token);
+      if (r.token) {
+        setNewToken(r.token);
+      }
       showToast("API token created.", "success");
       setAddOpen(false);
       setForm({ name: "", userid: "", expires_at: "" });
@@ -107,7 +114,9 @@ export const ApiTokensTab = ({
     }
   };
   const onDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget) {
+      return;
+    }
     try {
       await api.deleteApiToken(deleteTarget.tokenid);
       showToast("Token deleted.", "success");

@@ -1,0 +1,77 @@
+line-length = 100
+target-version = "py312"
+
+[lint]
+# Expanded beyond ruff's tiny default (E4/E7/E9/F) to approximate SonarQube's
+# default profile: bugbear/blind-except/tryceratops (reliability), bandit
+# (security), mccabe (complexity), simplify/return/pathlib/eradicate/print
+# (maintainability). See CLAUDE.md "SonarQube quality gates" section.
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "B",        # flake8-bugbear
+    "BLE",      # flake8-blind-except
+    "S",        # flake8-bandit (security)
+    "C90",      # mccabe complexity
+    "SIM",      # flake8-simplify
+    "RET",      # flake8-return
+    "ARG",      # flake8-unused-arguments
+    "PTH",      # flake8-use-pathlib
+    "TRY",      # tryceratops (exception handling)
+    "LOG", "G", # logging
+    "N",        # pep8-naming
+    "UP",       # pyupgrade
+    "ERA",      # eradicate (commented-out code)
+    "T20",      # flake8-print
+    "DTZ",      # flake8-datetimez
+]
+ignore = [
+    "E501",    # line length handled by ruff format
+    "S101",    # assert is fine (used in tests)
+    # Established project naming convention (Item_Manager, Host_Manager, ...) used
+    # throughout every manager class and module — renaming is a huge, high-risk,
+    # out-of-scope refactor for a style nit, not worth it here.
+    "N801", "N806", "N999",
+    # Every Zabbix/DB manager method deliberately catches `Exception` broadly and
+    # translates it to `RuntimeError` at the API boundary (see CLAUDE.md's
+    # `zabbix_call` convention) — the whole codebase's error-handling architecture
+    # depends on this. Narrowing ~224 call sites to guess zabbix_utils/psycopg2's
+    # exact exception hierarchy is high-risk for no real benefit.
+    "BLE001",
+    # `current_user: dict = Depends(get_current_user)` is required on ~40 FastAPI
+    # route handlers purely to enforce auth — the dependency runs (and can 401/403)
+    # even when the resolved value isn't read in the body. Same for required path
+    # params (`templateid` in a nested route) and framework-mandated signatures
+    # (`app: FastAPI` in a `lifespan()` handler, `self`/`s` in dynamically assigned
+    # methods/mock `__enter__` overrides needing the protocol's exact arity).
+    # Flagging these as "unused" is a false positive of the underlying pattern.
+    "ARG001", "ARG005",
+    # No safe autofix exists for merging nested `with` statements (43 sites), and
+    # hand-editing that many multi-line blocks is exactly the kind of mechanical,
+    # indentation-sensitive edit that already caused real regressions in this
+    # session (see git history) — not worth the risk for a pure style nit.
+    "SIM117",
+    # Moving `return`s from inside `try` into `else` (TRY300) and requiring custom
+    # exception classes instead of inline HTTPException messages (TRY003) are pure
+    # style preferences with no behavioral upside; TRY003 in particular conflicts
+    # with FastAPI's idiomatic `raise HTTPException(422, detail="...")` pattern
+    # used ~150 times across the route layer.
+    "TRY300", "TRY003",
+    # Restructuring a `raise` inside a `try` into a separate inner function (5
+    # sites) is a control-flow refactor with real regression risk for a lint
+    # nitpick about except-clause clarity — not worth it in already-reviewed,
+    # tested manager methods.
+    "TRY301",
+]
+
+[lint.mccabe]
+max-complexity = 15
+
+[lint.flake8-bugbear]
+# FastAPI's dependency-injection pattern (`x: T = Depends(...)`) is the
+# idiomatic, required way to declare route dependencies — not a mutable-default
+# bug. Without this, B008 fires on every route handler (~200 false positives).
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body", "fastapi.Header", "fastapi.Cookie", "fastapi.File", "fastapi.Form"]
+
+[lint.per-file-ignores]
+"tests/*" = ["S101", "S105", "S106", "ARG001", "ARG002", "PLR2004", "TRY002"]

@@ -7,7 +7,8 @@ _set_usergroup_permission / _user_type / _roleid_for, which live in SyncHelpersM
 
 import logging
 import secrets
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
+from collections.abc import Callable
 
 from ZabbixSync.constants import DEFAULT_GROUP
 
@@ -41,9 +42,7 @@ class SyncPushMixin:
         """Create or update a Zabbix user to match the portal user."""
         if not self.zapi:
             return
-        usrgrpid = self._get_or_create_usergroup(
-            team_name if team_name else DEFAULT_GROUP
-        )
+        usrgrpid = self._get_or_create_usergroup(team_name if team_name else DEFAULT_GROUP)
         if not usrgrpid:
             logger.warning(
                 "ZabbixSync.push_user(%r): could not resolve user group — skipping.",
@@ -75,11 +74,9 @@ class SyncPushMixin:
                 else:
                     payload["type"] = user_type
                 self.zapi.user.create(**payload)
-            logger.info(
-                "ZabbixSync: pushed user %r to Zabbix (type=%d).", username, user_type
-            )
-        except Exception as exc:
-            logger.error("ZabbixSync.push_user(%r) failed: %r", username, exc)
+            logger.info("ZabbixSync: pushed user %r to Zabbix (type=%d).", username, user_type)
+        except Exception:
+            logger.exception("ZabbixSync.push_user(%r) failed", username)
 
     def delete_user(self, username: str) -> None:
         """Delete a Zabbix user matching the portal user."""
@@ -91,8 +88,8 @@ class SyncPushMixin:
         try:
             self.zapi.user.delete(existing["userid"])
             logger.info("ZabbixSync: deleted user %r from Zabbix.", username)
-        except Exception as exc:
-            logger.error("ZabbixSync.delete_user(%r) failed: %r", username, exc)
+        except Exception:
+            logger.exception("ZabbixSync.delete_user(%r) failed", username)
 
     def update_password(self, username: str, new_password: str) -> None:
         """Sync a password change to Zabbix."""
@@ -104,8 +101,8 @@ class SyncPushMixin:
         try:
             self.zapi.user.update(userid=existing["userid"], passwd=new_password)
             logger.info("ZabbixSync: updated password for %r in Zabbix.", username)
-        except Exception as exc:
-            logger.error("ZabbixSync.update_password(%r) failed: %r", username, exc)
+        except Exception:
+            logger.exception("ZabbixSync.update_password(%r) failed", username)
 
     # ── Portal → Zabbix: teams and host visibility ────────────────────────────
 
@@ -132,9 +129,7 @@ class SyncPushMixin:
         if not self.zapi:
             return
         try:
-            ug = self.zapi.usergroup.get(
-                filter={"name": team_name}, output=["usrgrpid"]
-            )
+            ug = self.zapi.usergroup.get(filter={"name": team_name}, output=["usrgrpid"])
             if ug:
                 self.zapi.usergroup.delete(ug[0]["usrgrpid"])
             hg = self.zapi.hostgroup.get(filter={"name": team_name}, output=["groupid"])
@@ -144,8 +139,8 @@ class SyncPushMixin:
                 "ZabbixSync: deleted Zabbix user group and host group for %r.",
                 team_name,
             )
-        except Exception as exc:
-            logger.error("ZabbixSync.delete_team(%r) failed: %r", team_name, exc)
+        except Exception:
+            logger.exception("ZabbixSync.delete_team(%r) failed", team_name)
 
     # ── Portal → Zabbix: host assignments ────────────────────────────────────
 
@@ -169,9 +164,7 @@ class SyncPushMixin:
             host_grpid = self._get_or_create_hostgroup(team_name)
             if not host_grpid:
                 return
-            current_groups = [
-                {"groupid": g["groupid"]} for g in host.get(self._host_hg_key, [])
-            ]
+            current_groups = [{"groupid": g["groupid"]} for g in host.get(self._host_hg_key, [])]
             if not any(g["groupid"] == host_grpid for g in current_groups):
                 self.zapi.host.update(
                     hostid=host["hostid"],
@@ -183,15 +176,12 @@ class SyncPushMixin:
                     team_name,
                 )
             else:
-                logger.debug(
-                    "ZabbixSync: host %r already in host group %r.", hostname, team_name
-                )
-        except Exception as exc:
-            logger.error(
-                "ZabbixSync.push_host_to_team(%r, %r) failed: %r",
+                logger.debug("ZabbixSync: host %r already in host group %r.", hostname, team_name)
+        except Exception:
+            logger.exception(
+                "ZabbixSync.push_host_to_team(%r, %r) failed",
                 hostname,
                 team_name,
-                exc,
             )
 
     def remove_host_from_team(self, hostname: str, team_name: str) -> None:
@@ -230,10 +220,9 @@ class SyncPushMixin:
                 hostname,
                 team_name,
             )
-        except Exception as exc:
-            logger.error(
-                "ZabbixSync.remove_host_from_team(%r, %r) failed: %r",
+        except Exception:
+            logger.exception(
+                "ZabbixSync.remove_host_from_team(%r, %r) failed",
                 hostname,
                 team_name,
-                exc,
             )

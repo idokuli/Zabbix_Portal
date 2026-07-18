@@ -96,9 +96,7 @@ def test_add_external_item_success(mgr):
     _host_ok(mgr)
     mgr.zapi.hostinterface.get.return_value = [{"interfaceid": "5"}]
     mgr.zapi.item.create.return_value = {"itemids": ["20"]}
-    item_id, err = mgr.add_external_item(
-        "h1", "Ext check", "check.sh[arg]", value_type=1
-    )
+    item_id, err = mgr.add_external_item("h1", "Ext check", "check.sh[arg]", value_type=1)
     assert item_id == "20"
     assert err is None
     call_kwargs = mgr.zapi.item.create.call_args[1]
@@ -145,9 +143,7 @@ def test_add_calculated_item_host_not_found(mgr):
 def test_add_dependent_item_success(mgr):
     _host_ok(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["40"]}
-    item_id, err = mgr.add_dependent_item(
-        "h1", "Dep item", "dep.key", "100", value_type=4
-    )
+    item_id, err = mgr.add_dependent_item("h1", "Dep item", "dep.key", "100", value_type=4)
     assert item_id == "40"
     assert err is None
     call_kwargs = mgr.zapi.item.create.call_args[1]

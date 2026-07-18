@@ -14,9 +14,7 @@ import pytest
 
 
 def test_get_portal_ldap_config_returns_dict():
-    with patch(
-        "Database.get_setting", return_value='{"host": "ldap.corp", "enabled": true}'
-    ):
+    with patch("Database.get_setting", return_value='{"host": "ldap.corp", "enabled": true}'):
         from ldap_auth import get_portal_ldap_config
 
         result = get_portal_ldap_config()
@@ -98,9 +96,7 @@ def test_test_portal_ldap_connection_success():
     with patch.dict("sys.modules", {"ldap3": ldap3}):
         from ldap_auth import test_portal_ldap_connection
 
-        ok, msg = test_portal_ldap_connection(
-            {"host": "ldap.corp", "port": 389, "use_ssl": False}
-        )
+        ok, msg = test_portal_ldap_connection({"host": "ldap.corp", "port": 389, "use_ssl": False})
     assert ok is True
     assert msg == "ok"
 
@@ -234,9 +230,9 @@ def test_do_ldap_auth_user_not_found():
     with patch.dict("sys.modules", {"ldap3": ldap3, "ldap3.utils.conv": MagicMock()}):
         ldap3.utils = MagicMock()
         ldap3.utils.conv.escape_filter_chars = lambda x: x
-        from ldap_auth import _do_ldap_auth, LdapUserNotFound
+        from ldap_auth import _do_ldap_auth, LdapUserNotFoundError
 
-        with pytest.raises(LdapUserNotFound):
+        with pytest.raises(LdapUserNotFoundError):
             _do_ldap_auth(_cfg(), "ghost", "pass")
 
 
@@ -254,9 +250,7 @@ def test_do_ldap_auth_service_bind_fails():
 def test_do_ldap_auth_no_host_raises():
     cfg = _cfg()
     cfg["host"] = ""
-    with patch.dict(
-        "sys.modules", {"ldap3": MagicMock(), "ldap3.utils.conv": MagicMock()}
-    ):
+    with patch.dict("sys.modules", {"ldap3": MagicMock(), "ldap3.utils.conv": MagicMock()}):
         from ldap_auth import _do_ldap_auth
 
         with pytest.raises(RuntimeError, match="must be configured"):

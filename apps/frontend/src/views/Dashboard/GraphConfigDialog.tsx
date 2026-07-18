@@ -102,7 +102,9 @@ export const GraphConfigDialog = ({
           updates.hostName = host.host;
         }
         // Reset custom title when swapping to a new graph
-        if (!title.trim()) updates.customTitle = undefined;
+        if (!title.trim()) {
+          updates.customTitle = undefined;
+        }
       }
     }
     onSave(updates);

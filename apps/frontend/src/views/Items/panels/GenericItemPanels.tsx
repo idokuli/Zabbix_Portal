@@ -467,6 +467,13 @@ export const SshItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pane
   const [saving, setSaving] = useState(false);
   const common = useCommonItemState();
 
+  const buildSshAuthFields = () => {
+    if (authType === 1) {
+      return { publickey: publicKey || undefined, privatekey: privateKey || undefined };
+    }
+    return { password: password || undefined };
+  };
+
   const onSubmit = async () => {
     setSaving(true);
     try {
@@ -476,9 +483,7 @@ export const SshItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pane
         params,
         authtype: authType,
         username: username || undefined,
-        password: authType === 0 ? password || undefined : undefined,
-        publickey: authType === 1 ? publicKey || undefined : undefined,
-        privatekey: authType === 1 ? privateKey || undefined : undefined,
+        ...buildSshAuthFields(),
         value_type: valueType,
         delay: common.delay,
         history: common.history,

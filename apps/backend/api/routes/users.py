@@ -20,22 +20,16 @@ def list_users(current_user: dict = Depends(require_admin)):
 
 
 @router.put("/users/{user_id}", tags=["Users"], summary="Update user roles and team")
-def update_user(
-    user_id: int, data: UserUpdateRequest, current_user: dict = Depends(require_admin)
-):
+def update_user(user_id: int, data: UserUpdateRequest, current_user: dict = Depends(require_admin)):
     target = um.get_user_by_id(user_id)
     if not target:
         raise HTTPException(status_code=404, detail="User not found.")
-    if "root" not in current_user.get("roles", []) and target.get(
-        "team_id"
-    ) != live_team_id(current_user):
-        raise HTTPException(
-            status_code=403, detail="You can only edit users in your own team."
-        )
+    if "root" not in current_user.get("roles", []) and target.get("team_id") != live_team_id(
+        current_user
+    ):
+        raise HTTPException(status_code=403, detail="You can only edit users in your own team.")
     if not can_grant_roles(current_user.get("roles", []), data.roles):
-        raise HTTPException(
-            status_code=403, detail="You cannot assign roles higher than your own."
-        )
+        raise HTTPException(status_code=403, detail="You cannot assign roles higher than your own.")
     if not um.update_user_profile(user_id, data.roles, data.team_id):
         raise HTTPException(status_code=400, detail="Failed to update user.")
     team_name = um.get_team_name(data.team_id) if data.team_id else None
@@ -46,19 +40,11 @@ def update_user(
 @router.post("/users", tags=["Teams"], summary="Create user", status_code=201)
 def create_user(data: UserRequest, current_user: dict = Depends(require_admin)):
     if len(data.password) < 8:
-        raise HTTPException(
-            status_code=400, detail="Password must be at least 8 characters long."
-        )
-    if "root" not in current_user.get("roles", []) and data.team_id != live_team_id(
-        current_user
-    ):
-        raise HTTPException(
-            status_code=403, detail="You can only create users in your own team."
-        )
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long.")
+    if "root" not in current_user.get("roles", []) and data.team_id != live_team_id(current_user):
+        raise HTTPException(status_code=403, detail="You can only create users in your own team.")
     if not can_grant_roles(current_user.get("roles", []), data.roles or ["member"]):
-        raise HTTPException(
-            status_code=403, detail="You cannot assign roles higher than your own."
-        )
+        raise HTTPException(status_code=403, detail="You cannot assign roles higher than your own.")
     roles = data.roles or ["member"]
     result = um.create_user(
         data.username,
@@ -83,15 +69,13 @@ def change_password(
     current_user: dict = Depends(require_admin),
 ):
     if len(data.new_password) < 8:
-        raise HTTPException(
-            status_code=400, detail="Password must be at least 8 characters long."
-        )
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long.")
     target = um.get_user_by_id(user_id)
     if not target:
         raise HTTPException(status_code=404, detail="User not found.")
-    if "root" not in current_user.get("roles", []) and target.get(
-        "team_id"
-    ) != live_team_id(current_user):
+    if "root" not in current_user.get("roles", []) and target.get("team_id") != live_team_id(
+        current_user
+    ):
         raise HTTPException(
             status_code=403,
             detail="You can only change passwords for users in your own team.",
@@ -107,12 +91,10 @@ def delete_user(user_id: int, current_user: dict = Depends(require_admin)):
     target = um.get_user_by_id(user_id)
     if not target:
         raise HTTPException(status_code=404, detail="User not found.")
-    if "root" not in current_user.get("roles", []) and target.get(
-        "team_id"
-    ) != live_team_id(current_user):
-        raise HTTPException(
-            status_code=403, detail="You can only delete users in your own team."
-        )
+    if "root" not in current_user.get("roles", []) and target.get("team_id") != live_team_id(
+        current_user
+    ):
+        raise HTTPException(status_code=403, detail="You can only delete users in your own team.")
     if not um.delete_user(user_id):
         raise HTTPException(status_code=404, detail="User not found.")
     sync_bot.delete_user(target["username"])

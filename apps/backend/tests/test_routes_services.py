@@ -50,9 +50,8 @@ def _bot():
 def test_list_services_success():
     mock, app = _bot()
     mock.list_services.return_value = [{"serviceid": "1"}]
-    with patch("api.routes.services.services_bot", mock):
-        with TestClient(app) as c:
-            r = c.get("/services")
+    with patch("api.routes.services.services_bot", mock), TestClient(app) as c:
+        r = c.get("/services")
     assert r.status_code == 200
     assert "services" in r.json()
 
@@ -67,9 +66,8 @@ def test_create_service_success():
         "weight": 1,
         "description": "",
     }
-    with patch("api.routes.services.services_bot", mock):
-        with TestClient(app) as c:
-            r = c.post("/services", json=payload)
+    with patch("api.routes.services.services_bot", mock), TestClient(app) as c:
+        r = c.post("/services", json=payload)
     assert r.status_code == 200
     assert r.json()["serviceid"] == "3"
 
@@ -84,19 +82,15 @@ def test_create_service_zabbix_error():
         "weight": 1,
         "description": "",
     }
-    with patch("api.routes.services.services_bot", mock):
-        with TestClient(app) as c:
-            r = c.post("/services", json=payload)
+    with patch("api.routes.services.services_bot", mock), TestClient(app) as c:
+        r = c.post("/services", json=payload)
     assert r.status_code == 422
 
 
 def test_update_service_success():
     mock, app = _bot()
-    with patch("api.routes.services.services_bot", mock):
-        with TestClient(app) as c:
-            r = c.put(
-                "/services/3", json={"name": "Web2", "algorithm": 1, "description": ""}
-            )
+    with patch("api.routes.services.services_bot", mock), TestClient(app) as c:
+        r = c.put("/services/3", json={"name": "Web2", "algorithm": 1, "description": ""})
     assert r.status_code == 200
     assert r.json()["ok"] is True
 
@@ -104,28 +98,23 @@ def test_update_service_success():
 def test_update_service_zabbix_error():
     mock, app = _bot()
     mock.update_service.side_effect = RuntimeError("err")
-    with patch("api.routes.services.services_bot", mock):
-        with TestClient(app) as c:
-            r = c.put(
-                "/services/3", json={"name": "Web2", "algorithm": 1, "description": ""}
-            )
+    with patch("api.routes.services.services_bot", mock), TestClient(app) as c:
+        r = c.put("/services/3", json={"name": "Web2", "algorithm": 1, "description": ""})
     assert r.status_code == 422
 
 
 def test_delete_service_success():
     mock, app = _bot()
-    with patch("api.routes.services.services_bot", mock):
-        with TestClient(app) as c:
-            r = c.delete("/services/3")
+    with patch("api.routes.services.services_bot", mock), TestClient(app) as c:
+        r = c.delete("/services/3")
     assert r.status_code == 200
 
 
 def test_delete_service_zabbix_error():
     mock, app = _bot()
     mock.delete_service.side_effect = RuntimeError("err")
-    with patch("api.routes.services.services_bot", mock):
-        with TestClient(app) as c:
-            r = c.delete("/services/3")
+    with patch("api.routes.services.services_bot", mock), TestClient(app) as c:
+        r = c.delete("/services/3")
     assert r.status_code == 422
 
 
@@ -135,9 +124,8 @@ def test_delete_service_zabbix_error():
 def test_list_slas_success():
     mock, app = _bot()
     mock.list_slas.return_value = []
-    with patch("api.routes.services.services_bot", mock):
-        with TestClient(app) as c:
-            r = c.get("/sla")
+    with patch("api.routes.services.services_bot", mock), TestClient(app) as c:
+        r = c.get("/sla")
     assert r.status_code == 200
 
 
@@ -152,9 +140,8 @@ def test_create_sla_success():
         "description": "",
         "service_tags": [],
     }
-    with patch("api.routes.services.services_bot", mock):
-        with TestClient(app) as c:
-            r = c.post("/sla", json=payload)
+    with patch("api.routes.services.services_bot", mock), TestClient(app) as c:
+        r = c.post("/sla", json=payload)
     assert r.status_code == 200
     assert r.json()["slaid"] == "9"
 
@@ -170,26 +157,23 @@ def test_create_sla_zabbix_error():
         "description": "",
         "service_tags": [],
     }
-    with patch("api.routes.services.services_bot", mock):
-        with TestClient(app) as c:
-            r = c.post("/sla", json=payload)
+    with patch("api.routes.services.services_bot", mock), TestClient(app) as c:
+        r = c.post("/sla", json=payload)
     assert r.status_code == 422
 
 
 def test_delete_sla_success():
     mock, app = _bot()
-    with patch("api.routes.services.services_bot", mock):
-        with TestClient(app) as c:
-            r = c.delete("/sla/9")
+    with patch("api.routes.services.services_bot", mock), TestClient(app) as c:
+        r = c.delete("/sla/9")
     assert r.status_code == 200
 
 
 def test_get_sla_report_success():
     mock, app = _bot()
     mock.get_sla_report.return_value = {"periods": []}
-    with patch("api.routes.services.services_bot", mock):
-        with TestClient(app) as c:
-            r = c.get("/sla/9/report")
+    with patch("api.routes.services.services_bot", mock), TestClient(app) as c:
+        r = c.get("/sla/9/report")
     assert r.status_code == 200
 
 
@@ -199,9 +183,8 @@ def test_get_sla_report_success():
 def test_list_health_monitors_success():
     mock, app = _bot()
     mock.list_health_monitors.return_value = []
-    with patch("api.routes.services.services_bot", mock):
-        with TestClient(app) as c:
-            r = c.get("/health-monitors")
+    with patch("api.routes.services.services_bot", mock), TestClient(app) as c:
+        r = c.get("/health-monitors")
     assert r.status_code == 200
 
 
@@ -215,15 +198,13 @@ def test_create_health_monitor_success():
         "expected_contains": "",
         "process_name": "",
     }
-    with patch("api.routes.services.services_bot", mock):
-        with TestClient(app) as c:
-            r = c.post("/health-monitors", json=payload)
+    with patch("api.routes.services.services_bot", mock), TestClient(app) as c:
+        r = c.post("/health-monitors", json=payload)
     assert r.status_code == 200
 
 
 def test_delete_health_monitor_success():
     mock, app = _bot()
-    with patch("api.routes.services.services_bot", mock):
-        with TestClient(app) as c:
-            r = c.delete("/health-monitors/20")
+    with patch("api.routes.services.services_bot", mock), TestClient(app) as c:
+        r = c.delete("/health-monitors/20")
     assert r.status_code == 200

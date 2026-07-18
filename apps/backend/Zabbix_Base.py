@@ -4,7 +4,8 @@ import re
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 import requests
 from dotenv import load_dotenv
@@ -48,24 +49,18 @@ class Zabbix_Base:
         self._zabbix_version: tuple[int, int] = (5, 4)  # fallback; updated after login
         try:
             # zabbix_utils performs login during construction when creds are provided.
-            self.zapi = ZabbixAPI(
-                url=url, user=user, password=password, skip_version_check=True
-            )
+            self.zapi = ZabbixAPI(url=url, user=user, password=password, skip_version_check=True)
             logger.info("Successfully connected to Zabbix API.")
             # Detect server version so callers can choose the right API syntax
             try:
                 ver = str(self.zapi.apiinfo.version())
                 parts = [int(x) for x in ver.split(".")[:2]]
                 self._zabbix_version = (parts[0], parts[1])
-                logger.info(
-                    "Zabbix API version: %s (parsed %s)", ver, self._zabbix_version
-                )
+                logger.info("Zabbix API version: %s (parsed %s)", ver, self._zabbix_version)
             except Exception as ve:
-                logger.warning(
-                    "Could not detect Zabbix version: %r — defaulting to 5.4 syntax", ve
-                )
-        except Exception as e:
-            logger.error("Zabbix connection failed: %r", e)
+                logger.warning("Could not detect Zabbix version: %r — defaulting to 5.4 syntax", ve)
+        except Exception:
+            logger.exception("Zabbix connection failed")
             self.zapi = None
 
     def _resolve_api_url(self, base_url: str) -> str:
@@ -87,9 +82,7 @@ class Zabbix_Base:
         }
         for api_url in candidates:
             try:
-                resp = requests.post(
-                    api_url, json=payload, timeout=5, verify=self._ssl_verify
-                )
+                resp = requests.post(api_url, json=payload, timeout=5, verify=self._ssl_verify)
                 if resp.status_code == 200 and "jsonrpc" in resp.text:
                     logger.info("Zabbix API found at: %s", api_url)
                     return api_url

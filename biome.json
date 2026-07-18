@@ -28,9 +28,32 @@
     "rules": {
       "recommended": true,
       "correctness": {
-        "noUnusedImports": "warn",
-        "noUnusedVariables": "warn"
-      }
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error"
+      },
+      "complexity": {
+        "all": true,
+        "noVoid": "off"
+      },
+      "suspicious": {
+        "all": true,
+        "noReactSpecificProps": "off",
+        "noEmptyBlockStatements": "off",
+        "noConsole": { "level": "warn", "options": { "allow": ["error", "warn"] } }
+      },
+      "style": {
+        "all": true,
+        "useNamingConvention": "off",
+        "noImplicitBoolean": "off",
+        "noDefaultExport": "off",
+        "useFilenamingConvention": "off"
+      },
+      "performance": {
+        "all": true,
+        "noBarrelFile": "off"
+      },
+      "security": { "all": true },
+      "a11y": { "all": true }
     }
   },
   "javascript": {

@@ -39,9 +39,7 @@ def test_add_snmp_item_success_v2c(mgr):
     _host_ok(mgr)
     mgr.zapi.hostinterface.get.return_value = _iface("2")
     mgr.zapi.item.create.return_value = {"itemids": ["20"]}
-    item_id, err = mgr.add_snmp_item(
-        "h1", "CPU via SNMP", "snmp.cpu", ".1.3.6.1.4.1.2021.11.11.0"
-    )
+    item_id, err = mgr.add_snmp_item("h1", "CPU via SNMP", "snmp.cpu", ".1.3.6.1.4.1.2021.11.11.0")
     assert item_id == "20"
     assert err is None
     call_kwargs = mgr.zapi.item.create.call_args[1]
@@ -193,9 +191,7 @@ def test_add_snmp_trap_item_with_description_and_team(mgr):
     _host_ok(mgr)
     mgr.zapi.hostinterface.get.return_value = _iface("2")
     mgr.zapi.item.create.return_value = {"itemids": ["31"]}
-    item_id, err = mgr.add_snmp_trap_item(
-        "h1", "Trap", description="Trap desc", team_name="ops"
-    )
+    item_id, err = mgr.add_snmp_trap_item("h1", "Trap", description="Trap desc", team_name="ops")
     assert item_id == "31"
     call_kwargs = mgr.zapi.item.create.call_args[1]
     assert call_kwargs["description"] == "Trap desc"

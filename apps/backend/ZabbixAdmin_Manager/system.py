@@ -46,9 +46,7 @@ class SystemMixin:
                             "hostname": host,
                         }
                 except Exception as exc:
-                    logger.debug(
-                        "Failed to enrich item queue with host/item names: %s", exc
-                    )
+                    logger.debug("Failed to enrich item queue with host/item names: %s", exc)
             enriched = []
             for o in overview:
                 info = name_map.get(o.get("itemid", ""), {})
@@ -63,11 +61,10 @@ class SystemMixin:
         if not self.zapi:
             return {}
         try:
-            settings = self.zapi.settings.get(output="extend")
-            return settings
+            return self.zapi.settings.get(output="extend")
         except Exception as e:
             logger.exception("get_settings failed")
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e
 
     def update_housekeeping(self, params: dict) -> bool:
         if not self.zapi:
@@ -76,4 +73,4 @@ class SystemMixin:
             self.zapi.settings.update(**params)
             return True
         except Exception as e:
-            raise RuntimeError(str(e))
+            raise RuntimeError(str(e)) from e

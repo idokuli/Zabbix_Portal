@@ -5,9 +5,7 @@ from api.managers import dc_bot
 router = APIRouter(tags=["DataCollection"])
 
 
-@router.get(
-    "/dc/template-groups", tags=["DataCollection"], summary="List template groups"
-)
+@router.get("/dc/template-groups", tags=["DataCollection"], summary="List template groups")
 def list_template_groups(current_user: dict = Depends(get_current_user)):
     return {"groups": dc_bot.list_template_groups()}
 
@@ -18,9 +16,7 @@ def list_template_groups(current_user: dict = Depends(get_current_user)):
     summary="Create template group",
     status_code=201,
 )
-def create_template_group(
-    body: dict = Body(...), current_user: dict = Depends(require_admin)
-):
+def create_template_group(body: dict = Body(...), current_user: dict = Depends(require_admin)):
     name = (body.get("name") or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Name is required.")
@@ -64,9 +60,7 @@ def delete_template_group(groupid: str, current_user: dict = Depends(require_adm
     tags=["DataCollection"],
     summary="Templates in a group",
 )
-def get_template_group_members(
-    groupid: str, current_user: dict = Depends(get_current_user)
-):
+def get_template_group_members(groupid: str, current_user: dict = Depends(get_current_user)):
     return {"templates": dc_bot.get_template_group_members(groupid)}
 
 
@@ -80,9 +74,7 @@ def set_template_group_members(
 ):
     templateids = body.get("templateids", [])
     if not dc_bot.set_template_group_members(groupid, templateids):
-        raise HTTPException(
-            status_code=400, detail="Failed to update template group members."
-        )
+        raise HTTPException(status_code=400, detail="Failed to update template group members.")
     return {"ok": True}
 
 
@@ -100,9 +92,7 @@ def list_host_groups(current_user: dict = Depends(get_current_user)):
     summary="Create host group",
     status_code=201,
 )
-def create_host_group(
-    body: dict = Body(...), current_user: dict = Depends(require_admin)
-):
+def create_host_group(body: dict = Body(...), current_user: dict = Depends(require_admin)):
     name = (body.get("name") or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Name is required.")
@@ -112,9 +102,7 @@ def create_host_group(
     return {"groupid": gid, "message": f"Host group '{name}' created."}
 
 
-@router.put(
-    "/dc/host-groups/{groupid}", tags=["DataCollection"], summary="Rename host group"
-)
+@router.put("/dc/host-groups/{groupid}", tags=["DataCollection"], summary="Rename host group")
 def update_host_group(
     groupid: str, body: dict = Body(...), current_user: dict = Depends(require_admin)
 ):
@@ -126,14 +114,10 @@ def update_host_group(
     return {"message": "Host group updated."}
 
 
-@router.delete(
-    "/dc/host-groups/{groupid}", tags=["DataCollection"], summary="Delete host group"
-)
+@router.delete("/dc/host-groups/{groupid}", tags=["DataCollection"], summary="Delete host group")
 def delete_host_group(groupid: str, current_user: dict = Depends(require_admin)):
     if not dc_bot.delete_host_group(groupid):
-        raise HTTPException(
-            status_code=404, detail="Host group not found or could not be deleted."
-        )
+        raise HTTPException(status_code=404, detail="Host group not found or could not be deleted.")
     return {"message": "Host group deleted."}
 
 
@@ -142,9 +126,7 @@ def delete_host_group(groupid: str, current_user: dict = Depends(require_admin))
     tags=["DataCollection"],
     summary="Hosts in a group",
 )
-def get_host_group_members(
-    groupid: str, current_user: dict = Depends(get_current_user)
-):
+def get_host_group_members(groupid: str, current_user: dict = Depends(get_current_user)):
     return {"hosts": dc_bot.get_host_group_members(groupid)}
 
 
@@ -158,9 +140,7 @@ def set_host_group_members(
 ):
     hostids = body.get("hostids", [])
     if not dc_bot.set_host_group_members(groupid, hostids):
-        raise HTTPException(
-            status_code=400, detail="Failed to update host group members."
-        )
+        raise HTTPException(status_code=400, detail="Failed to update host group members.")
     return {"ok": True}
 
 
@@ -175,12 +155,8 @@ def list_dc_templates(
     return {"templates": dc_bot.list_templates(search=search)}
 
 
-@router.post(
-    "/dc/templates", tags=["DataCollection"], summary="Create template", status_code=201
-)
-def create_dc_template(
-    body: dict = Body(...), current_user: dict = Depends(require_admin)
-):
+@router.post("/dc/templates", tags=["DataCollection"], summary="Create template", status_code=201)
+def create_dc_template(body: dict = Body(...), current_user: dict = Depends(require_admin)):
     name = (body.get("name") or "").strip()
     group_ids = body.get("group_ids") or []
     if not name:
@@ -199,9 +175,7 @@ def create_dc_template(
     return {"templateid": tid, "message": f"Template '{name}' created."}
 
 
-@router.get(
-    "/dc/templates/{templateid}", tags=["DataCollection"], summary="Get template detail"
-)
+@router.get("/dc/templates/{templateid}", tags=["DataCollection"], summary="Get template detail")
 def get_dc_template(templateid: str, current_user: dict = Depends(get_current_user)):
     detail = dc_bot.get_template_detail(templateid)
     if not detail:
@@ -209,9 +183,7 @@ def get_dc_template(templateid: str, current_user: dict = Depends(get_current_us
     return detail
 
 
-@router.put(
-    "/dc/templates/{templateid}", tags=["DataCollection"], summary="Update template"
-)
+@router.put("/dc/templates/{templateid}", tags=["DataCollection"], summary="Update template")
 def update_dc_template(
     templateid: str, body: dict = Body(...), current_user: dict = Depends(require_admin)
 ):
@@ -230,14 +202,10 @@ def update_dc_template(
     return {"message": "Template updated."}
 
 
-@router.delete(
-    "/dc/templates/{templateid}", tags=["DataCollection"], summary="Delete template"
-)
+@router.delete("/dc/templates/{templateid}", tags=["DataCollection"], summary="Delete template")
 def delete_dc_template(templateid: str, current_user: dict = Depends(require_admin)):
     if not dc_bot.delete_template(templateid):
-        raise HTTPException(
-            status_code=404, detail="Template not found or could not be deleted."
-        )
+        raise HTTPException(status_code=404, detail="Template not found or could not be deleted.")
     return {"message": "Template deleted."}
 
 
@@ -255,9 +223,7 @@ def list_maintenances(current_user: dict = Depends(get_current_user)):
     summary="Create maintenance",
     status_code=201,
 )
-def create_maintenance(
-    body: dict = Body(...), current_user: dict = Depends(require_admin)
-):
+def create_maintenance(body: dict = Body(...), current_user: dict = Depends(require_admin)):
     name = (body.get("name") or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Name is required.")
@@ -302,9 +268,7 @@ def list_correlations(current_user: dict = Depends(get_current_user)):
     summary="Create correlation",
     status_code=201,
 )
-def create_correlation(
-    body: dict = Body(...), current_user: dict = Depends(require_admin)
-):
+def create_correlation(body: dict = Body(...), current_user: dict = Depends(require_admin)):
     name = (body.get("name") or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Name is required.")
@@ -337,9 +301,7 @@ def delete_correlation(correlationid: str, current_user: dict = Depends(require_
 # Discovery Rules
 
 
-@router.get(
-    "/dc/discovery-rules", tags=["DataCollection"], summary="List discovery rules"
-)
+@router.get("/dc/discovery-rules", tags=["DataCollection"], summary="List discovery rules")
 def list_discovery_rules(current_user: dict = Depends(get_current_user)):
     return {"rules": dc_bot.list_discovery_rules()}
 
@@ -350,9 +312,7 @@ def list_discovery_rules(current_user: dict = Depends(get_current_user)):
     summary="Create discovery rule",
     status_code=201,
 )
-def create_discovery_rule(
-    body: dict = Body(...), current_user: dict = Depends(require_admin)
-):
+def create_discovery_rule(body: dict = Body(...), current_user: dict = Depends(require_admin)):
     name = (body.get("name") or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Name is required.")

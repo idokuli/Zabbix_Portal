@@ -48,9 +48,8 @@ def _bot():
 def test_list_actions_success():
     mock, app = _bot()
     mock.list_actions.return_value = [{"actionid": "1"}]
-    with patch("api.routes.actions.actions_bot", mock):
-        with TestClient(app) as c:
-            r = c.get("/actions")
+    with patch("api.routes.actions.actions_bot", mock), TestClient(app) as c:
+        r = c.get("/actions")
     assert r.status_code == 200
     assert r.json()["actions"] == [{"actionid": "1"}]
 
@@ -58,11 +57,8 @@ def test_list_actions_success():
 def test_create_action_success():
     mock, app = _bot()
     mock.create_action.return_value = "10"
-    with patch("api.routes.actions.actions_bot", mock):
-        with TestClient(app) as c:
-            r = c.post(
-                "/actions", json={"name": "A", "eventsource": 0, "esc_period": "1m"}
-            )
+    with patch("api.routes.actions.actions_bot", mock), TestClient(app) as c:
+        r = c.post("/actions", json={"name": "A", "eventsource": 0, "esc_period": "1m"})
     assert r.status_code == 200
     assert r.json()["actionid"] == "10"
 
@@ -70,19 +66,15 @@ def test_create_action_success():
 def test_create_action_zabbix_error():
     mock, app = _bot()
     mock.create_action.side_effect = RuntimeError("zabbix error")
-    with patch("api.routes.actions.actions_bot", mock):
-        with TestClient(app) as c:
-            r = c.post(
-                "/actions", json={"name": "A", "eventsource": 0, "esc_period": "1m"}
-            )
+    with patch("api.routes.actions.actions_bot", mock), TestClient(app) as c:
+        r = c.post("/actions", json={"name": "A", "eventsource": 0, "esc_period": "1m"})
     assert r.status_code == 422
 
 
 def test_delete_action_success():
     mock, app = _bot()
-    with patch("api.routes.actions.actions_bot", mock):
-        with TestClient(app) as c:
-            r = c.delete("/actions/10")
+    with patch("api.routes.actions.actions_bot", mock), TestClient(app) as c:
+        r = c.delete("/actions/10")
     assert r.status_code == 200
     assert r.json()["ok"] is True
 
@@ -90,17 +82,15 @@ def test_delete_action_success():
 def test_delete_action_zabbix_error():
     mock, app = _bot()
     mock.delete_action.side_effect = RuntimeError("zabbix error")
-    with patch("api.routes.actions.actions_bot", mock):
-        with TestClient(app) as c:
-            r = c.delete("/actions/10")
+    with patch("api.routes.actions.actions_bot", mock), TestClient(app) as c:
+        r = c.delete("/actions/10")
     assert r.status_code == 422
 
 
 def test_toggle_action_success():
     mock, app = _bot()
-    with patch("api.routes.actions.actions_bot", mock):
-        with TestClient(app) as c:
-            r = c.put("/actions/10/toggle", json={"status": 1})
+    with patch("api.routes.actions.actions_bot", mock), TestClient(app) as c:
+        r = c.put("/actions/10/toggle", json={"status": 1})
     assert r.status_code == 200
 
 
@@ -110,9 +100,8 @@ def test_toggle_action_success():
 def test_list_media_types_success():
     mock, app = _bot()
     mock.list_media_types.return_value = [{"mediatypeid": "1"}]
-    with patch("api.routes.actions.actions_bot", mock):
-        with TestClient(app) as c:
-            r = c.get("/media-types")
+    with patch("api.routes.actions.actions_bot", mock), TestClient(app) as c:
+        r = c.get("/media-types")
     assert r.status_code == 200
     assert "media_types" in r.json()
 
@@ -130,9 +119,8 @@ def test_create_media_type_success():
         "script": "",
         "webhook_script": "",
     }
-    with patch("api.routes.actions.actions_bot", mock):
-        with TestClient(app) as c:
-            r = c.post("/media-types", json=payload)
+    with patch("api.routes.actions.actions_bot", mock), TestClient(app) as c:
+        r = c.post("/media-types", json=payload)
     assert r.status_code == 200
     assert r.json()["mediatypeid"] == "5"
 
@@ -150,26 +138,23 @@ def test_create_media_type_zabbix_error():
         "script": "",
         "webhook_script": "",
     }
-    with patch("api.routes.actions.actions_bot", mock):
-        with TestClient(app) as c:
-            r = c.post("/media-types", json=payload)
+    with patch("api.routes.actions.actions_bot", mock), TestClient(app) as c:
+        r = c.post("/media-types", json=payload)
     assert r.status_code == 422
 
 
 def test_delete_media_type_success():
     mock, app = _bot()
-    with patch("api.routes.actions.actions_bot", mock):
-        with TestClient(app) as c:
-            r = c.delete("/media-types/5")
+    with patch("api.routes.actions.actions_bot", mock), TestClient(app) as c:
+        r = c.delete("/media-types/5")
     assert r.status_code == 200
 
 
 def test_delete_media_type_zabbix_error():
     mock, app = _bot()
     mock.delete_media_type.side_effect = RuntimeError("err")
-    with patch("api.routes.actions.actions_bot", mock):
-        with TestClient(app) as c:
-            r = c.delete("/media-types/5")
+    with patch("api.routes.actions.actions_bot", mock), TestClient(app) as c:
+        r = c.delete("/media-types/5")
     assert r.status_code == 422
 
 
@@ -179,9 +164,8 @@ def test_delete_media_type_zabbix_error():
 def test_list_scripts_success():
     mock, app = _bot()
     mock.list_scripts.return_value = [{"scriptid": "1"}]
-    with patch("api.routes.actions.actions_bot", mock):
-        with TestClient(app) as c:
-            r = c.get("/scripts")
+    with patch("api.routes.actions.actions_bot", mock), TestClient(app) as c:
+        r = c.get("/scripts")
     assert r.status_code == 200
     assert "scripts" in r.json()
 
@@ -196,9 +180,8 @@ def test_create_script_success():
         "scope": 2,
         "description": "",
     }
-    with patch("api.routes.actions.actions_bot", mock):
-        with TestClient(app) as c:
-            r = c.post("/scripts", json=payload)
+    with patch("api.routes.actions.actions_bot", mock), TestClient(app) as c:
+        r = c.post("/scripts", json=payload)
     assert r.status_code == 200
     assert r.json()["scriptid"] == "7"
 
@@ -213,24 +196,21 @@ def test_create_script_zabbix_error():
         "scope": 2,
         "description": "",
     }
-    with patch("api.routes.actions.actions_bot", mock):
-        with TestClient(app) as c:
-            r = c.post("/scripts", json=payload)
+    with patch("api.routes.actions.actions_bot", mock), TestClient(app) as c:
+        r = c.post("/scripts", json=payload)
     assert r.status_code == 422
 
 
 def test_delete_script_success():
     mock, app = _bot()
-    with patch("api.routes.actions.actions_bot", mock):
-        with TestClient(app) as c:
-            r = c.delete("/scripts/7")
+    with patch("api.routes.actions.actions_bot", mock), TestClient(app) as c:
+        r = c.delete("/scripts/7")
     assert r.status_code == 200
 
 
 def test_delete_script_zabbix_error():
     mock, app = _bot()
     mock.delete_script.side_effect = RuntimeError("err")
-    with patch("api.routes.actions.actions_bot", mock):
-        with TestClient(app) as c:
-            r = c.delete("/scripts/7")
+    with patch("api.routes.actions.actions_bot", mock), TestClient(app) as c:
+        r = c.delete("/scripts/7")
     assert r.status_code == 422

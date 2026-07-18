@@ -44,40 +44,49 @@ export const ServicePanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pane
 
   const isDisabled = saving || !hostname || (isAgentType && !agentName.trim());
 
+  const submitLinuxProcess = () =>
+    api.addProcessItem({
+      hostname,
+      process_name: agentName.trim(),
+      item_name: svcItemName || undefined,
+      delay: common.delay,
+      history: common.history,
+      trends: common.trends,
+      description: common.description || undefined,
+    });
+
+  const submitWindowsService = () =>
+    api.addWindowsServiceItem({
+      hostname,
+      service_name: agentName.trim(),
+      item_name: svcItemName || undefined,
+      delay: common.delay,
+      history: common.history,
+      trends: common.trends,
+      description: common.description || undefined,
+    });
+
+  const submitGenericService = () =>
+    api.addServiceItem({
+      hostname,
+      service_type: svcType,
+      port: svcPort ? Number(svcPort) : null,
+      item_name: svcItemName || undefined,
+      delay: common.delay,
+      history: common.history,
+      trends: common.trends,
+      description: common.description || undefined,
+    });
+
   const onSubmit = async () => {
     setSaving(true);
     try {
       if (svcType === "linux_process") {
-        await api.addProcessItem({
-          hostname,
-          process_name: agentName.trim(),
-          item_name: svcItemName || undefined,
-          delay: common.delay,
-          history: common.history,
-          trends: common.trends,
-          description: common.description || undefined,
-        });
+        await submitLinuxProcess();
       } else if (svcType === "windows_service") {
-        await api.addWindowsServiceItem({
-          hostname,
-          service_name: agentName.trim(),
-          item_name: svcItemName || undefined,
-          delay: common.delay,
-          history: common.history,
-          trends: common.trends,
-          description: common.description || undefined,
-        });
+        await submitWindowsService();
       } else {
-        await api.addServiceItem({
-          hostname,
-          service_type: svcType,
-          port: svcPort ? Number(svcPort) : null,
-          item_name: svcItemName || undefined,
-          delay: common.delay,
-          history: common.history,
-          trends: common.trends,
-          description: common.description || undefined,
-        });
+        await submitGenericService();
       }
       showToast("Item added successfully.", "success");
       setSvcItemName("");
@@ -139,7 +148,7 @@ export const ServicePanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pane
         />
       )}
 
-      {!icmpTypes.has(svcType) && !isAgentType && (
+      {!(icmpTypes.has(svcType) || isAgentType) && (
         <TextField
           size="small"
           label="Port"
@@ -522,9 +531,11 @@ export const FileWatchPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pa
         trends: common.trends,
         description: common.description || undefined,
       });
-      if (res.trigger_error)
+      if (res.trigger_error) {
         showToast(`Item created, but trigger failed: ${res.trigger_error}`, "error");
-      else showToast("Item added successfully.", "success");
+      } else {
+        showToast("Item added successfully.", "success");
+      }
       setFilePath("");
       setItemName("");
       setTriggerName("");

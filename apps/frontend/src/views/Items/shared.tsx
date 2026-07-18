@@ -525,7 +525,9 @@ export const KEY_PARAM_DEFS: Record<string, ParamDef[]> = {
 
 export const assembleAgentKey = (base: string, params: string[]): string => {
   const trimmed = [...params];
-  while (trimmed.length > 0 && trimmed[trimmed.length - 1] === "") trimmed.pop();
+  while (trimmed.length > 0 && trimmed[trimmed.length - 1] === "") {
+    trimmed.pop();
+  }
   return trimmed.length > 0 ? `${base}[${trimmed.join(",")}]` : base;
 };
 
@@ -857,35 +859,61 @@ export type AllItem = {
 };
 
 export const timeAgo = (ts: number | null): string => {
-  if (!ts) return "";
+  if (!ts) {
+    return "";
+  }
   const secs = Math.floor(Date.now() / 1000) - ts;
-  if (secs < 60) return `${secs}s ago`;
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
-  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
+  if (secs < 60) {
+    return `${secs}s ago`;
+  }
+  if (secs < 3600) {
+    return `${Math.floor(secs / 60)}m ago`;
+  }
+  if (secs < 86400) {
+    return `${Math.floor(secs / 3600)}h ago`;
+  }
   return `${Math.floor(secs / 86400)}d ago`;
 };
+
+const DELAY_RE = /^(\d+)([smhd]?)$/i;
 
 // Parse a Zabbix delay string (e.g. "30s", "1m", "5m", "0") to seconds.
 // Returns 0 for unparseable / passive items so we skip staleness checks.
 export const parseDelaySecs = (delay: string): number => {
-  if (!delay || delay === "0") return 0;
-  const m = delay.match(/^(\d+)([smhd]?)$/i);
-  if (!m) return 0;
+  if (!delay || delay === "0") {
+    return 0;
+  }
+  const m = delay.match(DELAY_RE);
+  if (!m) {
+    return 0;
+  }
   const n = Number.parseInt(m[1], 10);
   const unit = (m[2] || "s").toLowerCase();
-  if (unit === "m") return n * 60;
-  if (unit === "h") return n * 3600;
-  if (unit === "d") return n * 86400;
+  if (unit === "m") {
+    return n * 60;
+  }
+  if (unit === "h") {
+    return n * 3600;
+  }
+  if (unit === "d") {
+    return n * 86400;
+  }
   return n;
 };
 
 // An item is stale when Zabbix hasn't collected a value in >3× the polling interval.
 // We use 3× as a buffer to allow for slight delays and missed polls.
 export const isItemStale = (item: AllItem): boolean => {
-  if (item.state === "1") return false; // "Not Supported" has its own chip
+  if (item.state === "1") {
+    return false; // "Not Supported" has its own chip
+  }
   const delaySecs = parseDelaySecs(item.delay);
-  if (delaySecs === 0) return false; // passive / dependent / no-interval item
-  if (!item.lastclock) return true; // never collected any data
+  if (delaySecs === 0) {
+    return false; // passive / dependent / no-interval item
+  }
+  if (!item.lastclock) {
+    return true; // never collected any data
+  }
   return Math.floor(Date.now() / 1000) - item.lastclock > delaySecs * 3;
 };
 
