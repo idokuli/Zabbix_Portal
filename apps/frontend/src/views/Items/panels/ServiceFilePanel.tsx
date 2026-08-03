@@ -695,12 +695,12 @@ export const FileWatchPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pa
           )}
           {triggerType === "age" && checkType === "mtime" && (
             <TextField
+              slotProps={{ htmlInput: { min: 1 } }}
               size="small"
               label="Max age (minutes)"
               type="number"
               value={maxAgeMinutes}
               onChange={(e) => setMaxAgeMinutes(Number(e.target.value))}
-              inputProps={{ min: 1 }}
             />
           )}
           <TextField

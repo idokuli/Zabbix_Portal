@@ -1,4 +1,5 @@
 "use client";
+import { formatAxisTick, formatDateTimeCompact } from "../../app/datetime";
 
 export const PERIOD_OPTIONS = [
   { label: "1 m", period: 60, minutes: 1 },
@@ -13,38 +14,11 @@ export const PERIOD_OPTIONS = [
   { label: "7 d", period: 604800, minutes: 10080 },
 ] as const;
 
-export const formatTimestamp = (clock: number, minutes?: number) => {
-  const d = new Date(clock * 1000);
-  if (minutes !== undefined && minutes <= 5) {
-    // Short range — show seconds
-    return d.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    });
-  }
-  if (minutes !== undefined && minutes >= 1440) {
-    // Multi-day — show date + hour
-    return d.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-  }
-  return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
-};
+/** Chart-axis label. Delegates to the canonical formatter — see app/datetime.ts. */
+export const formatTimestamp = (clock: number, minutes?: number) => formatAxisTick(clock, minutes);
 
-export const formatRangeTime = (clock: number) =>
-  new Date(clock * 1000).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+/** Range boundary label under a graph — `30/07 19:34`. */
+export const formatRangeTime = (clock: number) => formatDateTimeCompact(clock);
 
 export const formatLastSeen = (clock: number | null) => {
   if (!clock) {

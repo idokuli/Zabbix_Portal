@@ -1,6 +1,6 @@
 "use client";
-import { createContext, useContext, useEffect, useState } from "react";
 import type { PropsWithChildren } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 
 type Mode = "dark" | "light";
 type Direction = "ltr" | "rtl";

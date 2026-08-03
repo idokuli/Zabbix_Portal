@@ -124,6 +124,101 @@ class Metrics_Manager(Zabbix_Base):
             logger.exception("acknowledge_problem failed for eventid=%s", eventid)
             return False
 
+    def add_problem_note(self, eventid: str, username: str, note: str) -> bool:
+        """Post a comment on a Zabbix problem event without acknowledging it."""
+        if not self.zapi:
+            return False
+        try:
+            # action bitmask 4 = add message only — leaves the acknowledged
+            # flag untouched, unlike acknowledge_problem's bitmask 6.
+            self.zapi.event.acknowledge(
+                eventids=[eventid],
+                action=4,
+                message=f"{username}: {note}",
+            )
+            return True
+        except Exception:
+            logger.exception("add_problem_note failed for eventid=%s", eventid)
+            return False
+
+    def _resolve_recovery_clocks(self, events: list[dict]) -> dict[str, int]:
+        """Map r_eventid -> resolution clock, batched for the given problem events.
+
+        r_eventid points to the recovery event; its clock is the resolution timestamp.
+        """
+        recovery_ids = [e["r_eventid"] for e in events if e.get("r_eventid", "0") != "0"]
+        if not recovery_ids:
+            return {}
+        rec_events = self.zapi.event.get(
+            eventids=recovery_ids,
+            output=["eventid", "clock"],
+        )
+        return {r["eventid"]: int(r["clock"]) for r in rec_events}
+
+    def _resolve_ack_usernames(self, events: list[dict]) -> dict[str, str]:
+        """Batch-resolve Zabbix userids -> usernames for all acknowledge entries."""
+        all_userids = {
+            ack.get("userid", "")
+            for e in events
+            for ack in (e.get("acknowledges") or [])
+            if ack.get("userid")
+        }
+        if not all_userids:
+            return {}
+        try:
+            zabbix_users = self.zapi.user.get(
+                userids=list(all_userids),
+                output=["userid", "username"],
+            )
+            return {u["userid"]: u["username"] for u in zabbix_users}
+        except Exception as exc:
+            logger.debug("Failed to enrich ack user list: %s", exc)
+            return {}
+
+    @staticmethod
+    def _passes_history_filters(
+        hostname: str, event: dict, hostname_filter: set[str] | None, severity_min: int
+    ) -> bool:
+        if hostname_filter is not None and hostname not in hostname_filter:
+            return False
+        return not (severity_min > 0 and int(event.get("severity", 0)) < severity_min)
+
+    @staticmethod
+    def _build_history_entry(
+        event: dict,
+        hostname: str,
+        recovery_clock: dict[str, int],
+        userid_to_username: dict[str, str],
+        now: int,
+    ) -> dict:
+        clock = int(event["clock"])
+        r_eventid = event.get("r_eventid", "0")
+        r_clock = recovery_clock.get(r_eventid, 0) if r_eventid != "0" else 0
+        resolved = r_clock > 0
+        duration = (r_clock - clock) if resolved else (now - clock)
+
+        acks = event.get("acknowledges") or []
+        raw_userid = acks[-1].get("userid", "") if acks else ""
+        ack_user = userid_to_username.get(raw_userid, raw_userid) if acks else None
+        ack_note = acks[-1].get("message", "") if acks else ""
+        ack_time = int(acks[-1].get("clock", 0)) if acks else None
+
+        return {
+            "eventid": event["eventid"],
+            "name": event.get("name", ""),
+            "hostname": hostname,
+            "severity": int(event.get("severity", 0)),
+            "severity_name": SEVERITY_NAMES.get(str(event.get("severity", "0")), "Unknown"),
+            "clock": clock,
+            "r_clock": r_clock,
+            "resolved": resolved,
+            "duration_seconds": duration,
+            "acknowledged": event.get("acknowledged") == "1",
+            "ack_user": ack_user,
+            "ack_note": ack_note,
+            "ack_time": ack_time,
+        }
+
     def get_problem_history(
         self,
         hours: int = 24,
@@ -178,16 +273,7 @@ class Metrics_Manager(Zabbix_Base):
             if not events:
                 return []
 
-            # Fetch resolution times: r_eventid points to the recovery event; its
-            # clock is the resolution timestamp. Batch all non-zero r_eventids.
-            recovery_ids = [e["r_eventid"] for e in events if e.get("r_eventid", "0") != "0"]
-            recovery_clock: dict[str, int] = {}
-            if recovery_ids:
-                rec_events = self.zapi.event.get(
-                    eventids=recovery_ids,
-                    output=["eventid", "clock"],
-                )
-                recovery_clock = {r["eventid"]: int(r["clock"]) for r in rec_events}
+            recovery_clock = self._resolve_recovery_clocks(events)
 
             trigger_ids = list({e["objectid"] for e in events})
             triggers = self.zapi.trigger.get(
@@ -197,23 +283,7 @@ class Metrics_Manager(Zabbix_Base):
             )
             trigger_map = {t["triggerid"]: t for t in triggers}
 
-            # Batch-resolve Zabbix userids → usernames for all acknowledge entries
-            all_userids = {
-                ack.get("userid", "")
-                for e in events
-                for ack in (e.get("acknowledges") or [])
-                if ack.get("userid")
-            }
-            userid_to_username: dict[str, str] = {}
-            if all_userids:
-                try:
-                    zabbix_users = self.zapi.user.get(
-                        userids=list(all_userids),
-                        output=["userid", "username"],
-                    )
-                    userid_to_username = {u["userid"]: u["username"] for u in zabbix_users}
-                except Exception as exc:
-                    logger.debug("Failed to enrich ack user list: %s", exc)
+            userid_to_username = self._resolve_ack_usernames(events)
 
             now = int(time.time())
             result = []
@@ -223,40 +293,10 @@ class Metrics_Manager(Zabbix_Base):
                 if not hosts:
                     continue
                 hostname = hosts[0]["host"]
-
-                if hostname_filter is not None and hostname not in hostname_filter:
+                if not self._passes_history_filters(hostname, e, hostname_filter, severity_min):
                     continue
-                if severity_min > 0 and int(e.get("severity", 0)) < severity_min:
-                    continue
-
-                clock = int(e["clock"])
-                r_eventid = e.get("r_eventid", "0")
-                r_clock = recovery_clock.get(r_eventid, 0) if r_eventid != "0" else 0
-                resolved = r_clock > 0
-                duration = (r_clock - clock) if resolved else (now - clock)
-
-                acks = e.get("acknowledges") or []
-                raw_userid = acks[-1].get("userid", "") if acks else ""
-                ack_user = userid_to_username.get(raw_userid, raw_userid) if acks else None
-                ack_note = acks[-1].get("message", "") if acks else ""
-                ack_time = int(acks[-1].get("clock", 0)) if acks else None
-
                 result.append(
-                    {
-                        "eventid": e["eventid"],
-                        "name": e.get("name", ""),
-                        "hostname": hostname,
-                        "severity": int(e.get("severity", 0)),
-                        "severity_name": SEVERITY_NAMES.get(str(e.get("severity", "0")), "Unknown"),
-                        "clock": clock,
-                        "r_clock": r_clock,
-                        "resolved": resolved,
-                        "duration_seconds": duration,
-                        "acknowledged": e.get("acknowledged") == "1",
-                        "ack_user": ack_user,
-                        "ack_note": ack_note,
-                        "ack_time": ack_time,
-                    }
+                    self._build_history_entry(e, hostname, recovery_clock, userid_to_username, now)
                 )
             return result
         except Exception:

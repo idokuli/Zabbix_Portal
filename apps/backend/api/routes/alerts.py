@@ -7,6 +7,9 @@ import User_Management as um
 
 router = APIRouter(tags=["Alerts"])
 
+_OP_NOT_CONTAINS = "!contains"
+_RULE_NOT_FOUND = "Rule not found."
+
 
 @router.get("/alerts/rules", tags=["Alerts"], summary="List alert rules for current user")
 def list_alert_rules(current_user: dict = Depends(get_current_user)):
@@ -26,12 +29,12 @@ def create_alert_rule(data: AlertRuleCreate, current_user: dict = Depends(get_cu
                 status_code=400,
                 detail="item_id, item_name, hostname required for item rules",
             )
-        if data.operator not in (">", "<", ">=", "<=", "contains", "!contains"):
+        if data.operator not in (">", "<", ">=", "<=", "contains", _OP_NOT_CONTAINS):
             raise HTTPException(
                 status_code=400,
                 detail="operator must be >, <, >=, <=, contains, or !contains",
             )
-        if data.operator not in ("contains", "!contains") and data.threshold is None:
+        if data.operator not in ("contains", _OP_NOT_CONTAINS) and data.threshold is None:
             raise HTTPException(status_code=400, detail="threshold required for numeric item rules")
         result = alert_bot.create_rule(
             int(current_user["sub"]),
@@ -77,7 +80,7 @@ def update_alert_rule(
         ">=",
         "<=",
         "contains",
-        "!contains",
+        _OP_NOT_CONTAINS,
     ):
         raise HTTPException(status_code=400, detail="operator must be >, <, >=, or <=")
     if not alert_bot.update_rule(
@@ -91,14 +94,14 @@ def update_alert_rule(
         hostname=data.hostname,
         expected_contains=data.expected_contains,
     ):
-        raise HTTPException(status_code=404, detail="Rule not found.")
+        raise HTTPException(status_code=404, detail=_RULE_NOT_FOUND)
     return {"message": "Rule updated."}
 
 
 @router.delete("/alerts/rules/{rule_id}", tags=["Alerts"], summary="Delete alert rule")
 def delete_alert_rule(rule_id: int, current_user: dict = Depends(get_current_user)):
     if not alert_bot.delete_rule(rule_id, int(current_user["sub"])):
-        raise HTTPException(status_code=404, detail="Rule not found.")
+        raise HTTPException(status_code=404, detail=_RULE_NOT_FOUND)
     return {"message": "Rule deleted."}
 
 
@@ -110,7 +113,7 @@ def delete_alert_rule(rule_id: int, current_user: dict = Depends(get_current_use
 def toggle_alert_rule(rule_id: int, current_user: dict = Depends(get_current_user)):
     result = alert_bot.toggle_rule(rule_id, int(current_user["sub"]))
     if result is None:
-        raise HTTPException(status_code=404, detail="Rule not found.")
+        raise HTTPException(status_code=404, detail=_RULE_NOT_FOUND)
     return {"enabled": result}
 
 

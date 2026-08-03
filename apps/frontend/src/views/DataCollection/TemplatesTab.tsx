@@ -1,7 +1,7 @@
 "use client";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import CloseIcon from "@mui/icons-material/Close";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
@@ -33,8 +33,8 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import { useCallback, useEffect, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../../app/api";
 import type { TemplateItem } from "../../app/api/types";
 import { TabHeader } from "../../app/components/TabHeader";
@@ -153,7 +153,7 @@ const TagsEditor = ({
       Template-level tags applied to all problems from this template:
     </Typography>
     {tags.map((tag, idx) => (
-      <Stack key={tag._key} direction="row" spacing={1} sx={{ mb: 1 }} alignItems="center">
+      <Stack key={tag._key} direction="row" spacing={1} sx={{ alignItems: "center", mb: 1 }}>
         <TextField
           size="small"
           label="Name"
@@ -210,7 +210,7 @@ const MacrosEditor = ({
       User macros defined at the template level:
     </Typography>
     {macros.map((macro, idx) => (
-      <Stack key={macro._key} direction="row" spacing={1} sx={{ mb: 1 }} alignItems="center">
+      <Stack key={macro._key} direction="row" spacing={1} sx={{ alignItems: "center", mb: 1 }}>
         <TextField
           size="small"
           label="Macro"
@@ -362,18 +362,18 @@ const CreateTemplateDialog = ({
   onCreate: () => void;
 }) => (
   <Dialog
+    slotProps={{ paper: { sx: { maxHeight: "90vh" } } }}
     open={open}
     onClose={onClose}
     maxWidth="md"
     fullWidth
-    PaperProps={{ sx: { maxHeight: "90vh" } }}
   >
     <DialogTitle sx={{ fontWeight: 700, pb: 0 }}>Create template</DialogTitle>
     <Tabs
+      slotProps={{ indicator: { style: { height: 2 } } }}
       value={dialogTab}
       onChange={(_, v) => setDialogTab(v)}
       sx={{ px: 3, borderBottom: "1px solid", borderColor: "divider", minHeight: 36 }}
-      TabIndicatorProps={{ style: { height: 2 } }}
     >
       <Tab
         label="Template"
@@ -525,7 +525,7 @@ const TemplateItemsTab = ({
   onDeleteItemRequest: (item: TemplateItem) => void;
 }) => (
   <Box>
-    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+    <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 1 }}>
       <Typography variant="body2" color="text.secondary">
         Items defined directly on this template (not inherited):
       </Typography>
@@ -543,7 +543,7 @@ const TemplateItemsTab = ({
         <CircularProgress size={20} />
       </Box>
     ) : (
-      <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
+      <TableContainer sx={{ border: "1px solid", borderColor: "divider" }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -617,11 +617,11 @@ const TemplateDetailDialog = ({
   onDeleteItemRequest: (item: TemplateItem) => void;
 }) => (
   <Dialog
+    slotProps={{ paper: { sx: { height: "90vh" } } }}
     open={open}
     onClose={onClose}
     maxWidth="lg"
     fullWidth
-    PaperProps={{ sx: { height: "90vh" } }}
   >
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <Box
@@ -653,6 +653,7 @@ const TemplateDetailDialog = ({
       {!detailLoading && detail && (
         <>
           <Tabs
+            slotProps={{ indicator: { style: { height: 2 } } }}
             value={detailTab}
             onChange={(_, v) => setDetailTab(v)}
             sx={{
@@ -662,7 +663,6 @@ const TemplateDetailDialog = ({
               minHeight: 40,
               mt: 0.5,
             }}
-            TabIndicatorProps={{ style: { height: 2 } }}
           >
             {["Template", "Tags", "Macros", `Items (${tplItems.length})`].map((label) => (
               <Tab
@@ -768,7 +768,9 @@ const TemplateDetailDialog = ({
 
 export const TemplatesTab = ({
   showToast,
-}: { showToast: (m: string, s: "success" | "error") => void }) => {
+}: {
+  showToast: (m: string, s: "success" | "error") => void;
+}) => {
   const [templates, setTemplates] = useState<DcTemplate[]>([]);
   const [tplGroups, setTplGroups] = useState<TemplateGroup[]>([]);
   const [loading, setLoading] = useState(false);
@@ -979,55 +981,36 @@ export const TemplatesTab = ({
       <TabHeader
         title="Templates"
         description="Manage reusable sets of items, triggers, and graphs applied to monitored hosts."
+        count={filtered.length}
+        loading={loading}
       />
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          mb: 1.5,
-          gap: 1,
-        }}
-      >
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-            Templates
-          </Typography>
-          {loading ? (
-            <CircularProgress size={14} />
-          ) : (
-            <Chip label={filtered.length} size="small" sx={{ height: 18, fontSize: "0.62rem" }} />
-          )}
-        </Box>
-        <Stack direction="row" spacing={1} alignItems="center">
-          <TextField
-            size="small"
-            placeholder="Search…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            sx={{ flex: 1 }}
-          />
-          <Tooltip title="Refresh">
-            <IconButton size="small" onClick={() => void load()} disabled={loading}>
-              <RefreshIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
-          <Button
-            size="small"
-            variant="contained"
-            color="secondary"
-            startIcon={<AddOutlinedIcon />}
-            onClick={openAdd}
-          >
-            Add
-          </Button>
-        </Stack>
-      </Box>
+      <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", mb: 1.5 }}>
+        <TextField
+          size="small"
+          placeholder="Search…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ flex: 1 }}
+        />
+        <Tooltip title="Refresh">
+          <IconButton size="small" onClick={() => void load()} disabled={loading}>
+            <RefreshIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        </Tooltip>
+        <Button
+          size="small"
+          variant="contained"
+          color="secondary"
+          startIcon={<AddOutlinedIcon />}
+          onClick={openAdd}
+        >
+          Add
+        </Button>
+      </Stack>
       <TableContainer
         sx={{
           border: "1px solid",
           borderColor: "divider",
-          borderRadius: 1.5,
           maxHeight: 480,
           overflow: "auto",
         }}

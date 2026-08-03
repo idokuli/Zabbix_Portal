@@ -1,7 +1,7 @@
 "use client";
 
 import ClearIcon from "@mui/icons-material/Clear";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
@@ -35,6 +35,7 @@ import {
   Typography,
 } from "@mui/material";
 import type { Host } from "../../app/api";
+import { formatDateTime } from "../../app/datetime";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { type AllItem, isItemStale, timeAgo, valueTypes } from "./shared";
 
@@ -127,7 +128,6 @@ const ItemDetailPanel = ({ item, isExpanded }: { item: AllItem; isExpanded: bool
         px: 3,
         py: 1.5,
         bgcolor: "action.hover",
-        borderRadius: 1,
         my: 0.5,
       }}
     >
@@ -174,7 +174,7 @@ const ItemDetailPanel = ({ item, isExpanded }: { item: AllItem; isExpanded: bool
             Last collected
           </Typography>
           <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
-            {item.lastclock ? new Date(item.lastclock * 1000).toLocaleString() : "Never"}
+            {formatDateTime(item.lastclock, "Never")}
           </Typography>
         </Box>
       </Box>
@@ -184,8 +184,7 @@ const ItemDetailPanel = ({ item, isExpanded }: { item: AllItem; isExpanded: bool
           px: 1.5,
           py: 0.75,
           bgcolor: "background.paper",
-          borderRadius: 1,
-          borderLeft: "3px solid",
+          border: "1px solid",
           borderColor: "divider",
         }}
       >
@@ -473,27 +472,29 @@ export const ItemsBrowseTable = ({
   return (
     <Stack spacing={2}>
       {/* ── Toolbar ── */}
-      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems="center">
+      <Stack sx={{ alignItems: "center" }} direction={{ xs: "column", sm: "row" }} spacing={1.5}>
         <TextField
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchOutlinedIcon sx={{ fontSize: 18, color: "text.disabled" }} />
+                </InputAdornment>
+              ),
+              endAdornment: browseSearch ? (
+                <InputAdornment position="end">
+                  <IconButton size="small" onClick={() => onSearchChange("")}>
+                    <ClearIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </InputAdornment>
+              ) : undefined,
+            },
+          }}
           size="small"
           placeholder="Search by name or key…"
           value={browseSearch}
           onChange={(e) => onSearchChange(e.target.value)}
           sx={{ flex: 1 }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchOutlinedIcon sx={{ fontSize: 18, color: "text.disabled" }} />
-              </InputAdornment>
-            ),
-            endAdornment: browseSearch ? (
-              <InputAdornment position="end">
-                <IconButton size="small" onClick={() => onSearchChange("")}>
-                  <ClearIcon sx={{ fontSize: 16 }} />
-                </IconButton>
-              </InputAdornment>
-            ) : undefined,
-          }}
         />
         <FormControl size="small" sx={{ minWidth: 200 }}>
           <InputLabel>Filter by host</InputLabel>
@@ -546,7 +547,6 @@ export const ItemsBrowseTable = ({
         sx={{
           border: "1px solid",
           borderColor: "divider",
-          borderRadius: 1.5,
           maxHeight: 520,
           overflow: "auto",
         }}

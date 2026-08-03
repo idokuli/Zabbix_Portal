@@ -1,5 +1,5 @@
 "use client";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import {
@@ -25,7 +25,6 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../app/api";
-import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { ConfirmDelete, type HostGroup, MembersDialog, SectionHeader } from "./shared";
 
@@ -33,7 +32,9 @@ type HostOption = { hostid: string; host: string; name: string };
 
 export const HostGroupsTab = ({
   showToast,
-}: { showToast: (m: string, s: "success" | "error") => void }) => {
+}: {
+  showToast: (m: string, s: "success" | "error") => void;
+}) => {
   const [groups, setGroups] = useState<HostGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -173,18 +174,15 @@ export const HostGroupsTab = ({
 
   return (
     <>
-      <TabHeader
-        title="Host Groups"
-        description="Organize hosts into groups for easier management and permission assignment."
-      />
       <SectionHeader
         title="Host Groups"
+        description="Organize hosts into groups for easier management and permission assignment."
         count={groups.length}
         loading={loading}
         onRefresh={load}
         onAdd={() => openDialog(null)}
       />
-      <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5 }}>
+      <TableContainer sx={{ border: "1px solid", borderColor: "divider" }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -296,25 +294,27 @@ export const HostGroupsTab = ({
               renderInput={(params) => (
                 <TextField
                   {...params}
+                  slotProps={{
+                    input: {
+                      ...params.slotProps.input,
+                      endAdornment: (
+                        <>
+                          {hostsLoading && <CircularProgress size={14} />}
+                          {params.slotProps.input.endAdornment}
+                        </>
+                      ),
+                    },
+                  }}
                   label="Assign hosts"
                   placeholder={
                     hostsLoading ? "Loading hosts…" : "Select hosts to add to this group"
                   }
-                  InputProps={{
-                    ...params.InputProps,
-                    endAdornment: (
-                      <>
-                        {hostsLoading && <CircularProgress size={14} />}
-                        {params.InputProps.endAdornment}
-                      </>
-                    ),
-                  }}
                 />
               )}
-              renderTags={(value, getTagProps) =>
+              renderValue={(value, getItemProps) =>
                 value.map((option, index) => (
                   <Chip
-                    {...getTagProps({ index })}
+                    {...getItemProps({ index })}
                     key={option.hostid}
                     label={option.host || option.name}
                     size="small"

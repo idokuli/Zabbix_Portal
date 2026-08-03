@@ -275,15 +275,28 @@ def test_get_host_group_members_zapi_none(mgr):
 
 def test_set_host_group_members_adds_and_removes(mgr):
     mgr.zapi.host.get.return_value = [{"hostid": "10"}]
-    result = mgr.set_host_group_members("1", ["20"])
-    assert result is True
+    ok, err = mgr.set_host_group_members("1", ["20"])
+    assert ok is True
+    assert err is None
     mgr.zapi.host.massadd.assert_called_once()
     mgr.zapi.host.massremove.assert_called_once()
 
 
 def test_set_host_group_members_zapi_none(mgr):
     mgr.zapi = None
-    assert mgr.set_host_group_members("1", ["10"]) is False
+    ok, err = mgr.set_host_group_members("1", ["10"])
+    assert ok is False
+    assert err == "Zabbix API not connected."
+
+
+def test_set_host_group_members_zabbix_error_surfaces_message(mgr):
+    mgr.zapi.host.get.return_value = [{"hostid": "10"}]
+    mgr.zapi.host.massremove.side_effect = Exception(
+        'Invalid params. Host "FDS DB" cannot be without host group.'
+    )
+    ok, err = mgr.set_host_group_members("1", [])
+    assert ok is False
+    assert err == 'Host "FDS DB" cannot be without host group.'
 
 
 # ── Template CRUD ─────────────────────────────────────────────────────────────
@@ -406,7 +419,9 @@ def test_delete_correlation_true(mgr):
 def test_set_host_group_members_true(mgr):
     mgr.zapi.host.get.return_value = [{"hostid": "5"}]
     mgr.zapi.hostgroup.massupdate.return_value = {"groupids": ["1"]}
-    assert mgr.set_host_group_members("1", ["5"]) is True
+    ok, err = mgr.set_host_group_members("1", ["5"])
+    assert ok is True
+    assert err is None
 
 
 def test_set_template_group_members_true(mgr):

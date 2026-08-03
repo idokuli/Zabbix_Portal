@@ -21,7 +21,7 @@ import {
 import { useCallback, useState } from "react";
 import { api } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
-import { TimeBar, fmtTs } from "./shared";
+import { fmtTs, TimeBar } from "./shared";
 import { useReportLoader } from "./useReportLoader";
 
 const STATUS_COLORS: Record<number, string> = { 0: "#2EA043", 1: "#DBA243", 2: "#E45959" };
@@ -246,7 +246,6 @@ export const ActionLogTab = () => {
         sx={{
           border: "1px solid",
           borderColor: "divider",
-          borderRadius: 1.5,
           maxHeight: 560,
           overflow: "auto",
         }}

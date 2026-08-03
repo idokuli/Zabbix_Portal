@@ -1,6 +1,6 @@
 "use client";
 import AddIcon from "@mui/icons-material/Add";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import EditIcon from "@mui/icons-material/Edit";
 import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 import HttpIcon from "@mui/icons-material/Http";
@@ -36,7 +36,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
-import { type Host, api } from "../../app/api";
+import { api, type Host } from "../../app/api";
 import { hostsApi } from "../../app/api/hosts";
 import type { TemplateItem } from "../../app/api/types";
 import { ConfirmDelete } from "../../app/components/ConfirmDelete";
@@ -311,13 +311,7 @@ const ITEM_TYPE_META: {
   },
 ];
 
-const ItemPanel = ({
-  itemType,
-  panelProps,
-}: {
-  itemType: ItemType;
-  panelProps: PanelProps;
-}) => {
+const ItemPanel = ({ itemType, panelProps }: { itemType: ItemType; panelProps: PanelProps }) => {
   switch (itemType) {
     case "agent":
       return <AgentItemPanel {...panelProps} />;
@@ -414,7 +408,7 @@ const TemplateItemsTab = ({
   <Card>
     <CardContent>
       <Stack spacing={2}>
-        <Stack direction="row" spacing={1.5} alignItems="center">
+        <Stack sx={{ alignItems: "center" }} direction="row" spacing={1.5}>
           <TextField
             size="small"
             placeholder="Search items…"
@@ -1089,11 +1083,11 @@ export const Items = () => {
               onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
             />
             <TextField
+              slotProps={{ input: { sx: { fontFamily: "monospace", fontSize: "0.8rem" } } }}
               size="small"
               label="Item key (condition)"
               value={editForm.key_}
               onChange={(e) => setEditForm((f) => ({ ...f, key_: e.target.value }))}
-              InputProps={{ sx: { fontFamily: "monospace", fontSize: "0.8rem" } }}
               helperText="The Zabbix item key that defines what data is collected. Changing this may clear existing history."
             />
             <TextField

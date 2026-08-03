@@ -1,9 +1,9 @@
 "use client";
 import AddIcon from "@mui/icons-material/Add";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import StarOutlineIcon from "@mui/icons-material/StarOutline";
+import StarOutlineIcon from "@mui/icons-material/StarOutlineOutlined";
 import {
   Alert,
   Box,
@@ -174,7 +174,7 @@ const LdapServersSection = ({
     {ldapServersLoading ? (
       <LinearProgress />
     ) : (
-      <TableContainer sx={{ border: 1, borderColor: "divider", borderRadius: 1 }}>
+      <TableContainer sx={{ border: 1, borderColor: "divider" }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -264,7 +264,6 @@ const PortalLdapSection = ({
     sx={{
       border: "1px solid",
       borderColor: portalLdap.enabled ? "primary.main" : "divider",
-      borderRadius: 2,
       p: 2.5,
       transition: "border-color 0.2s",
     }}
@@ -323,7 +322,7 @@ const PortalLdapSection = ({
               >
                 Pre-fill from a configured server:
               </Typography>
-              <Stack direction="row" spacing={1} flexWrap="wrap">
+              <Stack sx={{ flexWrap: "wrap" }} direction="row" spacing={1}>
                 {ldapServers.map((s) => (
                   <Button
                     key={s.userdirectoryid}
@@ -426,7 +425,7 @@ const PortalLdapSection = ({
       </Collapse>
 
       {/* Test connectivity */}
-      <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, p: 1.5 }}>
+      <Box sx={{ border: "1px solid", borderColor: "divider", p: 1.5 }}>
         <Typography
           variant="caption"
           color="text.secondary"
@@ -434,7 +433,11 @@ const PortalLdapSection = ({
         >
           Test connection
         </Typography>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="flex-start">
+        <Stack
+          sx={{ alignItems: "flex-start" }}
+          direction={{ xs: "column", sm: "row" }}
+          spacing={1}
+        >
           <TextField
             size="small"
             label="Test username (optional)"
@@ -546,7 +549,7 @@ const SamlSection = ({
         fullWidth
         placeholder="uid"
       />
-      <Stack direction="row" flexWrap="wrap" gap={1.5}>
+      <Stack sx={{ flexWrap: "wrap", gap: 1.5 }} direction="row">
         {[
           { key: "saml_sign_messages", label: "Sign messages" },
           { key: "saml_sign_assertions", label: "Sign assertions" },
@@ -596,13 +599,13 @@ const PasswordPolicySection = ({
     <Divider sx={{ my: 1 }} />
     <Stack spacing={1.5}>
       <TextField
+        slotProps={{ htmlInput: { min: 1, max: 70 } }}
         size="small"
         label="Minimum password length"
         type="number"
         value={String(form.passwd_min_length ?? settings.passwd_min_length ?? "8")}
         onChange={(e) => set("passwd_min_length", e.target.value)}
         sx={{ maxWidth: 220 }}
-        inputProps={{ min: 1, max: 70 }}
       />
       <Stack>
         <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
@@ -679,7 +682,9 @@ const HttpAuthSection = ({
 
 export const AuthenticationTab = ({
   showToast,
-}: { showToast: (m: string, s: "success" | "error") => void }) => {
+}: {
+  showToast: (m: string, s: "success" | "error") => void;
+}) => {
   const tick = useRefreshTick();
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);

@@ -31,7 +31,6 @@ export const MetricWidgetCard = ({
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        borderRadius: 2,
         overflow: "hidden",
       }}
     >

@@ -1,5 +1,12 @@
 import { apiFetch } from "./fetch";
-import type { AlertEvent, AlertRule, ItemHistory, Problem, StoredNotif } from "./types";
+import type {
+  AlertEvent,
+  AlertRule,
+  ItemHistory,
+  Problem,
+  ProblemNote,
+  StoredNotif,
+} from "./types";
 
 export const metricsApi = {
   getProblems: () => apiFetch<{ problems: Problem[] }>("/metrics/problems"),
@@ -50,6 +57,15 @@ export const metricsApi = {
   ) =>
     apiFetch<{ message: string; acknowledged_by: string }>(
       `/metrics/problems/${encodeURIComponent(eventid)}/acknowledge`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(meta),
+      },
+    ),
+  addProblemNote: (eventid: string, meta: { hostname: string; note: string }) =>
+    apiFetch<{ message: string } & ProblemNote>(
+      `/metrics/problems/${encodeURIComponent(eventid)}/note`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

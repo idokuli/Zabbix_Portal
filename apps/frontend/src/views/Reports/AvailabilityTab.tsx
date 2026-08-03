@@ -25,6 +25,17 @@ import { TabHeader } from "../../app/components/TabHeader";
 import { TimeBar } from "./shared";
 import { useReportLoader } from "./useReportLoader";
 
+// Mode-independent bar fill (chart-series style) + mode-aware text token.
+const availabilityTone = (pct: number) => {
+  if (pct >= 99) {
+    return { bar: "#2EA043", text: "success.main" };
+  }
+  if (pct >= 95) {
+    return { bar: "#DBA243", text: "warning.main" };
+  }
+  return { bar: "#E45959", text: "error.main" };
+};
+
 export const AvailabilityTab = () => {
   const [hours, setHours] = useState(24);
   const [data, setData] = useState<
@@ -79,7 +90,7 @@ export const AvailabilityTab = () => {
         Availability is calculated from Zabbix problems in the selected window. Hosts with no
         problems show 100%.
       </Alert>
-      <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5 }}>
+      <TableContainer sx={{ border: "1px solid", borderColor: "divider" }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -103,7 +114,7 @@ export const AvailabilityTab = () => {
             )}
             {data.map((h) => {
               const pct = h.availability_pct;
-              const color = pct >= 99 ? "#2EA043" : pct >= 95 ? "#DBA243" : "#E45959";
+              const tone = availabilityTone(pct);
               const downMins = Math.floor(h.downtime_seconds / 60);
               const downStr =
                 downMins >= 60 ? `${Math.floor(downMins / 60)}h ${downMins % 60}m` : `${downMins}m`;
@@ -137,15 +148,14 @@ export const AvailabilityTab = () => {
                           sx={{
                             flex: 1,
                             height: 6,
-                            borderRadius: 3,
-                            bgcolor: "rgba(255,255,255,0.08)",
-                            "& .MuiLinearProgress-bar": { bgcolor: color, borderRadius: 3 },
+                            bgcolor: "action.hover",
+                            "& .MuiLinearProgress-bar": { bgcolor: tone.bar },
                           }}
                         />
                       </Box>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2" sx={{ fontWeight: 700, color }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: tone.text }}>
                         {pct.toFixed(2)}%
                       </Typography>
                     </TableCell>

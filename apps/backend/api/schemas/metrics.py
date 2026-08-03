@@ -8,3 +8,8 @@ class AcknowledgeRequest(BaseModel):
     hostname: str = ""
     severity: int = 0
     note: str = ""
+
+
+class AddNoteRequest(BaseModel):
+    hostname: str = ""
+    note: str

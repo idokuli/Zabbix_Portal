@@ -12,6 +12,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from api.schemas.items import BrowserItemRequest, ZabbixScriptItemRequest
+
 
 @pytest.fixture()
 def mgr():
@@ -175,20 +177,25 @@ def test_add_dependent_item_zapi_none(mgr):
 def test_add_zabbix_script_item_success(mgr):
     _mock_host(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["7"]}
-    item_id, err = mgr.add_zabbix_script_item("h1", "Script item", "script.key", "return 1;")
+    req = ZabbixScriptItemRequest(
+        hostname="h1", item_name="Script item", item_key="script.key", params="return 1;"
+    )
+    item_id, err = mgr.add_zabbix_script_item(req)
     assert item_id == "7"
     assert err is None
 
 
 def test_add_zabbix_script_item_host_not_found(mgr):
     mgr.zapi.host.get.return_value = []
-    item_id, err = mgr.add_zabbix_script_item("ghost", "x", "k", "s")
+    req = ZabbixScriptItemRequest(hostname="ghost", item_name="x", item_key="k", params="s")
+    item_id, err = mgr.add_zabbix_script_item(req)
     assert item_id is None
 
 
 def test_add_zabbix_script_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_zabbix_script_item("h1", "x", "k", "s")
+    req = ZabbixScriptItemRequest(hostname="h1", item_name="x", item_key="k", params="s")
+    item_id, err = mgr.add_zabbix_script_item(req)
     assert item_id is None
 
 
@@ -198,20 +205,26 @@ def test_add_zabbix_script_item_zapi_none(mgr):
 def test_add_browser_item_success(mgr):
     _mock_host(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["8"]}
-    item_id, err = mgr.add_browser_item(
-        "h1", "Browser check", "browser.key", "return performance.timing;"
+    req = BrowserItemRequest(
+        hostname="h1",
+        item_name="Browser check",
+        item_key="browser.key",
+        params="return performance.timing;",
     )
+    item_id, err = mgr.add_browser_item(req)
     assert item_id == "8"
     assert err is None
 
 
 def test_add_browser_item_host_not_found(mgr):
     mgr.zapi.host.get.return_value = []
-    item_id, err = mgr.add_browser_item("ghost", "x", "k", "s")
+    req = BrowserItemRequest(hostname="ghost", item_name="x", item_key="k", params="s")
+    item_id, err = mgr.add_browser_item(req)
     assert item_id is None
 
 
 def test_add_browser_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_browser_item("h1", "x", "k", "s")
+    req = BrowserItemRequest(hostname="h1", item_name="x", item_key="k", params="s")
+    item_id, err = mgr.add_browser_item(req)
     assert item_id is None

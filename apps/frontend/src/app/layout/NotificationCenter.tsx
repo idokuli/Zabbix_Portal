@@ -1,5 +1,6 @@
 "use client";
 import CloseIcon from "@mui/icons-material/Close";
+import ComputerOutlinedIcon from "@mui/icons-material/ComputerOutlined";
 import DeleteSweepOutlinedIcon from "@mui/icons-material/DeleteSweepOutlined";
 import InboxOutlinedIcon from "@mui/icons-material/InboxOutlined";
 import MarkEmailReadOutlinedIcon from "@mui/icons-material/MarkEmailReadOutlined";
@@ -8,6 +9,7 @@ import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
 import {
   Alert,
   Box,
+  Button,
   Chip,
   Divider,
   Drawer,
@@ -23,6 +25,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Problem, StoredNotif } from "../api";
+import { formatDateTimeCompact } from "../datetime";
 import { getSev } from "./alertSounds";
 
 const formatAge = (clock: number) => {
@@ -48,30 +51,15 @@ const formatAge = (clock: number) => {
   return `${Math.floor(s / (365 * 86400))}y ago`;
 };
 
-const formatEventTime = (ts: number) =>
-  new Date(ts * 1000).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+const formatEventTime = (ts: number) => formatDateTimeCompact(ts);
 
-export const NotifCard = ({
-  problem,
-  onDismiss,
-}: {
-  problem: Problem;
-  onDismiss: () => void;
-}) => {
+export const NotifCard = ({ problem, onDismiss }: { problem: Problem; onDismiss: () => void }) => {
   const sev = getSev(problem.severity);
   return (
     <Paper
       sx={{
         width: 320,
-        borderRadius: 2,
         overflow: "hidden",
-        borderLeft: `3px solid ${sev.color}`,
         bgcolor: "background.paper",
         boxShadow: 3,
         display: "flex",
@@ -101,7 +89,7 @@ export const NotifCard = ({
             flexShrink: 0,
           }}
         />
-        <Typography variant="caption" sx={{ flex: 1, fontWeight: 600, color: sev.color }}>
+        <Typography variant="caption" sx={{ flex: 1, fontWeight: 600 }}>
           {sev.label}
         </Typography>
         <Typography variant="caption" sx={{ color: "text.disabled", fontSize: "0.6875rem" }}>
@@ -160,8 +148,7 @@ const HistoryItemRow = ({
           gap: 1.5,
           px: 2,
           py: 1.25,
-          borderLeft: `3px solid ${sev.color}`,
-          bgcolor: isNew ? `${sev.color}08` : "transparent",
+          bgcolor: isNew ? "action.selected" : "transparent",
           transition: "background 0.2s",
         }}
       >
@@ -180,91 +167,54 @@ const HistoryItemRow = ({
             sx={{
               display: "flex",
               alignItems: "center",
-              gap: 0.75,
+              gap: 1,
               mb: 0.25,
               flexWrap: "wrap",
             }}
           >
-            <Chip
-              label={sev.label}
-              size="small"
-              sx={{
-                height: 17,
-                fontSize: "0.6rem",
-                fontWeight: 700,
-                color: sev.color,
-                bgcolor: `${sev.color}18`,
-                border: `1px solid ${sev.color}40`,
-              }}
-            />
-            <Chip
-              label={n.source === "zabbix" ? "Zabbix" : "Rule"}
-              size="small"
-              variant="outlined"
-              sx={{ height: 15, fontSize: "0.55rem" }}
-            />
+            <Typography variant="caption" sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+              {sev.label}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
+              {n.source === "zabbix" ? "Zabbix" : "Rule"}
+            </Typography>
             {isNew && (
-              <Chip
-                label="NEW"
-                size="small"
-                color="error"
-                sx={{ height: 15, fontSize: "0.55rem", fontWeight: 800 }}
-              />
+              <Typography variant="caption" sx={{ color: "primary.main", fontWeight: 600 }}>
+                New
+              </Typography>
             )}
             {n.acknowledged && (
-              <Chip
-                label="Ack"
-                size="small"
-                color="success"
-                variant="outlined"
-                sx={{ height: 15, fontSize: "0.55rem" }}
-              />
+              <Typography variant="caption" sx={{ color: "success.main" }}>
+                Acknowledged
+              </Typography>
             )}
             <Typography
               variant="caption"
-              sx={{
-                ml: "auto",
-                color: "text.disabled",
-                fontSize: "0.65rem",
-                flexShrink: 0,
-              }}
+              sx={{ ml: "auto", color: "text.disabled", flexShrink: 0 }}
             >
               {formatEventTime(n.clock)}
             </Typography>
           </Box>
-          <Typography sx={{ fontSize: "0.78rem", fontWeight: 600 }} noWrap>
+          <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
             {n.hostname}
           </Typography>
-          <Typography sx={{ fontSize: "0.72rem", color: "text.secondary" }} noWrap>
+          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>
             {n.name}
           </Typography>
           {n.source === "zabbix" && !n.acknowledged && (
-            <Box
-              component="button"
+            <Button
+              size="small"
+              variant="outlined"
               disabled={isAcking}
               onClick={async () => {
                 setAckingId(n.id);
                 await onAcknowledge(n.id);
                 setAckingId(null);
               }}
-              sx={{
-                mt: 0.5,
-                px: 1,
-                py: 0.25,
-                fontSize: "0.65rem",
-                fontWeight: 600,
-                borderRadius: 1,
-                border: "1px solid",
-                borderColor: "success.main",
-                color: "success.main",
-                bgcolor: "transparent",
-                cursor: isAcking ? "default" : "pointer",
-                opacity: isAcking ? 0.5 : 1,
-                "&:hover": { bgcolor: "rgba(34,197,94,0.08)" },
-              }}
+              sx={{ mt: 0.75, py: 0, minHeight: 24, fontSize: "0.6875rem" }}
             >
               {isAcking ? "Acknowledging…" : "Acknowledge"}
-            </Box>
+            </Button>
           )}
         </Box>
       </Box>
@@ -306,7 +256,6 @@ const ProblemRow = ({
           gap: 1.5,
           px: 2,
           py: 1.25,
-          borderLeft: `3px solid ${sev.color}`,
           cursor: "pointer",
           "&:hover": { bgcolor: "action.hover" },
         }}
@@ -322,77 +271,61 @@ const ProblemRow = ({
           }}
         />
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.25 }}>
-            <Chip
-              label={sev.label}
-              size="small"
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.25 }}>
+            <Typography variant="caption" sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+              {sev.label}
+            </Typography>
+            <Typography
+              variant="caption"
               sx={{
-                height: 17,
-                fontSize: "0.6rem",
-                fontWeight: 700,
-                color: sev.color,
-                bgcolor: `${sev.color}18`,
-                border: `1px solid ${sev.color}40`,
+                color: p.acknowledged ? "success.main" : "text.secondary",
+                whiteSpace: "nowrap",
               }}
-            />
-            <Chip
-              label={p.acknowledged ? "Ack" : "Unack"}
-              size="small"
-              color={p.acknowledged ? "success" : "default"}
-              variant="outlined"
-              sx={{ height: 15, fontSize: "0.55rem" }}
-            />
+            >
+              {p.acknowledged ? "Acknowledged" : "Unacknowledged"}
+            </Typography>
             <Typography
               variant="caption"
               sx={{
                 ml: "auto",
                 color: "text.disabled",
-                fontSize: "0.65rem",
                 flexShrink: 0,
+                fontVariantNumeric: "tabular-nums",
               }}
             >
               {formatEventTime(p.clock)}
             </Typography>
           </Box>
-          <Typography sx={{ fontSize: "0.78rem", fontWeight: 600 }} noWrap>
-            {p.hostname}
-          </Typography>
-          <Typography sx={{ fontSize: "0.72rem", color: "text.secondary" }} noWrap>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.625 }}>
+            <ComputerOutlinedIcon sx={{ fontSize: 14, color: "text.disabled" }} />
+            <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+              {p.hostname}
+            </Typography>
+          </Box>
+          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>
             {p.name}
           </Typography>
           {!p.acknowledged && (
-            <Box
-              component="button"
+            <Button
+              size="small"
+              variant="outlined"
               disabled={isAcking}
-              onClick={async () => {
+              onClick={async (e) => {
+                e.stopPropagation();
                 setAckingId(p.eventid);
                 setAckError(null);
                 try {
                   await onAcknowledge(p.eventid);
-                } catch (e) {
-                  setAckError(e instanceof Error ? e.message : "Failed to acknowledge");
+                } catch (err) {
+                  setAckError(err instanceof Error ? err.message : "Failed to acknowledge");
                 } finally {
                   setAckingId(null);
                 }
               }}
-              sx={{
-                mt: 0.5,
-                px: 1,
-                py: 0.25,
-                fontSize: "0.65rem",
-                fontWeight: 600,
-                borderRadius: 1,
-                border: "1px solid",
-                borderColor: "success.main",
-                color: "success.main",
-                bgcolor: "transparent",
-                cursor: isAcking ? "default" : "pointer",
-                opacity: isAcking ? 0.5 : 1,
-                "&:hover": { bgcolor: "rgba(34,197,94,0.08)" },
-              }}
+              sx={{ mt: 0.75, py: 0, minHeight: 24, fontSize: "0.6875rem" }}
             >
               {isAcking ? "Acknowledging…" : "Acknowledge"}
-            </Box>
+            </Button>
           )}
         </Box>
       </Box>
@@ -430,17 +363,11 @@ const NotificationHeader = ({
       flexShrink: 0,
     }}
   >
-    <InboxOutlinedIcon sx={{ fontSize: 20, color: "primary.main" }} />
-    <Typography sx={{ fontWeight: 700, fontSize: "0.9rem", flex: 1 }}>
-      Notification Center
+    <Typography variant="subtitle1" sx={{ flex: 1 }}>
+      Notifications
     </Typography>
     {unreadCount > 0 && (
-      <Chip
-        label={`${unreadCount} new`}
-        size="small"
-        color="error"
-        sx={{ height: 20, fontSize: "0.65rem", fontWeight: 700 }}
-      />
+      <Chip label={`${unreadCount} new`} size="small" color="error" variant="outlined" />
     )}
     <Tooltip title="Refresh">
       <IconButton size="small" onClick={onRefresh} disabled={loading}>
@@ -496,7 +423,7 @@ const ProblemsTabContent = ({
       <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1 }}>
         {[...new Array(3)].map((_, i) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: skeleton
-          <Skeleton key={i} variant="rectangular" height={64} sx={{ borderRadius: 1 }} />
+          <Skeleton key={i} variant="rectangular" height={64} sx={{}} />
         ))}
       </Box>
     ) : problems.length === 0 ? (
@@ -561,12 +488,14 @@ export const NotificationCenter = ({
 
   return (
     <Drawer
+      slotProps={{
+        paper: {
+          sx: { width: 400, display: "flex", flexDirection: "column" },
+        },
+      }}
       anchor="right"
       open={open}
       onClose={onClose}
-      PaperProps={{
-        sx: { width: 400, display: "flex", flexDirection: "column" },
-      }}
     >
       {/* Header */}
       <NotificationHeader
@@ -581,21 +510,17 @@ export const NotificationCenter = ({
 
       {/* Tabs */}
       <Tabs
+        slotProps={{ indicator: { style: { height: 2 } } }}
         value={tab}
         onChange={(_, v) => setTab(v)}
         sx={{ borderBottom: "1px solid", borderColor: "divider", flexShrink: 0, minHeight: 38 }}
-        TabIndicatorProps={{ style: { height: 2 } }}
       >
         <Tab
           label={
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
               Alert History
               {visibleHistory.length > 0 && (
-                <Chip
-                  label={visibleHistory.length}
-                  size="small"
-                  sx={{ height: 16, fontSize: "0.6rem" }}
-                />
+                <Chip label={visibleHistory.length} size="small" sx={{ height: 18 }} />
               )}
             </Box>
           }
@@ -606,12 +531,7 @@ export const NotificationCenter = ({
             <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
               Active Problems
               {problems.length > 0 && (
-                <Chip
-                  label={problems.length}
-                  size="small"
-                  color="error"
-                  sx={{ height: 16, fontSize: "0.6rem" }}
-                />
+                <Chip label={problems.length} size="small" color="error" sx={{ height: 18 }} />
               )}
             </Box>
           }
@@ -627,7 +547,7 @@ export const NotificationCenter = ({
             <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1 }}>
               {[...new Array(4)].map((_, i) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: skeleton
-                <Skeleton key={i} variant="rectangular" height={64} sx={{ borderRadius: 1 }} />
+                <Skeleton key={i} variant="rectangular" height={64} sx={{}} />
               ))}
             </Box>
           ) : visibleHistory.length === 0 ? (

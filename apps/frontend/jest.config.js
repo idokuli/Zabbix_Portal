@@ -10,12 +10,21 @@ module.exports = {
     "^react-i18next$": "<rootDir>/src/__tests__/__mocks__/react-i18next.js",
   },
   transform: {
-    "^.+\\.(ts|tsx|js|jsx)$": [
+    "^.+\\.(tsx|jsx)$": [
       "babel-jest",
       {
         presets: [
           ["@babel/preset-env", { targets: { node: "current" } }],
           ["@babel/preset-react", { runtime: "automatic" }],
+          "@babel/preset-typescript",
+        ],
+      },
+    ],
+    "^.+\\.(ts|js)$": [
+      "babel-jest",
+      {
+        presets: [
+          ["@babel/preset-env", { targets: { node: "current" } }],
           "@babel/preset-typescript",
         ],
       },

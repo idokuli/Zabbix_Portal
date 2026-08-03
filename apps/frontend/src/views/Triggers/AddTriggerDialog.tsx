@@ -19,7 +19,7 @@ import {
 } from "@mui/material";
 import type { Host } from "../../app/api";
 import { SearchableSelect } from "../../components/SearchableSelect";
-import { SEVERITY_CONFIG, operators } from "./shared";
+import { operators, SEVERITY_CONFIG } from "./shared";
 
 type FormHostItem = {
   itemid: string;
@@ -182,7 +182,7 @@ export const AddTriggerDialog = ({
                   fontSize: "0.72rem",
                   textTransform: "none",
                   borderColor: s.color,
-                  color: formSeverity === s.severity ? "#fff" : s.color,
+                  color: formSeverity === s.severity ? "#1C2128" : s.color,
                   bgcolor: formSeverity === s.severity ? s.color : "transparent",
                   "&:hover": {
                     bgcolor: formSeverity === s.severity ? s.color : `${s.color}18`,

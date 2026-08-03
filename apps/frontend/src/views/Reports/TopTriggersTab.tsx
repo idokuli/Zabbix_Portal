@@ -26,7 +26,7 @@ import { useCallback, useState } from "react";
 import { api } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
 import { SEVERITIES } from "../../app/severity";
-import { TimeBar, fmtTs } from "./shared";
+import { fmtTs, TimeBar } from "./shared";
 import { useReportLoader } from "./useReportLoader";
 
 const SEV_COLORS: Record<number, string> = Object.fromEntries(
@@ -103,7 +103,6 @@ export const TopTriggersTab = () => {
         sx={{
           border: "1px solid",
           borderColor: "divider",
-          borderRadius: 1.5,
           maxHeight: 560,
           overflow: "auto",
         }}

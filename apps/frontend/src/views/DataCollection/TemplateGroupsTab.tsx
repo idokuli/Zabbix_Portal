@@ -1,5 +1,5 @@
 "use client";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import {
@@ -25,7 +25,6 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../app/api";
-import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { ConfirmDelete, MembersDialog, SectionHeader, type TemplateGroup } from "./shared";
 
@@ -33,7 +32,9 @@ type TemplateOption = { templateid: string; name: string };
 
 export const TemplateGroupsTab = ({
   showToast,
-}: { showToast: (m: string, s: "success" | "error") => void }) => {
+}: {
+  showToast: (m: string, s: "success" | "error") => void;
+}) => {
   const [groups, setGroups] = useState<TemplateGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -171,18 +172,15 @@ export const TemplateGroupsTab = ({
 
   return (
     <>
-      <TabHeader
-        title="Template Groups"
-        description="Organize monitoring templates into logical groups."
-      />
       <SectionHeader
         title="Template Groups"
+        description="Organize monitoring templates into logical groups."
         count={groups.length}
         loading={loading}
         onRefresh={load}
         onAdd={() => openDialog(null)}
       />
-      <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5 }}>
+      <TableContainer sx={{ border: "1px solid", borderColor: "divider" }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -289,25 +287,27 @@ export const TemplateGroupsTab = ({
               renderInput={(params) => (
                 <TextField
                   {...params}
+                  slotProps={{
+                    input: {
+                      ...params.slotProps.input,
+                      endAdornment: (
+                        <>
+                          {templatesLoading && <CircularProgress size={14} />}
+                          {params.slotProps.input.endAdornment}
+                        </>
+                      ),
+                    },
+                  }}
                   label="Assign templates"
                   placeholder={
                     templatesLoading ? "Loading templates…" : "Select templates for this group"
                   }
-                  InputProps={{
-                    ...params.InputProps,
-                    endAdornment: (
-                      <>
-                        {templatesLoading && <CircularProgress size={14} />}
-                        {params.InputProps.endAdornment}
-                      </>
-                    ),
-                  }}
                 />
               )}
-              renderTags={(value, getTagProps) =>
+              renderValue={(value, getItemProps) =>
                 value.map((option, index) => (
                   <Chip
-                    {...getTagProps({ index })}
+                    {...getItemProps({ index })}
                     key={option.templateid}
                     label={option.name}
                     size="small"

@@ -1,7 +1,7 @@
 "use client";
 
 import AddIcon from "@mui/icons-material/Add";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import LockResetOutlinedIcon from "@mui/icons-material/LockResetOutlined";
@@ -98,7 +98,7 @@ export const TeamCard = ({
   };
 
   return (
-    <Card sx={{ height: "100%", borderRadius: 3 }}>
+    <Card sx={{ height: "100%" }}>
       <CardContent sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%" }}>
         {/* Card header */}
         <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
@@ -114,7 +114,11 @@ export const TeamCard = ({
           </Box>
           {canDeleteTeam && (
             <Tooltip title="Delete team">
-              <IconButton size="small" color="error" onClick={() => onDeleteTeam(team.id)}>
+              <IconButton
+                size="small"
+                sx={{ color: "text.disabled", "&:hover": { color: "error.main" } }}
+                onClick={() => onDeleteTeam(team.id)}
+              >
                 <DeleteOutlineIcon fontSize="small" />
               </IconButton>
             </Tooltip>
@@ -141,7 +145,6 @@ export const TeamCard = ({
                   <Box
                     key={u.id}
                     sx={{
-                      borderRadius: 1.5,
                       border: "1px solid",
                       borderColor: "divider",
                       overflow: "hidden",
@@ -196,7 +199,10 @@ export const TeamCard = ({
                             <IconButton
                               size="small"
                               onClick={() => onChangePassword(u)}
-                              sx={{ color: "warning.main" }}
+                              sx={{
+                                color: "text.disabled",
+                                "&:hover": { color: "warning.main" },
+                              }}
                             >
                               <LockResetOutlinedIcon fontSize="small" />
                             </IconButton>
@@ -204,7 +210,7 @@ export const TeamCard = ({
                           <Tooltip title="Remove from team">
                             <IconButton
                               size="small"
-                              color="error"
+                              sx={{ color: "text.disabled", "&:hover": { color: "error.main" } }}
                               onClick={() => onRemoveFromTeam(u.id, team.id)}
                             >
                               <DeleteOutlineIcon fontSize="small" />
@@ -316,7 +322,6 @@ export const TeamCard = ({
                   mt: 0.5,
                   border: "1px solid",
                   borderColor: "divider",
-                  borderRadius: 1,
                   maxHeight: 200,
                   overflowY: "auto",
                 }}
@@ -416,7 +421,6 @@ export const TeamCard = ({
                       fontSize: "0.7rem",
                       px: 1.5,
                       py: 0.4,
-                      borderRadius: "12px !important",
                       border: "1px solid !important",
                     }}
                   >

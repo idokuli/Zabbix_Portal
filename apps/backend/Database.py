@@ -45,8 +45,16 @@ class _PooledConn:
 
 def _init_pool() -> None:
     global _pool
+    # connect_timeout bounds the initial TCP handshake. Without it, an unreachable
+    # DATABASE_URL host (wrong address, or a firewall silently dropping packets
+    # instead of rejecting) hangs here indefinitely — and since this runs as the
+    # first line of the FastAPI lifespan startup, uvicorn never opens its listening
+    # socket until startup finishes, so OpenShift's liveness/readiness probes see
+    # "connection refused" forever and keep restarting a container that never
+    # actually crashed or logged anything. A bounded timeout turns that silent
+    # hang into a clear, fast, loggable connection error instead.
     _pool = psycopg2.pool.ThreadedConnectionPool(
-        2, 20, _DATABASE_URL, cursor_factory=RealDictCursor
+        2, 20, _DATABASE_URL, cursor_factory=RealDictCursor, connect_timeout=10
     )
 
 
@@ -136,6 +144,15 @@ CREATE TABLE IF NOT EXISTS problem_acknowledgements (
     acked_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS problem_notes (
+    id         SERIAL PRIMARY KEY,
+    eventid    TEXT        NOT NULL,
+    hostname   TEXT        NOT NULL DEFAULT '',
+    username   TEXT        NOT NULL,
+    note       TEXT        NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS portal_settings (
     key        TEXT PRIMARY KEY,
     value      TEXT NOT NULL,
@@ -223,6 +240,7 @@ CREATE INDEX IF NOT EXISTS idx_dashboard_layouts_owner ON dashboard_layouts(owne
 CREATE INDEX IF NOT EXISTS idx_dashboard_pages_owner ON dashboard_pages(owner_type, owner_id, kind);
 CREATE INDEX IF NOT EXISTS idx_problem_acks_eventid  ON problem_acknowledgements(eventid);
 CREATE INDEX IF NOT EXISTS idx_problem_acks_acked_at ON problem_acknowledgements(acked_at DESC);
+CREATE INDEX IF NOT EXISTS idx_problem_notes_eventid ON problem_notes(eventid);
 CREATE INDEX IF NOT EXISTS idx_team_users_team_id    ON team_users(team_id);
 CREATE INDEX IF NOT EXISTS idx_host_assignments_team_id ON host_assignments(team_id);
 CREATE INDEX IF NOT EXISTS idx_host_assignments_hostname ON host_assignments(hostname);
@@ -314,12 +332,37 @@ def install_notify_triggers() -> None:
     memberships change in the Zabbix DB so the portal can sync immediately.
     """
     conn = get_conn()
+    lock_held = False
     try:
         with conn.cursor() as cur:
             # Serialize across workers: only one installs at a time; others wait then skip
             # (triggers are idempotent once the first worker finishes).
             # Advisory lock key is a fixed arbitrary integer — scoped to this session.
+            #
+            # The wait must be bounded: a SIGKILLed backend leaves its server-side
+            # session (and this lock) alive until TCP keepalive expiry, and an
+            # unbounded pg_advisory_lock then wedges every future startup. With a
+            # timeout the worst case is a logged warning and startup proceeds.
+            cur.execute("SET lock_timeout = '30s'")
+            # Make the server reap this session within ~1 min if we die holding
+            # the lock, instead of the multi-hour TCP keepalive default.
+            cur.execute("SET tcp_keepalives_idle = 30")
+            cur.execute("SET tcp_keepalives_interval = 10")
+            cur.execute("SET tcp_keepalives_count = 3")
             cur.execute("SELECT pg_advisory_lock(8472910234)")
+            lock_held = True
+
+            # This function definition gets its own savepoint, exactly like the per-table
+            # loop below — without it, a transient failure here (e.g. a concurrent-DDL
+            # conflict from another worker mid-timeout-wait) aborts the whole transaction,
+            # and the unconditional pg_advisory_unlock/RESET calls that used to sit in a
+            # `finally` right after this would then ALSO fail (you can't run anything on
+            # an aborted transaction without rolling back first) — which both masked the
+            # real error behind a generic "current transaction is aborted" message and,
+            # critically, left pg_advisory_lock's session-scoped lock held forever on this
+            # pooled connection, wedging every future call to this function until someone
+            # manually pg_terminate_backend()s it.
+            cur.execute("SAVEPOINT sp_fn")
             try:
                 cur.execute("""
                     CREATE OR REPLACE FUNCTION overwatch_notify()
@@ -330,6 +373,13 @@ def install_notify_triggers() -> None:
                     END;
                     $$ LANGUAGE plpgsql;
                 """)
+                cur.execute("RELEASE SAVEPOINT sp_fn")
+            except Exception as exc:
+                cur.execute("ROLLBACK TO SAVEPOINT sp_fn")
+                logger.warning(
+                    "install_notify_triggers: could not (re)create overwatch_notify(): %s", exc
+                )
+            else:
                 for table in _WATCHED_ZABBIX_TABLES:
                     cur.execute("SAVEPOINT sp")
                     trigger_name = f"overwatch_notify_{table}"
@@ -346,14 +396,36 @@ def install_notify_triggers() -> None:
                             )
                         )
                         cur.execute("RELEASE SAVEPOINT sp")
-                    except Exception:
+                    except Exception as exc:
                         cur.execute("ROLLBACK TO SAVEPOINT sp")
-            finally:
-                cur.execute("SELECT pg_advisory_unlock(8472910234)")
+                        logger.debug(
+                            "install_notify_triggers: trigger on %s skipped: %s", table, exc
+                        )
+
+            # Every failure path above is now savepoint-contained, so the transaction is
+            # never left aborted here — these two are safe to run unconditionally.
+            cur.execute("SELECT pg_advisory_unlock(8472910234)")
+            cur.execute("RESET lock_timeout")
         conn.commit()
         logger.info("ZabbixSync: notify triggers installed on Zabbix tables.")
     except Exception as exc:
         conn.rollback()
         logger.warning("install_notify_triggers failed (non-fatal): %r", exc)
+        if lock_held:
+            # conn.rollback() above fully clears any aborted-transaction state, so the
+            # lock can still be released safely here even after an unanticipated failure —
+            # this is the belt-and-suspenders backstop for whatever the savepoints above
+            # didn't foresee, so the lock is (almost) never leaked outright.
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT pg_advisory_unlock(8472910234)")
+                    cur.execute("RESET lock_timeout")
+                conn.commit()
+            except Exception as unlock_exc:
+                logger.warning(
+                    "install_notify_triggers: failed to release advisory lock after error — "
+                    "it will remain held until this pooled connection is recycled: %s",
+                    unlock_exc,
+                )
     finally:
         conn.close()

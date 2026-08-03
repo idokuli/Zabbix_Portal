@@ -1,9 +1,14 @@
 "use client";
+import AccessTimeOutlinedIcon from "@mui/icons-material/AccessTimeOutlined";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import CloseIcon from "@mui/icons-material/Close";
+import ComputerOutlinedIcon from "@mui/icons-material/ComputerOutlined";
+import EditNoteOutlinedIcon from "@mui/icons-material/EditNoteOutlined";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
+import TimerOutlinedIcon from "@mui/icons-material/TimerOutlined";
 import {
   Box,
   Button,
@@ -26,70 +31,158 @@ import {
   type SelectChangeEvent,
   Skeleton,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
-import { type Host, type HostGroup, type Problem, api } from "../../app/api";
+import { api, type Host, type HostGroup, type Problem } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
 import { useAuth } from "../../app/context/AuthContext";
 import { useRefreshTick } from "../../app/context/RefreshContext";
+import { formatDateTime, formatTime } from "../../app/datetime";
+import { monoFontFamily } from "../../app/theme";
 import { SearchableSelect } from "../../components/SearchableSelect";
-import { SEVERITY_CONFIG, SeverityChip, formatAge } from "./shared";
+import { formatAge, SEVERITY_CONFIG } from "./shared";
 
 // ── Problems tab ──────────────────────────────────────────────────────
+
+// When hideAckedAfterMinutes is set, an acknowledged problem counts down to the
+// moment it drops out of `filtered` in ProblemsTab — this renders that countdown
+// so the disappearance isn't a surprise. Returns null once time is up (the row
+// itself is about to be filtered out on the next tick).
+const ackHideCountdown = (
+  p: Problem,
+  hideAckedAfterMinutes: number | null,
+  nowTick: number,
+): string | null => {
+  if (hideAckedAfterMinutes === null || !p.acknowledged || !p.ack_time) {
+    return null;
+  }
+  const remainingMs = hideAckedAfterMinutes * 60_000 - (nowTick - new Date(p.ack_time).getTime());
+  if (remainingMs <= 0) {
+    return null;
+  }
+  return formatAge(Math.ceil(remainingMs / 1000));
+};
+
+const isHiddenByAckTimer = (
+  p: Problem,
+  hideAckedAfterMinutes: number | null,
+  nowTick: number,
+): boolean => {
+  if (hideAckedAfterMinutes === null || !p.acknowledged || !p.ack_time) {
+    return false;
+  }
+  const elapsedMs = nowTick - new Date(p.ack_time).getTime();
+  return elapsedMs >= hideAckedAfterMinutes * 60_000;
+};
+
+// Kept as standalone (module-scope) functions, not closures inside ProblemsTab, so their
+// branching doesn't count toward that component's own cognitive-complexity budget.
+const matchesProblemFilters = (
+  p: Problem,
+  filters: {
+    selectedSeverities: number[];
+    hostFilter: string;
+    selectedGroups: string[];
+    searchLower: string;
+  },
+): boolean => {
+  const { selectedSeverities, hostFilter, selectedGroups, searchLower } = filters;
+  if (selectedSeverities.length > 0 && !selectedSeverities.includes(p.severity)) {
+    return false;
+  }
+  if (hostFilter && p.hostname !== hostFilter) {
+    return false;
+  }
+  if (selectedGroups.length > 0 && !p.groups.some((g) => selectedGroups.includes(g))) {
+    return false;
+  }
+  if (
+    searchLower &&
+    !p.name.toLowerCase().includes(searchLower) &&
+    !p.hostname.toLowerCase().includes(searchLower)
+  ) {
+    return false;
+  }
+  return true;
+};
+
+const compareBySort = (a: Problem, b: Problem, sortBy: ProblemSortBy): number =>
+  sortBy === "newest" ? b.clock - a.clock : a.clock - b.clock;
+
+const sortProblems = (problems: Problem[], sortBy: ProblemSortBy): Problem[] =>
+  sortBy === "default" ? problems : [...problems].sort((a, b) => compareBySort(a, b, sortBy));
 
 const AckCell = ({
   p,
   acknowledging,
   onAckRequest,
+  hideAckedAfterMinutes,
+  nowTick,
 }: {
   p: Problem;
   acknowledging: Set<string>;
   onAckRequest: (p: Problem) => void;
+  hideAckedAfterMinutes: number | null;
+  nowTick: number;
 }) =>
   p.acknowledged ? (
-    <Tooltip
-      title={
-        p.ack_user ? (
-          <Box>
-            <Typography variant="caption" sx={{ display: "block", fontWeight: 700 }}>
-              Acknowledged by {p.ack_user}
+    <Stack sx={{ alignItems: "center" }} direction="row" spacing={0.5}>
+      <Tooltip
+        title={
+          p.ack_user ? (
+            <Box>
+              <Typography variant="caption" sx={{ display: "block", fontWeight: 700 }}>
+                Acknowledged by {p.ack_user}
+              </Typography>
+              {p.ack_time && (
+                <Typography variant="caption" sx={{ display: "block" }}>
+                  {formatDateTime(p.ack_time)}
+                </Typography>
+              )}
+              {p.ack_note && (
+                <Typography
+                  variant="caption"
+                  sx={{ display: "block", fontStyle: "italic", mt: 0.25 }}
+                >
+                  "{p.ack_note}"
+                </Typography>
+              )}
+            </Box>
+          ) : (
+            "Acknowledged"
+          )
+        }
+      >
+        <Chip
+          label={p.ack_user ? `Ack'd by ${p.ack_user}` : "Ack'd"}
+          size="small"
+          color="success"
+          variant="outlined"
+          sx={{ height: 20, fontSize: "0.68rem" }}
+        />
+      </Tooltip>
+      {(() => {
+        const countdown = ackHideCountdown(p, hideAckedAfterMinutes, nowTick);
+        return countdown ? (
+          <Tooltip title="Time until this acknowledged problem is hidden from the list">
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.disabled",
+                whiteSpace: "nowrap",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              hides in {countdown}
             </Typography>
-            {p.ack_time && (
-              <Typography variant="caption" sx={{ display: "block" }}>
-                {new Date(p.ack_time).toLocaleString()}
-              </Typography>
-            )}
-            {p.ack_note && (
-              <Typography
-                variant="caption"
-                sx={{ display: "block", fontStyle: "italic", mt: 0.25 }}
-              >
-                "{p.ack_note}"
-              </Typography>
-            )}
-          </Box>
-        ) : (
-          "Acknowledged"
-        )
-      }
-    >
-      <Chip
-        label={p.ack_user ? `Ack'd by ${p.ack_user}` : "Ack'd"}
-        size="small"
-        color="success"
-        variant="outlined"
-        sx={{ height: 20, fontSize: "0.68rem" }}
-      />
-    </Tooltip>
+          </Tooltip>
+        ) : null;
+      })()}
+    </Stack>
   ) : (
     <Tooltip title="Acknowledge this problem">
       <span>
@@ -109,187 +202,488 @@ const AckCell = ({
     </Tooltip>
   );
 
-const ProblemDetailPanel = ({ p, isExpanded }: { p: Problem; isExpanded: boolean }) => (
-  <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-    <Box sx={{ px: 3, py: 1.5, bgcolor: "action.hover", borderRadius: 1, my: 0.5 }}>
+const DetailField = ({
+  icon,
+  label,
+  children,
+}: {
+  icon: ReactNode;
+  label: string;
+  children: ReactNode;
+}) => (
+  <Box sx={{ display: "flex", alignItems: "flex-start", gap: 0.875 }}>
+    <Box sx={{ display: "flex", color: "text.disabled", mt: "3px", "& svg": { fontSize: 15 } }}>
+      {icon}
+    </Box>
+    <Box>
       <Typography
         variant="caption"
         sx={{
-          fontWeight: 700,
-          color: "text.secondary",
+          display: "block",
+          color: "text.disabled",
           textTransform: "uppercase",
-          letterSpacing: "0.07em",
-          fontSize: "0.6rem",
+          letterSpacing: "0.06em",
+          fontSize: "0.625rem",
+          fontWeight: 600,
         }}
       >
-        Problem details
+        {label}
       </Typography>
-      <Box sx={{ display: "flex", gap: 4, mt: 0.75, flexWrap: "wrap" }}>
-        <Box>
-          <Typography variant="caption" color="text.disabled">
-            Host
-          </Typography>
-          <Typography variant="body2" sx={{ fontWeight: 600, fontSize: "0.8rem" }}>
-            {p.hostname}
-          </Typography>
-        </Box>
-        <Box>
-          <Typography variant="caption" color="text.disabled">
-            Started
-          </Typography>
-          <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
-            {new Date(p.clock * 1000).toLocaleString()}
-          </Typography>
-        </Box>
-        <Box>
-          <Typography variant="caption" color="text.disabled">
-            Duration
-          </Typography>
-          <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
-            {formatAge(p.age_seconds)}
+      {children}
+    </Box>
+  </Box>
+);
+
+const ProblemDetailPanel = ({ p, isExpanded }: { p: Problem; isExpanded: boolean }) => (
+  <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+    <Box sx={{ px: 3, py: 0.5 }}>
+      <Box sx={{ border: "1px solid", borderColor: "divider", bgcolor: "action.hover" }}>
+        <Box sx={{ px: 2, py: 0.875, borderBottom: "1px solid", borderColor: "divider" }}>
+          <Typography
+            variant="caption"
+            sx={{
+              fontWeight: 700,
+              color: "text.secondary",
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+              fontSize: "0.625rem",
+            }}
+          >
+            Problem details
           </Typography>
         </Box>
-        {p.acknowledged && (
-          <Box>
-            <Typography variant="caption" color="text.disabled">
-              Acknowledged by
+        <Box sx={{ display: "flex", gap: 4, flexWrap: "wrap", px: 2, py: 1.5 }}>
+          <DetailField icon={<ComputerOutlinedIcon />} label="Host">
+            <Typography variant="body2" sx={{ fontWeight: 600, fontSize: "0.8125rem" }}>
+              {p.hostname}
             </Typography>
+          </DetailField>
+          <DetailField icon={<AccessTimeOutlinedIcon />} label="Started">
             <Typography
               variant="body2"
-              sx={{ fontSize: "0.8rem", fontWeight: 600, color: "success.main" }}
+              sx={{ fontSize: "0.8125rem", fontVariantNumeric: "tabular-nums" }}
             >
-              {p.ack_user || "Unknown"}
-              {p.ack_time && (
-                <Typography
-                  component="span"
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ ml: 0.75, fontWeight: 400 }}
-                >
-                  · {new Date(p.ack_time).toLocaleString()}
-                </Typography>
-              )}
+              {formatDateTime(p.clock)}
+            </Typography>
+          </DetailField>
+          <DetailField icon={<TimerOutlinedIcon />} label="Duration">
+            <Typography
+              variant="body2"
+              sx={{ fontSize: "0.8125rem", fontVariantNumeric: "tabular-nums" }}
+            >
+              {formatAge(p.age_seconds)}
+            </Typography>
+          </DetailField>
+          {p.acknowledged && (
+            <DetailField icon={<CheckCircleOutlineIcon />} label="Acknowledged by">
+              <Typography
+                variant="body2"
+                sx={{ fontSize: "0.8125rem", fontWeight: 600, color: "success.main" }}
+              >
+                {p.ack_user || "Unknown"}
+                {p.ack_time && (
+                  <Typography
+                    component="span"
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ ml: 0.75, fontWeight: 400 }}
+                  >
+                    · {formatDateTime(p.ack_time)}
+                  </Typography>
+                )}
+              </Typography>
+            </DetailField>
+          )}
+        </Box>
+        {p.ack_note && (
+          <Box
+            sx={{
+              mx: 2,
+              mb: 1.5,
+              px: 1.5,
+              py: 0.75,
+              bgcolor: "background.paper",
+              border: "1px solid",
+              borderColor: "divider",
+            }}
+          >
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.disabled",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                fontSize: "0.625rem",
+                fontWeight: 600,
+              }}
+            >
+              Note
+            </Typography>
+            <Typography variant="body2" sx={{ fontSize: "0.82rem", fontStyle: "italic", mt: 0.25 }}>
+              "{p.ack_note}"
             </Typography>
           </Box>
         )}
+        {p.acknowledged && !p.ack_note && (
+          <Typography
+            variant="caption"
+            color="text.disabled"
+            sx={{ display: "block", px: 2, pb: 1.5 }}
+          >
+            No note was added.
+          </Typography>
+        )}
+        {p.notes && p.notes.length > 0 && (
+          <Box sx={{ mx: 2, mb: 1.5, display: "flex", flexDirection: "column", gap: 0.75 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.disabled",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                fontSize: "0.625rem",
+                fontWeight: 600,
+              }}
+            >
+              Notes ({p.notes.length})
+            </Typography>
+            {p.notes.map((n, i) => (
+              <Box
+                // biome-ignore lint/suspicious/noArrayIndexKey: notes are append-only, stable order
+                key={i}
+                sx={{
+                  px: 1.5,
+                  py: 0.75,
+                  bgcolor: "background.paper",
+                  border: "1px solid",
+                  borderColor: "divider",
+                }}
+              >
+                <Typography variant="body2" sx={{ fontSize: "0.82rem" }}>
+                  {n.note}
+                </Typography>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ display: "block", mt: 0.25 }}
+                >
+                  {n.username} · {formatDateTime(n.created_at)}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        )}
       </Box>
-      {p.ack_note && (
-        <Box
-          sx={{
-            mt: 1,
-            px: 1.5,
-            py: 0.75,
-            bgcolor: "background.paper",
-            borderRadius: 1,
-            borderLeft: "3px solid",
-            borderColor: "success.main",
-          }}
-        >
-          <Typography variant="caption" color="text.disabled">
-            Note
-          </Typography>
-          <Typography variant="body2" sx={{ fontSize: "0.82rem", fontStyle: "italic", mt: 0.25 }}>
-            "{p.ack_note}"
-          </Typography>
-        </Box>
-      )}
-      {p.acknowledged && !p.ack_note && (
-        <Typography variant="caption" color="text.disabled" sx={{ display: "block", mt: 0.75 }}>
-          No note was added.
-        </Typography>
-      )}
     </Box>
   </Collapse>
 );
 
+// Record-list row: severity dot + expand chevron lead the line, the problem
+// name carries primary weight, host/time/duration form a muted mono meta
+// line underneath — same reading pattern as Overview's problem feed, not a
+// spreadsheet grid.
 const ProblemRow = ({
   p,
   isExpanded,
   onToggle,
   acknowledging,
   onAckRequest,
+  onNoteRequest,
+  hideAckedAfterMinutes,
+  nowTick,
 }: {
   p: Problem;
   isExpanded: boolean;
   onToggle: () => void;
   acknowledging: Set<string>;
   onAckRequest: (p: Problem) => void;
-}) => (
-  <>
-    <TableRow
-      onClick={onToggle}
-      sx={{ cursor: "pointer", "&:hover": { backgroundColor: "action.hover" } }}
-    >
-      <TableCell sx={{ width: 28, pr: 0 }}>
-        <IconButton
-          size="small"
-          aria-label={isExpanded ? "Collapse row" : "Expand row"}
-          sx={{ p: 0.25 }}
-        >
-          {isExpanded ? (
-            <KeyboardArrowDownIcon sx={{ fontSize: 16 }} />
-          ) : (
-            <KeyboardArrowRightIcon sx={{ fontSize: 16 }} />
-          )}
-        </IconButton>
-      </TableCell>
-      <TableCell>
-        <SeverityChip severity={p.severity} />
-      </TableCell>
-      <TableCell>
-        <Typography variant="body2" sx={{ fontSize: "0.8rem", fontWeight: 500 }}>
-          {p.hostname}
-        </Typography>
-      </TableCell>
-      <TableCell>
-        <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
-          {p.name}
-        </Typography>
-      </TableCell>
-      <TableCell>
-        <Tooltip title={new Date(p.clock * 1000).toLocaleString()}>
-          <Typography variant="body2" sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
-            {new Date(p.clock * 1000).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </Typography>
-        </Tooltip>
-      </TableCell>
-      <TableCell>
-        <Typography variant="body2" sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
-          {formatAge(p.age_seconds)}
-        </Typography>
-      </TableCell>
-      <TableCell>
-        <AckCell p={p} acknowledging={acknowledging} onAckRequest={onAckRequest} />
-      </TableCell>
-    </TableRow>
+  onNoteRequest: (p: Problem) => void;
+  hideAckedAfterMinutes: number | null;
+  nowTick: number;
+}) => {
+  const sev = SEVERITY_CONFIG.find((s) => s.severity === p.severity) ?? SEVERITY_CONFIG[0];
+  return (
+    <>
+      <Box
+        onClick={onToggle}
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 1.25,
+          px: 2,
+          py: 1.1,
+          cursor: "pointer",
+          borderBottom: "1px solid",
+          borderColor: "divider",
+          "&:hover": { backgroundColor: "action.hover" },
+        }}
+      >
+        {isExpanded ? (
+          <KeyboardArrowDownIcon sx={{ fontSize: 16, color: "text.disabled", flexShrink: 0 }} />
+        ) : (
+          <KeyboardArrowRightIcon sx={{ fontSize: 16, color: "text.disabled", flexShrink: 0 }} />
+        )}
+        <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: sev.color, flexShrink: 0 }} />
 
-    {/* Expanded detail row */}
-    <TableRow>
-      <TableCell colSpan={7} sx={{ py: 0, border: isExpanded ? undefined : "none" }}>
-        <ProblemDetailPanel p={p} isExpanded={isExpanded} />
-      </TableCell>
-    </TableRow>
-  </>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+            {p.name}
+          </Typography>
+          <Typography
+            sx={{
+              fontFamily: monoFontFamily,
+              fontSize: "0.6875rem",
+              color: "text.secondary",
+              fontVariantNumeric: "tabular-nums",
+            }}
+            noWrap
+          >
+            {p.hostname} · {formatTime(p.clock)} · {formatAge(p.age_seconds)}
+          </Typography>
+        </Box>
+
+        <Typography
+          variant="caption"
+          sx={{
+            color: sev.color,
+            fontWeight: 700,
+            flexShrink: 0,
+            whiteSpace: "nowrap",
+            minWidth: 64,
+            textAlign: "right",
+          }}
+        >
+          {sev.label}
+        </Typography>
+
+        <Stack
+          direction="row"
+          spacing={0.75}
+          onClick={(e) => e.stopPropagation()}
+          sx={{ alignItems: "center", flexShrink: 0 }}
+        >
+          {p.notes && p.notes.length > 0 && (
+            <Tooltip title={`${p.notes.length} note${p.notes.length !== 1 ? "s" : ""}`}>
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 0.375,
+                  color: "text.disabled",
+                }}
+              >
+                <EditNoteOutlinedIcon sx={{ fontSize: 15 }} />
+                <Typography variant="caption" sx={{ fontVariantNumeric: "tabular-nums" }}>
+                  {p.notes.length}
+                </Typography>
+              </Box>
+            </Tooltip>
+          )}
+          <Tooltip title="Add note">
+            <IconButton
+              size="small"
+              onClick={() => onNoteRequest(p)}
+              sx={{ color: "text.disabled" }}
+            >
+              <EditNoteOutlinedIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+          <AckCell
+            p={p}
+            acknowledging={acknowledging}
+            onAckRequest={onAckRequest}
+            hideAckedAfterMinutes={hideAckedAfterMinutes}
+            nowTick={nowTick}
+          />
+        </Stack>
+      </Box>
+
+      <ProblemDetailPanel p={p} isExpanded={isExpanded} />
+    </>
+  );
+};
+
+const AcknowledgeDialog = ({
+  target,
+  note,
+  setNote,
+  onClose,
+  onSubmit,
+  busy,
+  username,
+}: {
+  target: Problem | null;
+  note: string;
+  setNote: (v: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+  busy: boolean;
+  username: string;
+}) => (
+  <Dialog open={target !== null} onClose={onClose} maxWidth="sm" fullWidth>
+    <DialogTitle sx={{ fontWeight: 700 }}>Acknowledge problem</DialogTitle>
+    <DialogContent>
+      <Stack spacing={2} sx={{ pt: 0.5 }}>
+        {target && (
+          <Box sx={{ bgcolor: "action.hover", p: 1.5 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              {target.name}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {target.hostname} · {target.severity_name}
+            </Typography>
+          </Box>
+        )}
+        <Typography variant="body2" color="text.secondary">
+          Acknowledging as <strong>{username}</strong>. Add an optional note explaining what was
+          done.
+        </Typography>
+        <TextField
+          size="small"
+          multiline
+          minRows={2}
+          fullWidth
+          label="Note (optional)"
+          placeholder="e.g. Restarted the service, investigating further…"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+      </Stack>
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={onClose}>Cancel</Button>
+      <Button variant="contained" color="success" disabled={busy} onClick={onSubmit}>
+        Acknowledge
+      </Button>
+    </DialogActions>
+  </Dialog>
+);
+
+const AddNoteDialog = ({
+  target,
+  note,
+  setNote,
+  onClose,
+  onSubmit,
+  busy,
+  username,
+}: {
+  target: Problem | null;
+  note: string;
+  setNote: (v: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+  busy: boolean;
+  username: string;
+}) => (
+  <Dialog open={target !== null} onClose={onClose} maxWidth="sm" fullWidth>
+    <DialogTitle sx={{ fontWeight: 700 }}>Add note</DialogTitle>
+    <DialogContent>
+      <Stack spacing={2} sx={{ pt: 0.5 }}>
+        {target && (
+          <Box sx={{ bgcolor: "action.hover", p: 1.5 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              {target.name}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {target.hostname} · {target.severity_name}
+            </Typography>
+          </Box>
+        )}
+        <Typography variant="body2" color="text.secondary">
+          Leave a note as <strong>{username}</strong> without changing the acknowledgement status.
+        </Typography>
+        <TextField
+          size="small"
+          multiline
+          minRows={2}
+          fullWidth
+          label="Note"
+          placeholder="e.g. Escalated to network team, waiting on a response…"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+      </Stack>
+    </DialogContent>
+    <DialogActions>
+      <Button onClick={onClose}>Cancel</Button>
+      <Button variant="contained" disabled={!note.trim() || busy} onClick={onSubmit}>
+        Add note
+      </Button>
+    </DialogActions>
+  </Dialog>
 );
 
 const ProblemsSkeletonRows = () => (
   <>
     {Array.from({ length: 4 }).map((_, i) => (
-      // biome-ignore lint/suspicious/noArrayIndexKey: skeleton rows
-      <TableRow key={i}>
-        {Array.from({ length: 6 }).map((__, j) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: skeleton cells
-          <TableCell key={j}>
-            <Skeleton variant="text" height={20} />
-          </TableCell>
-        ))}
-      </TableRow>
+      <Box
+        // biome-ignore lint/suspicious/noArrayIndexKey: skeleton rows
+        key={i}
+        sx={{ px: 2, py: 1.1, borderBottom: "1px solid", borderColor: "divider" }}
+      >
+        <Skeleton variant="text" width="40%" height={20} />
+        <Skeleton variant="text" width="25%" height={16} />
+      </Box>
     ))}
   </>
 );
+
+type ProblemSortBy = "default" | "newest" | "oldest";
+
+// Options for "hide acknowledged after" — value is minutes, null = never hide.
+const HIDE_ACKED_OPTIONS: Array<{ label: string; value: number | null }> = [
+  { label: "Never", value: null },
+  { label: "1 minute", value: 1 },
+  { label: "5 minutes", value: 5 },
+  { label: "15 minutes", value: 15 },
+  { label: "30 minutes", value: 30 },
+  { label: "1 hour", value: 60 },
+  { label: "4 hours", value: 240 },
+];
+
+// Sort order + "hide acknowledged after" preferences, persisted per-browser (localStorage),
+// same pattern as theme mode/direction in ThemeContext. Pulled out of ProblemsTab so the
+// load-on-mount/tick effects don't add to that component's own cognitive complexity.
+const useProblemsPreferences = () => {
+  const [sortBy, setSortByState] = useState<ProblemSortBy>("default");
+  const [hideAckedAfterMinutes, setHideAckedAfterMinutesState] = useState<number | null>(null);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+
+  useEffect(() => {
+    const savedSort = localStorage.getItem("problemsSortBy");
+    if (savedSort === "newest" || savedSort === "oldest" || savedSort === "default") {
+      setSortByState(savedSort);
+    }
+    const savedHide = localStorage.getItem("problemsHideAckedAfterMinutes");
+    const parsed = savedHide ? Number(savedHide) : Number.NaN;
+    if (!Number.isNaN(parsed)) {
+      setHideAckedAfterMinutesState(parsed);
+    }
+  }, []);
+
+  // Only tick while a hide-after-ack timer is actually armed, so the countdown
+  // re-renders once a second without a background timer running unconditionally.
+  useEffect(() => {
+    if (hideAckedAfterMinutes === null) {
+      return;
+    }
+    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [hideAckedAfterMinutes]);
+
+  const setSortBy = (v: ProblemSortBy) => {
+    setSortByState(v);
+    localStorage.setItem("problemsSortBy", v);
+  };
+
+  const setHideAckedAfterMinutes = (v: number | null) => {
+    setHideAckedAfterMinutesState(v);
+    localStorage.setItem("problemsHideAckedAfterMinutes", v === null ? "" : String(v));
+  };
+
+  return { sortBy, setSortBy, hideAckedAfterMinutes, setHideAckedAfterMinutes, nowTick };
+};
 
 const ProblemsHeaderRow = ({
   loading,
@@ -303,6 +697,10 @@ const ProblemsHeaderRow = ({
   visibleHosts,
   hostFilter,
   setHostFilter,
+  sortBy,
+  setSortBy,
+  hideAckedAfterMinutes,
+  setHideAckedAfterMinutes,
   onRefresh,
 }: {
   loading: boolean;
@@ -316,6 +714,10 @@ const ProblemsHeaderRow = ({
   visibleHosts: Host[];
   hostFilter: string;
   setHostFilter: (v: string) => void;
+  sortBy: ProblemSortBy;
+  setSortBy: (v: ProblemSortBy) => void;
+  hideAckedAfterMinutes: number | null;
+  setHideAckedAfterMinutes: (v: number | null) => void;
   onRefresh: () => void;
 }) => (
   <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 2, flexWrap: "wrap" }}>
@@ -331,31 +733,33 @@ const ProblemsHeaderRow = ({
       />
     )}
     <TextField
+      slotProps={{
+        input: {
+          startAdornment: (
+            <InputAdornment position="start">
+              <SearchIcon sx={{ fontSize: 16, color: "text.disabled" }} />
+            </InputAdornment>
+          ),
+          endAdornment: search ? (
+            <InputAdornment position="end">
+              <IconButton size="small" onClick={() => setSearch("")}>
+                <CloseIcon sx={{ fontSize: 14 }} />
+              </IconButton>
+            </InputAdornment>
+          ) : undefined,
+        },
+      }}
       size="small"
       placeholder="Search problem or host…"
       value={search}
       onChange={(e) => setSearch(e.target.value)}
       sx={{ flex: 1, minWidth: 180 }}
-      InputProps={{
-        startAdornment: (
-          <InputAdornment position="start">
-            <SearchIcon sx={{ fontSize: 16, color: "text.disabled" }} />
-          </InputAdornment>
-        ),
-        endAdornment: search ? (
-          <InputAdornment position="end">
-            <IconButton size="small" onClick={() => setSearch("")}>
-              <CloseIcon sx={{ fontSize: 14 }} />
-            </IconButton>
-          </InputAdornment>
-        ) : undefined,
-      }}
     />
     <FormControl size="small" sx={{ minWidth: 180 }}>
       <InputLabel shrink sx={{ fontSize: "0.78rem" }}>
         Filter by group
       </InputLabel>
-      <Select
+      <Select<string[]>
         multiple
         value={selectedGroups}
         onChange={(e: SelectChangeEvent<string[]>) =>
@@ -373,7 +777,10 @@ const ProblemsHeaderRow = ({
         {hostGroups.map((g) => (
           <MenuItem key={g.groupid} value={g.name} sx={{ fontSize: "0.78rem", py: 0.25 }}>
             <Checkbox checked={selectedGroups.includes(g.name)} size="small" />
-            <ListItemText primary={g.name} primaryTypographyProps={{ fontSize: "0.78rem" }} />
+            <ListItemText
+              slotProps={{ primary: { sx: { fontSize: "0.78rem" } } }}
+              primary={g.name}
+            />
           </MenuItem>
         ))}
       </Select>
@@ -395,6 +802,46 @@ const ProblemsHeaderRow = ({
           </MenuItem>
         ))}
       </SearchableSelect>
+    </FormControl>
+    <FormControl size="small" sx={{ minWidth: 150 }}>
+      <InputLabel sx={{ fontSize: "0.78rem" }}>Sort by</InputLabel>
+      <Select
+        value={sortBy}
+        label="Sort by"
+        onChange={(e: SelectChangeEvent) => setSortBy(e.target.value as ProblemSortBy)}
+        sx={{ fontSize: "0.78rem" }}
+      >
+        <MenuItem value="default" sx={{ fontSize: "0.78rem" }}>
+          Severity (default)
+        </MenuItem>
+        <MenuItem value="newest" sx={{ fontSize: "0.78rem" }}>
+          Newest first
+        </MenuItem>
+        <MenuItem value="oldest" sx={{ fontSize: "0.78rem" }}>
+          Oldest first
+        </MenuItem>
+      </Select>
+    </FormControl>
+    <FormControl size="small" sx={{ minWidth: 170 }}>
+      <InputLabel sx={{ fontSize: "0.78rem" }}>Hide acked after</InputLabel>
+      <Select
+        value={hideAckedAfterMinutes === null ? "" : String(hideAckedAfterMinutes)}
+        label="Hide acked after"
+        onChange={(e: SelectChangeEvent) =>
+          setHideAckedAfterMinutes(e.target.value === "" ? null : Number(e.target.value))
+        }
+        sx={{ fontSize: "0.78rem" }}
+      >
+        {HIDE_ACKED_OPTIONS.map((opt) => (
+          <MenuItem
+            key={opt.label}
+            value={opt.value === null ? "" : String(opt.value)}
+            sx={{ fontSize: "0.78rem" }}
+          >
+            {opt.label}
+          </MenuItem>
+        ))}
+      </Select>
     </FormControl>
     <Tooltip title="Refresh">
       <IconButton size="small" onClick={onRefresh} disabled={loading}>
@@ -485,9 +932,18 @@ export const ProblemsTab = ({ initialHost = "" }: { initialHost?: string }) => {
   const [expandedProblemId, setExpandedProblemId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // Sort + "hide acknowledged after" preferences — persisted per-browser, like theme.
+  const { sortBy, setSortBy, hideAckedAfterMinutes, setHideAckedAfterMinutes, nowTick } =
+    useProblemsPreferences();
+
   // Ack dialog state
   const [ackTarget, setAckTarget] = useState<Problem | null>(null);
   const [ackNote, setAckNote] = useState("");
+
+  // Add-note dialog state — independent of acknowledging
+  const [noteTarget, setNoteTarget] = useState<Problem | null>(null);
+  const [noteText, setNoteText] = useState("");
+  const [addingNote, setAddingNote] = useState<Set<string>>(new Set());
 
   const loadProblems = useCallback((silent = false) => {
     if (!silent) {
@@ -542,6 +998,37 @@ export const ProblemsTab = ({ initialHost = "" }: { initialHost?: string }) => {
     }
   }, []);
 
+  const handleAddNote = useCallback(async (problem: Problem, note: string) => {
+    const { eventid } = problem;
+    setAddingNote((prev) => new Set([...prev, eventid]));
+    setNoteTarget(null);
+    setNoteText("");
+    try {
+      const res = await api.addProblemNote(eventid, { hostname: problem.hostname, note });
+      setProblems((prev) =>
+        prev.map((p) =>
+          p.eventid === eventid
+            ? {
+                ...p,
+                notes: [
+                  ...(p.notes ?? []),
+                  { username: res.username, note: res.note, created_at: res.created_at },
+                ],
+              }
+            : p,
+        ),
+      );
+    } catch {
+      // no-op — button re-enables so user can retry
+    } finally {
+      setAddingNote((prev) => {
+        const next = new Set(prev);
+        next.delete(eventid);
+        return next;
+      });
+    }
+  }, []);
+
   useEffect(() => {
     void loadProblems();
   }, [loadProblems]);
@@ -566,25 +1053,13 @@ export const ProblemsTab = ({ initialHost = "" }: { initialHost?: string }) => {
       : hosts.filter((h) => h.groups?.some((g) => selectedGroups.includes(g.name)));
 
   const searchLower = search.toLowerCase();
-  const filtered = problems.filter((p) => {
-    if (selectedSeverities.length > 0 && !selectedSeverities.includes(p.severity)) {
-      return false;
-    }
-    if (hostFilter && p.hostname !== hostFilter) {
-      return false;
-    }
-    if (selectedGroups.length > 0 && !p.groups.some((g) => selectedGroups.includes(g))) {
-      return false;
-    }
-    if (
-      searchLower &&
-      !p.name.toLowerCase().includes(searchLower) &&
-      !p.hostname.toLowerCase().includes(searchLower)
-    ) {
-      return false;
-    }
-    return true;
-  });
+  const filtered = problems
+    .filter((p) =>
+      matchesProblemFilters(p, { selectedSeverities, hostFilter, selectedGroups, searchLower }),
+    )
+    .filter((p) => !isHiddenByAckTimer(p, hideAckedAfterMinutes, nowTick));
+
+  const sorted = sortProblems(filtered, sortBy);
 
   const severityCounts = SEVERITY_CONFIG.map((s) => ({
     ...s,
@@ -615,6 +1090,10 @@ export const ProblemsTab = ({ initialHost = "" }: { initialHost?: string }) => {
         visibleHosts={visibleHosts}
         hostFilter={hostFilter}
         setHostFilter={setHostFilter}
+        sortBy={sortBy}
+        setSortBy={setSortBy}
+        hideAckedAfterMinutes={hideAckedAfterMinutes}
+        setHideAckedAfterMinutes={setHideAckedAfterMinutes}
         onRefresh={() => void loadProblems()}
       />
 
@@ -635,101 +1114,82 @@ export const ProblemsTab = ({ initialHost = "" }: { initialHost?: string }) => {
         }}
       />
 
-      {/* Problems table */}
-      <TableContainer component={Paper} variant="outlined">
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell sx={{ width: 28, pr: 0 }} />
-              <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem", width: 130 }}>
-                Severity
-              </TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem", width: 160 }}>Host</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem" }}>Problem</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem", width: 120 }}>Time</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem", width: 90 }}>
-                Duration
-              </TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: "0.75rem", width: 90 }}>Ack</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {loading ? (
-              <ProblemsSkeletonRows />
-            ) : filtered.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} align="center" sx={{ py: 4, color: "text.secondary" }}>
-                  {problems.length === 0 ? "No active problems" : "No problems match filters"}
-                </TableCell>
-              </TableRow>
-            ) : (
-              filtered.map((p) => (
-                <ProblemRow
-                  key={p.eventid}
-                  p={p}
-                  isExpanded={expandedProblemId === p.eventid}
-                  onToggle={() =>
-                    setExpandedProblemId(expandedProblemId === p.eventid ? null : p.eventid)
-                  }
-                  acknowledging={acknowledging}
-                  onAckRequest={(problem) => {
-                    setAckTarget(problem);
-                    setAckNote("");
-                  }}
-                />
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-
-      {/* Acknowledge dialog */}
-      <Dialog open={ackTarget !== null} onClose={() => setAckTarget(null)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700 }}>Acknowledge problem</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ pt: 0.5 }}>
-            {ackTarget && (
-              <Box sx={{ bgcolor: "action.hover", borderRadius: 1, p: 1.5 }}>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                  {ackTarget.name}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {ackTarget.hostname} · {ackTarget.severity_name}
-                </Typography>
-              </Box>
-            )}
-            <Typography variant="body2" color="text.secondary">
-              Acknowledging as <strong>{authUser?.username ?? "you"}</strong>. Add an optional note
-              explaining what was done.
-            </Typography>
-            <TextField
-              size="small"
-              multiline
-              minRows={2}
-              fullWidth
-              label="Note (optional)"
-              placeholder="e.g. Restarted the service, investigating further…"
-              value={ackNote}
-              onChange={(e) => setAckNote(e.target.value)}
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setAckTarget(null)}>Cancel</Button>
-          <Button
-            variant="contained"
-            color="success"
-            disabled={ackTarget ? acknowledging.has(ackTarget.eventid) : false}
-            onClick={() => {
-              if (ackTarget) {
-                handleAcknowledge(ackTarget, ackNote);
-              }
+      {/* Problems list */}
+      <Paper variant="outlined">
+        <Box
+          sx={{
+            px: 2,
+            py: 1,
+            borderBottom: "1px solid",
+            borderColor: "divider",
+          }}
+        >
+          <Typography
+            sx={{
+              fontSize: "0.625rem",
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.1em",
+              color: "text.secondary",
             }}
           >
-            Acknowledge
-          </Button>
-        </DialogActions>
-      </Dialog>
+            {loading
+              ? "Loading…"
+              : `Active problems — ${filtered.length}${filtered.length !== problems.length ? ` of ${problems.length}` : ""}`}
+          </Typography>
+        </Box>
+        {loading ? (
+          <ProblemsSkeletonRows />
+        ) : filtered.length === 0 ? (
+          <Box sx={{ py: 4, textAlign: "center" }}>
+            <Typography variant="body2" color="text.secondary">
+              {problems.length === 0 ? "No active problems" : "No problems match filters"}
+            </Typography>
+          </Box>
+        ) : (
+          sorted.map((p) => (
+            <ProblemRow
+              key={p.eventid}
+              p={p}
+              isExpanded={expandedProblemId === p.eventid}
+              onToggle={() =>
+                setExpandedProblemId(expandedProblemId === p.eventid ? null : p.eventid)
+              }
+              acknowledging={acknowledging}
+              onAckRequest={(problem) => {
+                setAckTarget(problem);
+                setAckNote("");
+              }}
+              onNoteRequest={(problem) => {
+                setNoteTarget(problem);
+                setNoteText("");
+              }}
+              hideAckedAfterMinutes={hideAckedAfterMinutes}
+              nowTick={nowTick}
+            />
+          ))
+        )}
+      </Paper>
+
+      <AcknowledgeDialog
+        target={ackTarget}
+        note={ackNote}
+        setNote={setAckNote}
+        onClose={() => setAckTarget(null)}
+        onSubmit={() => ackTarget && handleAcknowledge(ackTarget, ackNote)}
+        busy={ackTarget ? acknowledging.has(ackTarget.eventid) : false}
+        username={authUser?.username ?? "you"}
+      />
+
+      <AddNoteDialog
+        target={noteTarget}
+        note={noteText}
+        setNote={setNoteText}
+        onClose={() => setNoteTarget(null)}
+        onSubmit={() => noteTarget && handleAddNote(noteTarget, noteText.trim())}
+        busy={noteTarget ? addingNote.has(noteTarget.eventid) : false}
+        username={authUser?.username ?? "you"}
+      />
     </Box>
   );
 };

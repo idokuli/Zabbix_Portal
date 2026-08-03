@@ -106,6 +106,70 @@ def create_host(data: HostRequest, current_user: dict = Depends(require_operator
     summary="Bulk Create Hosts from CSV/XLSX",
     status_code=201,
 )
+def _validate_bulk_upload_size(content: bytes) -> None:
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    if len(content) > 10 * 1024 * 1024:  # 10 MB hard limit
+        raise HTTPException(status_code=413, detail="File too large. Maximum size is 10 MB.")
+
+
+def _parse_bulk_upload(
+    filename: str, content: bytes, original_filename: str | None
+) -> pd.DataFrame:
+    try:
+        if filename.endswith(".csv"):
+            return pd.read_csv(BytesIO(content))
+        return pd.read_excel(BytesIO(content))
+    except Exception as exc:
+        logger.exception("Bulk upload: failed to parse file %r", original_filename)
+        raise HTTPException(
+            status_code=400,
+            detail="Failed to parse file. Ensure it is a valid CSV or XLSX.",
+        ) from exc
+
+
+def _resolve_bulk_columns(df: pd.DataFrame) -> tuple[str, str, str | None]:
+    normalized = {str(c).strip().lower(): c for c in df.columns}
+    hostname_col = normalized.get("hostname") or normalized.get("host")
+    ip_col = normalized.get("ip") or normalized.get("ip_address")
+    template_col = normalized.get("template")
+    if not hostname_col or not ip_col:
+        raise HTTPException(
+            status_code=400,
+            detail="File must contain hostname (or host) and ip (or ip_address) columns.",
+        )
+    return hostname_col, ip_col, template_col
+
+
+def _create_bulk_host_row(
+    idx,
+    row,
+    hostname_col: str,
+    ip_col: str,
+    template_col: str | None,
+    default_template: str,
+    team_id,
+    team_name: str | None,
+) -> tuple[bool, dict]:
+    """Returns (created, entry) — entry is the created-row or failed-row payload."""
+    hostname = str(row.get(hostname_col, "")).strip()
+    ip = str(row.get(ip_col, "")).strip()
+    template = str(row.get(template_col, "")).strip() if template_col else ""
+    if not hostname or hostname.lower() == "nan" or not ip or ip.lower() == "nan":
+        return False, {"row": int(idx) + 2, "reason": "Missing hostname/ip"}
+
+    hostid, err = host_bot.create_server(hostname, ip, template_name=template or default_template)
+    if not hostid:
+        return False, {"row": int(idx) + 2, "hostname": hostname, "reason": err or "Unknown error"}
+
+    if team_id:
+        um.assign_host(team_id, hostname)
+    if team_name:
+        host_bot.tag_host(hostname, team_name)
+        host_bot.add_host_to_hostgroup(hostname, team_name)
+    return True, {"row": int(idx) + 2, "hostname": hostname, "hostid": hostid}
+
+
 async def bulk_create_hosts(
     file: UploadFile = File(...),
     apply_team_tag: bool = Form(True),
@@ -117,33 +181,9 @@ async def bulk_create_hosts(
         raise HTTPException(status_code=400, detail="Unsupported file type. Use .csv or .xlsx")
 
     content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-    if len(content) > 10 * 1024 * 1024:  # 10 MB hard limit
-        raise HTTPException(status_code=413, detail="File too large. Maximum size is 10 MB.")
-
-    try:
-        if filename.endswith(".csv"):
-            df = pd.read_csv(BytesIO(content))
-        else:
-            df = pd.read_excel(BytesIO(content))
-    except Exception as exc:
-        logger.exception("Bulk upload: failed to parse file %r", file.filename)
-        raise HTTPException(
-            status_code=400,
-            detail="Failed to parse file. Ensure it is a valid CSV or XLSX.",
-        ) from exc
-
-    normalized = {str(c).strip().lower(): c for c in df.columns}
-    hostname_col = normalized.get("hostname") or normalized.get("host")
-    ip_col = normalized.get("ip") or normalized.get("ip_address")
-    template_col = normalized.get("template")
-
-    if not hostname_col or not ip_col:
-        raise HTTPException(
-            status_code=400,
-            detail="File must contain hostname (or host) and ip (or ip_address) columns.",
-        )
+    _validate_bulk_upload_size(content)
+    df = _parse_bulk_upload(filename, content, file.filename)
+    hostname_col, ip_col, template_col = _resolve_bulk_columns(df)
 
     default_template = "Linux by Zabbix agent"
     team_id = live_team_id(current_user)
@@ -153,31 +193,10 @@ async def bulk_create_hosts(
         created: list[dict] = []
         failed: list[dict] = []
         for idx, row in df.iterrows():
-            hostname = str(row.get(hostname_col, "")).strip()
-            ip = str(row.get(ip_col, "")).strip()
-            template = str(row.get(template_col, "")).strip() if template_col else ""
-            if not hostname or hostname.lower() == "nan" or not ip or ip.lower() == "nan":
-                failed.append({"row": int(idx) + 2, "reason": "Missing hostname/ip"})
-                continue
-
-            hostid, err = host_bot.create_server(
-                hostname, ip, template_name=template or default_template
+            was_created, entry = _create_bulk_host_row(
+                idx, row, hostname_col, ip_col, template_col, default_template, team_id, team_name
             )
-            if hostid:
-                if team_id:
-                    um.assign_host(team_id, hostname)
-                if team_name:
-                    host_bot.tag_host(hostname, team_name)
-                    host_bot.add_host_to_hostgroup(hostname, team_name)
-                created.append({"row": int(idx) + 2, "hostname": hostname, "hostid": hostid})
-            else:
-                failed.append(
-                    {
-                        "row": int(idx) + 2,
-                        "hostname": hostname,
-                        "reason": err or "Unknown error",
-                    }
-                )
+            (created if was_created else failed).append(entry)
         return created, failed
 
     created, failed = await run_in_threadpool(_process)

@@ -27,7 +27,8 @@ import { useCallback, useEffect, useState } from "react";
 import { type AlertEvent, api } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
-import { SEVERITY_CONFIG, SeverityChip, formatAge } from "./shared";
+import { formatDateTime } from "../../app/datetime";
+import { formatAge, SEVERITY_CONFIG, SeverityChip } from "./shared";
 
 const SkeletonRows = ({ rows, cols }: { rows: number; cols: number }) => (
   <>
@@ -65,7 +66,7 @@ const notificationStatusColor = (s: number) =>
 const NotificationRow = ({ n, onClick }: { n: ZabbixNotification; onClick: () => void }) => (
   <TableRow hover sx={{ cursor: "pointer" }} onClick={onClick}>
     <TableCell>
-      <Tooltip title={new Date(n.clock * 1000).toLocaleString()}>
+      <Tooltip title={formatDateTime(n.clock)}>
         <Typography
           variant="body2"
           sx={{ fontSize: "0.75rem", color: "text.secondary", cursor: "pointer" }}
@@ -163,7 +164,7 @@ const PortalEventRow = ({ e, onClick }: { e: AlertEvent; onClick: () => void }) 
         </Typography>
       </TableCell>
       <TableCell>
-        <Tooltip title={new Date(e.fired_at * 1000).toLocaleString()}>
+        <Tooltip title={formatDateTime(e.fired_at)}>
           <Typography
             variant="body2"
             sx={{ fontSize: "0.75rem", color: "text.secondary", cursor: "default" }}

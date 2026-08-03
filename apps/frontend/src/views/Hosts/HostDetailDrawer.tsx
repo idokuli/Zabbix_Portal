@@ -1,5 +1,5 @@
 "use client";
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
 import CloseIcon from "@mui/icons-material/Close";
 import RouterOutlinedIcon from "@mui/icons-material/RouterOutlined";
 import StarIcon from "@mui/icons-material/Star";
@@ -60,7 +60,6 @@ const DrawerItemRow = ({
       py: 0.75,
       px: 1,
       mb: 0.25,
-      borderRadius: 1.5,
       border: "1px solid",
       borderColor: "divider",
       bgcolor: isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.01)",
@@ -118,7 +117,6 @@ const DrawerTriggerRow = ({
         py: 0.75,
         px: 1,
         mb: 0.25,
-        borderRadius: 1.5,
         border: "1px solid",
         borderColor: isProblem ? "rgba(220,38,38,0.3)" : "divider",
         bgcolor: isProblem
@@ -265,18 +263,20 @@ export const HostDetailDrawer = ({
   isFavTrigger: (id: string) => boolean;
 }) => (
   <Drawer
+    slotProps={{
+      paper: {
+        sx: {
+          width: 520,
+          bgcolor: "background.paper",
+          backgroundImage: "none",
+          borderLeft: "1px solid",
+          borderColor: "divider",
+        },
+      },
+    }}
     anchor="right"
     open={!!selectedHost}
     onClose={onClose}
-    PaperProps={{
-      sx: {
-        width: 520,
-        bgcolor: "background.paper",
-        backgroundImage: "none",
-        borderLeft: "1px solid",
-        borderColor: "divider",
-      },
-    }}
   >
     {selectedHost && (
       <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>

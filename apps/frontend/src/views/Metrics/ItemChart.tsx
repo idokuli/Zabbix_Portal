@@ -7,17 +7,18 @@ import {
   Tooltip as ChartTooltip,
   Filler,
   Legend,
-  LineElement,
   LinearScale,
+  LineElement,
   PointElement,
   Title,
 } from "chart.js";
 import ZoomPlugin from "chartjs-plugin-zoom";
 import { useEffect, useRef, useState } from "react";
 import { Line } from "react-chartjs-2";
-import { type AlertEvent, type HistoryPoint, type ItemHistory, api } from "../../app/api";
+import { type AlertEvent, api, type HistoryPoint, type ItemHistory } from "../../app/api";
+import { formatDateTimeCompact, formatTime, formatTimeShort } from "../../app/datetime";
 import { formatSizeValue } from "../../app/utils";
-import { PERIOD_OPTIONS, SEVERITY_CONFIG, formatTimestamp } from "./shared";
+import { formatTimestamp, PERIOD_OPTIONS, SEVERITY_CONFIG } from "./shared";
 
 ChartJS.register(
   CategoryScale,
@@ -295,12 +296,7 @@ const formatTooltipTitle = (items: { raw: unknown }[]) => {
   if (!raw) {
     return "";
   }
-  return new Date(raw.x * 1000).toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
+  return formatTime(raw.x);
 };
 
 const formatTooltipLabel = (
@@ -340,7 +336,6 @@ const NoDataFallback = ({
         height: "100%",
         minHeight: 180,
         bgcolor: chartBg,
-        borderRadius: 1.5,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -381,19 +376,8 @@ const NoDataFallback = ({
   );
 };
 
-const formatRangeBound = (clock: number, spanMinutes: number): string => {
-  const d = new Date(clock * 1000);
-  if (spanMinutes >= 1440) {
-    return d.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-  }
-  return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
-};
+const formatRangeBound = (clock: number, spanMinutes: number): string =>
+  spanMinutes >= 1440 ? formatDateTimeCompact(clock) : formatTimeShort(clock);
 
 export const ItemChart = ({
   itemid,
@@ -480,7 +464,7 @@ export const ItemChart = ({
   }, [minutes]);
 
   if (loading) {
-    return <Skeleton variant="rectangular" width="100%" height={180} sx={{ borderRadius: 1 }} />;
+    return <Skeleton variant="rectangular" width="100%" height={180} sx={{}} />;
   }
 
   const noRecordings = !data || data.history.length === 0;
@@ -526,7 +510,6 @@ export const ItemChart = ({
         bgcolor: chartBg,
         opacity: refreshing ? 0.72 : 1,
         transition: "opacity 0.2s ease",
-        borderRadius: 1.5,
         p: "14px 10px 8px 10px",
         boxSizing: "border-box",
         position: "relative",

@@ -2,10 +2,8 @@
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import {
-  Box,
   Button,
   Chip,
-  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -15,10 +13,10 @@ import {
   List,
   ListItem,
   ListItemText,
-  Stack,
   Tooltip,
   Typography,
 } from "@mui/material";
+import { TabHeader } from "../../app/components/TabHeader";
 
 export type TemplateGroup = { groupid: string; name: string; template_count: number };
 export type HostGroup = { groupid: string; name: string; host_count: number };
@@ -63,7 +61,11 @@ export const StatusChip = ({
   status,
   on = "0",
   labels = ["Enabled", "Disabled"],
-}: { status: string; on?: string; labels?: string[] }) => (
+}: {
+  status: string;
+  on?: string;
+  labels?: string[];
+}) => (
   <Chip
     label={status === on ? labels[0] : labels[1]}
     size="small"
@@ -125,6 +127,7 @@ export const MembersDialog = <T extends { name: string }>({
 
 export const SectionHeader = ({
   title,
+  description,
   count,
   loading,
   onRefresh,
@@ -132,38 +135,35 @@ export const SectionHeader = ({
   addLabel = "Add",
 }: {
   title: string;
+  description: string;
   count: number;
   loading: boolean;
   onRefresh: () => void;
   onAdd: () => void;
   addLabel?: string;
 }) => (
-  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.5 }}>
-    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-      <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-        {title}
-      </Typography>
-      {loading ? (
-        <CircularProgress size={14} />
-      ) : (
-        <Chip label={count} size="small" sx={{ height: 18, fontSize: "0.62rem" }} />
-      )}
-    </Box>
-    <Stack direction="row" spacing={1}>
-      <Tooltip title="Refresh">
-        <IconButton size="small" onClick={onRefresh} disabled={loading}>
-          <RefreshIcon sx={{ fontSize: 16 }} />
-        </IconButton>
-      </Tooltip>
-      <Button
-        size="small"
-        variant="contained"
-        color="secondary"
-        startIcon={<AddOutlinedIcon />}
-        onClick={onAdd}
-      >
-        {addLabel}
-      </Button>
-    </Stack>
-  </Box>
+  <TabHeader
+    title={title}
+    description={description}
+    count={count}
+    loading={loading}
+    actions={
+      <>
+        <Tooltip title="Refresh">
+          <IconButton size="small" onClick={onRefresh} disabled={loading}>
+            <RefreshIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        </Tooltip>
+        <Button
+          size="small"
+          variant="contained"
+          color="secondary"
+          startIcon={<AddOutlinedIcon />}
+          onClick={onAdd}
+        >
+          {addLabel}
+        </Button>
+      </>
+    }
+  />
 );

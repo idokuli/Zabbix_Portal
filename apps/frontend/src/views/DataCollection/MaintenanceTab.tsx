@@ -1,5 +1,5 @@
 "use client";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import {
   Box,
   Button,
@@ -27,14 +27,15 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../app/api";
-import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { SearchableSelect } from "../../components/SearchableSelect";
-import { ConfirmDelete, type HostGroup, type Maintenance, SectionHeader, fmtTs } from "./shared";
+import { ConfirmDelete, fmtTs, type HostGroup, type Maintenance, SectionHeader } from "./shared";
 
 export const MaintenanceTab = ({
   showToast,
-}: { showToast: (m: string, s: "success" | "error") => void }) => {
+}: {
+  showToast: (m: string, s: "success" | "error") => void;
+}) => {
   const [items, setItems] = useState<Maintenance[]>([]);
   const [hostGroups, setHostGroups] = useState<HostGroup[]>([]);
   const [loading, setLoading] = useState(false);
@@ -123,12 +124,9 @@ export const MaintenanceTab = ({
 
   return (
     <>
-      <TabHeader
+      <SectionHeader
         title="Maintenance Windows"
         description="Schedule maintenance periods to suppress alerts during planned downtime."
-      />
-      <SectionHeader
-        title="Maintenance"
         count={items.length}
         loading={loading}
         onRefresh={load}
@@ -148,7 +146,6 @@ export const MaintenanceTab = ({
         sx={{
           border: "1px solid",
           borderColor: "divider",
-          borderRadius: 1.5,
           maxHeight: 480,
           overflow: "auto",
         }}
@@ -245,22 +242,22 @@ export const MaintenanceTab = ({
             </FormControl>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
               <TextField
+                slotProps={{ inputLabel: { shrink: true } }}
                 size="small"
                 label="Active from"
                 type="datetime-local"
                 value={form.active_since_str}
                 onChange={(e) => setForm((f) => ({ ...f, active_since_str: e.target.value }))}
                 fullWidth
-                InputLabelProps={{ shrink: true }}
               />
               <TextField
+                slotProps={{ inputLabel: { shrink: true } }}
                 size="small"
                 label="Active till"
                 type="datetime-local"
                 value={form.active_till_str}
                 onChange={(e) => setForm((f) => ({ ...f, active_till_str: e.target.value }))}
                 fullWidth
-                InputLabelProps={{ shrink: true }}
               />
             </Stack>
             <FormControl size="small" fullWidth>

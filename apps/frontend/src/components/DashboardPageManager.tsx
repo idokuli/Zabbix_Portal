@@ -1,7 +1,7 @@
 "use client";
 
 import AddIcon from "@mui/icons-material/Add";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import {
   Button,
@@ -16,7 +16,7 @@ import {
   Tooltip,
 } from "@mui/material";
 import { useEffect, useState } from "react";
-import { type DashboardPage, type DashboardPageKind, type DashboardScope, api } from "../app/api";
+import { api, type DashboardPage, type DashboardPageKind, type DashboardScope } from "../app/api";
 import { ConfirmDelete } from "../app/components/ConfirmDelete";
 
 type DashboardPageManagerProps = {

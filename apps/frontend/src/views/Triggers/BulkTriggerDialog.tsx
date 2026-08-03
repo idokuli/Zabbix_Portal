@@ -12,11 +12,11 @@ import {
   Typography,
 } from "@mui/material";
 import { useState } from "react";
-import { api } from "../../app/api";
 import type { Host } from "../../app/api";
+import { api } from "../../app/api";
 import { MultiHostSelect } from "../Items/panels/shared";
-import { BulkResults } from "../Items/shared";
 import type { BulkResult } from "../Items/shared";
+import { BulkResults } from "../Items/shared";
 
 const PRIORITIES = [
   { value: 0, label: "Not classified" },

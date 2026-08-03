@@ -1,17 +1,18 @@
 "use client";
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import AccessTimeOutlinedIcon from "@mui/icons-material/AccessTimeOutlined";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
+import ComputerOutlinedIcon from "@mui/icons-material/ComputerOutlined";
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
-import NotificationsNoneOutlinedIcon from "@mui/icons-material/NotificationsNoneOutlined";
+import LaunchOutlinedIcon from "@mui/icons-material/LaunchOutlined";
 import RouterOutlinedIcon from "@mui/icons-material/RouterOutlined";
 import StorageOutlinedIcon from "@mui/icons-material/StorageOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import {
   Box,
-  Card,
+  Button,
   Chip,
-  Grid,
   List,
   ListItemButton,
   ListItemIcon,
@@ -21,15 +22,17 @@ import {
   Typography,
 } from "@mui/material";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { type AlertEvent, type Problem, type Team, api } from "../../app/api";
+import { useCallback, useEffect, useState } from "react";
+import { type AlertEvent, api, type Problem, type Team } from "../../app/api";
 import { EmptyState } from "../../app/components/EmptyState";
 import { useAuth } from "../../app/context/AuthContext";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { useSync } from "../../app/context/SyncContext";
+import { formatDateTime } from "../../app/datetime";
+import { SEVERITIES, severityOf } from "../../app/severity";
+import { monoFontFamily } from "../../app/theme";
 import { AlertEventRow } from "./AlertEventRow";
-import { ProblemRow } from "./ProblemRow";
 import { StatusRow } from "./StatusRow";
 
 type Stats = {
@@ -40,272 +43,404 @@ type Stats = {
   assignedServers: number;
 };
 
-// ── Summary strip ─────────────────────────────────────────────────────
+type Health = { ok: boolean; zabbix: boolean } | null;
 
-const SummaryStat = ({
-  label,
-  value,
-  sub,
-  href,
-  valueColor,
-  loading,
-}: {
-  label: string;
-  value: number | string;
-  sub?: string;
-  href: string;
-  valueColor?: string;
-  loading: boolean;
-}) => (
-  <Box
-    component={Link}
-    href={href}
-    sx={{
-      flex: 1,
-      minWidth: 130,
-      px: 2.25,
-      py: 1.5,
-      textDecoration: "none",
-      color: "inherit",
-      "&:hover": { bgcolor: "action.hover" },
-      transition: "background-color 0.15s ease",
-    }}
-  >
-    <Typography variant="overline" sx={{ color: "text.secondary", display: "block", mb: 0.25 }}>
-      {label}
-    </Typography>
-    {loading ? (
-      <Skeleton variant="text" width={48} height={28} />
-    ) : (
-      <Box sx={{ display: "flex", alignItems: "baseline", gap: 1 }}>
-        <Typography
-          sx={{
-            fontSize: "1.25rem",
-            fontWeight: 600,
-            lineHeight: 1.3,
-            fontVariantNumeric: "tabular-nums",
-            color: valueColor ?? "text.primary",
-          }}
-        >
-          {value}
-        </Typography>
-        {sub && (
-          <Typography variant="caption" sx={{ color: "text.disabled" }}>
-            {sub}
-          </Typography>
-        )}
-      </Box>
-    )}
-  </Box>
-);
+const fmtAge = (seconds: number): string => {
+  if (seconds < 3600) {
+    return `${Math.max(1, Math.floor(seconds / 60))}m`;
+  }
+  if (seconds < 86400) {
+    return `${Math.floor(seconds / 3600)}h`;
+  }
+  return `${Math.floor(seconds / 86400)}d`;
+};
 
-const SummaryStrip = ({
-  stats,
-  offlineCount,
-  problems,
-  alertEvents,
-  loading,
-}: {
-  stats: Stats | null;
-  offlineCount: number;
-  problems: Problem[];
-  alertEvents: AlertEvent[];
-  loading: boolean;
-}) => (
+// ── Severity band — NOC-style counters, worst first ───────────────────
+
+const SeverityBand = ({ problems, loading }: { problems: Problem[]; loading: boolean }) => (
   <Paper
     sx={{
-      mb: 2.5,
+      mb: 2,
       display: "flex",
-      flexWrap: "wrap",
       alignItems: "stretch",
       overflow: "hidden",
       "& > a:not(:first-of-type)": { borderLeft: "1px solid", borderLeftColor: "divider" },
     }}
   >
-    <SummaryStat
-      label="Hosts"
-      value={stats?.totalHosts ?? 0}
-      sub={
-        stats
-          ? offlineCount > 0
-            ? `${stats.onlineHosts} enabled · ${offlineCount} offline`
-            : "all enabled"
-          : undefined
-      }
-      href="/hosts"
-      loading={loading}
-    />
-    <SummaryStat
-      label="Active problems"
-      value={loading ? 0 : problems.length}
-      sub={!loading && problems.length === 0 ? "all clear" : undefined}
-      valueColor={problems.length > 0 ? "error.main" : undefined}
-      href="/metrics?tab=problems"
-      loading={loading}
-    />
-    <SummaryStat
-      label="Alert events"
-      value={loading ? 0 : alertEvents.length}
-      valueColor={alertEvents.length > 0 ? "warning.main" : undefined}
-      href="/metrics?tab=alert-rules"
-      loading={loading}
-    />
-    <SummaryStat label="Teams" value={stats?.totalTeams ?? 0} href="/teams" loading={loading} />
-    <SummaryStat
-      label="Team members"
-      value={stats?.totalUsers ?? 0}
-      href="/teams"
-      loading={loading}
-    />
+    {[...SEVERITIES].reverse().map((sev) => {
+      const count = problems.filter((p) => p.severity === sev.value).length;
+      const lit = !loading && count > 0;
+      return (
+        <Box
+          key={sev.value}
+          component={Link}
+          href="/metrics?tab=problems"
+          sx={{
+            flex: 1,
+            minWidth: 0,
+            px: 1.75,
+            py: 1.25,
+            textDecoration: "none",
+            backgroundColor: lit ? sev.bg : "transparent",
+            "&:hover": { backgroundColor: lit ? sev.bg : "action.hover" },
+            transition: "background-color 0.15s ease",
+          }}
+        >
+          <Typography
+            sx={{
+              fontFamily: monoFontFamily,
+              fontSize: "1.375rem",
+              lineHeight: 1.2,
+              fontWeight: 600,
+              color: lit ? sev.color : "text.disabled",
+            }}
+          >
+            {loading ? "–" : count}
+          </Typography>
+          <Typography
+            noWrap
+            sx={{
+              fontSize: "0.625rem",
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+              color: lit ? "text.primary" : "text.secondary",
+            }}
+          >
+            {sev.label}
+          </Typography>
+        </Box>
+      );
+    })}
   </Paper>
 );
 
-// ── Panel primitive ───────────────────────────────────────────────────
+// ── Estate ticker — one mono readout line instead of stat cards ───────
 
-const Panel = ({
-  title,
-  action,
-  fill = true,
-  children,
+const TickerItem = ({
+  label,
+  value,
+  href,
+  tone,
 }: {
-  title: string;
-  action?: ReactNode;
-  fill?: boolean;
-  children: ReactNode;
+  label: string;
+  value: string;
+  href: string;
+  tone?: string;
 }) => (
-  <Card sx={{ height: fill ? "100%" : "auto", display: "flex", flexDirection: "column" }}>
-    <Box
+  <Box
+    component={Link}
+    href={href}
+    sx={{
+      display: "flex",
+      alignItems: "baseline",
+      gap: 0.75,
+      px: 1.75,
+      py: 0.9,
+      textDecoration: "none",
+      whiteSpace: "nowrap",
+      "&:hover": { bgcolor: "action.hover" },
+    }}
+  >
+    <Typography
       sx={{
-        px: 2,
-        py: 1.25,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        borderBottom: "1px solid",
-        borderColor: "divider",
-        flexShrink: 0,
+        fontSize: "0.625rem",
+        fontWeight: 600,
+        textTransform: "uppercase",
+        letterSpacing: "0.08em",
+        color: "text.secondary",
       }}
     >
-      <Typography variant="subtitle2">{title}</Typography>
-      {action}
-    </Box>
-    <Box sx={{ p: 2, flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-      {children}
-    </Box>
-  </Card>
-);
-
-const RowSkeletons = ({ count, height }: { count: number; height: number }) => (
-  <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
-    {Array.from({ length: count }).map((_, n) => (
-      // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length anonymous skeleton placeholders
-      <Skeleton key={n} variant="rounded" height={height} />
-    ))}
+      {label}
+    </Typography>
+    <Typography
+      sx={{
+        fontFamily: monoFontFamily,
+        fontSize: "0.8125rem",
+        fontWeight: 600,
+        color: tone ?? "text.primary",
+      }}
+    >
+      {value}
+    </Typography>
   </Box>
 );
 
-// ── Panels ────────────────────────────────────────────────────────────
+const tickerItems = (
+  stats: Stats | null,
+  offlineCount: number,
+  alertEvents: AlertEvent[],
+  health: Health,
+): Array<{ label: string; value: string; href: string; tone?: string }> => [
+  { label: "Hosts", value: String(stats?.totalHosts ?? 0), href: "/hosts" },
+  {
+    label: "Offline",
+    value: String(offlineCount),
+    href: "/hosts",
+    tone: offlineCount > 0 ? "warning.main" : undefined,
+  },
+  {
+    label: "Alert events",
+    value: String(alertEvents.length),
+    href: "/metrics?tab=alert-rules",
+    tone: alertEvents.length > 0 ? "warning.main" : undefined,
+  },
+  { label: "Teams", value: String(stats?.totalTeams ?? 0), href: "/teams" },
+  { label: "Members", value: String(stats?.totalUsers ?? 0), href: "/teams" },
+  {
+    label: "API",
+    value: health?.ok ? "UP" : "DOWN",
+    href: "/",
+    tone: health?.ok ? "success.main" : "error.main",
+  },
+  {
+    label: "Zabbix",
+    value: health?.zabbix ? "UP" : "DOWN",
+    href: "/",
+    tone: health?.zabbix ? "success.main" : "error.main",
+  },
+];
 
-const ActiveProblemsPanel = ({ loading, problems }: { loading: boolean; problems: Problem[] }) => (
-  <Panel
-    title="Active problems"
-    action={
-      !loading && problems.length > 0 ? (
-        <Chip
-          size="small"
-          label={problems.length}
-          color="error"
-          variant="outlined"
-          sx={{ fontWeight: 600, height: 20 }}
-        />
-      ) : undefined
-    }
+const EstateTicker = ({
+  stats,
+  offlineCount,
+  alertEvents,
+  health,
+  loading,
+}: {
+  stats: Stats | null;
+  offlineCount: number;
+  alertEvents: AlertEvent[];
+  health: Health;
+  loading: boolean;
+}) => (
+  <Paper
+    sx={{
+      mb: 2,
+      display: "flex",
+      alignItems: "center",
+      flexWrap: "wrap",
+      overflow: "hidden",
+      "& > a:not(:first-of-type)": { borderLeft: "1px solid", borderLeftColor: "divider" },
+    }}
   >
     {loading ? (
-      <RowSkeletons count={4} height={40} />
-    ) : problems.length === 0 ? (
-      <EmptyState
-        icon={<CheckCircleOutlineIcon sx={{ fontSize: 22 }} />}
-        title="No active problems"
-        description="All monitored hosts are healthy"
-      />
+      <Skeleton variant="text" sx={{ mx: 2, my: 0.5, flex: 1, maxWidth: 420 }} />
     ) : (
-      <>
-        <Box sx={{ flex: 1, overflow: "auto", maxHeight: 340 }}>
-          {problems.slice(0, 8).map((p) => (
-            <ProblemRow key={p.eventid} problem={p} />
-          ))}
-        </Box>
-        {problems.length > 8 && (
-          <Box sx={{ mt: 1.5, pt: 1.25, borderTop: "1px solid", borderColor: "divider" }}>
-            <Typography
-              component={Link}
-              href="/metrics?tab=problems"
-              variant="caption"
-              sx={{
-                color: "primary.main",
-                textDecoration: "none",
-                "&:hover": { textDecoration: "underline" },
-              }}
-            >
-              View all {problems.length} problems
-            </Typography>
-          </Box>
-        )}
-      </>
+      tickerItems(stats, offlineCount, alertEvents, health).map((item) => (
+        <TickerItem key={item.label} {...item} />
+      ))
     )}
-  </Panel>
+  </Paper>
 );
 
-const RecentAlertsPanel = ({
-  loading,
-  alertEvents,
+// ── Problem feed (master) ─────────────────────────────────────────────
+
+const FeedRow = ({
+  problem,
+  selected,
+  onSelect,
 }: {
-  loading: boolean;
-  alertEvents: AlertEvent[];
+  problem: Problem;
+  selected: boolean;
+  onSelect: () => void;
+}) => {
+  const sev = severityOf(problem.severity);
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={onSelect}
+      sx={{
+        all: "unset",
+        boxSizing: "border-box",
+        display: "flex",
+        alignItems: "center",
+        gap: 1.5,
+        width: "100%",
+        px: 2,
+        py: 1.1,
+        cursor: "pointer",
+        borderBottom: "1px solid",
+        borderColor: "divider",
+        bgcolor: selected ? "action.selected" : "transparent",
+        "&:hover": { bgcolor: selected ? "action.selected" : "action.hover" },
+      }}
+    >
+      <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: sev.color, flexShrink: 0 }} />
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+          {problem.name}
+        </Typography>
+        <Typography
+          sx={{
+            fontFamily: monoFontFamily,
+            fontSize: "0.6875rem",
+            color: "text.secondary",
+            fontVariantNumeric: "tabular-nums",
+          }}
+          noWrap
+        >
+          {problem.hostname} · {fmtAge(problem.age_seconds)}
+          {problem.acknowledged ? " · ack" : ""}
+        </Typography>
+      </Box>
+      <Typography
+        variant="caption"
+        sx={{
+          color: sev.color,
+          fontWeight: 700,
+          flexShrink: 0,
+          whiteSpace: "nowrap",
+          minWidth: 64,
+          textAlign: "right",
+        }}
+      >
+        {sev.label}
+      </Typography>
+    </Box>
+  );
+};
+
+// ── Inspector (detail) ────────────────────────────────────────────────
+
+const InspectorField = ({
+  icon,
+  label,
+  children,
+}: {
+  icon?: ReactNode;
+  label: string;
+  children: ReactNode;
 }) => (
-  <Panel title="Recent alerts">
-    {loading ? (
-      <RowSkeletons count={3} height={36} />
-    ) : alertEvents.length === 0 ? (
-      <EmptyState
-        icon={<NotificationsNoneOutlinedIcon sx={{ fontSize: 22 }} />}
-        title="No recent alert events"
-        description="Custom rules have not fired recently"
-      />
-    ) : (
-      <Box sx={{ flex: 1 }}>
-        {alertEvents.map((e) => (
-          <AlertEventRow key={e.id} event={e} />
-        ))}
+  <Box sx={{ display: "flex", alignItems: "flex-start", gap: icon ? 0.875 : 0 }}>
+    {icon && (
+      <Box sx={{ display: "flex", color: "text.disabled", mt: "2px", "& svg": { fontSize: 15 } }}>
+        {icon}
       </Box>
     )}
-  </Panel>
-);
-
-const SystemStatusPanel = ({
-  loading,
-  health,
-}: {
-  loading: boolean;
-  health: { ok: boolean; zabbix: boolean } | null;
-}) => (
-  <Panel title="System status" fill={false}>
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-      <StatusRow label="Backend API" ok={health?.ok ?? false} loading={loading} />
-      <StatusRow label="Zabbix" ok={health?.zabbix ?? false} loading={loading} />
-      <StatusRow label="Database" ok={health?.ok ?? false} loading={loading} />
+    <Box>
+      <Typography
+        sx={{
+          fontSize: "0.625rem",
+          fontWeight: 600,
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          color: "text.secondary",
+          mb: 0.25,
+        }}
+      >
+        {label}
+      </Typography>
+      {children}
     </Box>
-  </Panel>
+  </Box>
 );
 
-const QuickActionsPanel = ({ isAdmin }: { isAdmin: boolean }) => {
+const ProblemInspector = ({ problem }: { problem: Problem }) => {
+  const sev = severityOf(problem.severity);
+  return (
+    <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 2 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <Box sx={{ width: 9, height: 9, borderRadius: "50%", bgcolor: sev.color }} />
+        <Typography variant="caption" sx={{ fontWeight: 700, color: sev.color }}>
+          {sev.label.toUpperCase()}
+        </Typography>
+        {problem.acknowledged && (
+          <Chip label="acknowledged" size="small" variant="outlined" color="success" />
+        )}
+      </Box>
+
+      <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.5 }}>
+        {problem.name}
+      </Typography>
+
+      <Box
+        sx={{
+          border: "1px solid",
+          borderColor: "divider",
+          bgcolor: "action.hover",
+          px: 1.75,
+          py: 1.5,
+          display: "flex",
+          flexDirection: "column",
+          gap: 1.5,
+        }}
+      >
+        <InspectorField icon={<ComputerOutlinedIcon />} label="Host">
+          <Typography sx={{ fontFamily: monoFontFamily, fontSize: "0.8125rem" }}>
+            {problem.hostname}
+          </Typography>
+        </InspectorField>
+
+        <InspectorField icon={<AccessTimeOutlinedIcon />} label="Started">
+          <Typography
+            sx={{
+              fontFamily: monoFontFamily,
+              fontSize: "0.8125rem",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {formatDateTime(problem.clock)} · {fmtAge(problem.age_seconds)} ago
+          </Typography>
+        </InspectorField>
+
+        {problem.groups.length > 0 && (
+          <InspectorField label="Host groups">
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mt: 0.25 }}>
+              {problem.groups.map((g) => (
+                <Chip key={g} label={g} size="small" variant="outlined" />
+              ))}
+            </Box>
+          </InspectorField>
+        )}
+
+        {problem.acknowledged && problem.ack_user && (
+          <InspectorField icon={<CheckCircleOutlineIcon />} label="Acknowledged by">
+            <Typography variant="body2" sx={{ fontWeight: 600, color: "success.main" }}>
+              {problem.ack_user}
+              {problem.ack_note && (
+                <Typography
+                  component="span"
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ ml: 0.75, fontWeight: 400 }}
+                >
+                  — {problem.ack_note}
+                </Typography>
+              )}
+            </Typography>
+          </InspectorField>
+        )}
+      </Box>
+
+      <Button
+        component={Link}
+        href={`/metrics?tab=problems&host=${encodeURIComponent(problem.hostname)}`}
+        variant="outlined"
+        size="small"
+        startIcon={<LaunchOutlinedIcon sx={{ fontSize: 14 }} />}
+        sx={{ alignSelf: "flex-start" }}
+      >
+        Open in problems
+      </Button>
+    </Box>
+  );
+};
+
+const InspectorHome = ({
+  health,
+  alertEvents,
+  isAdmin,
+  loading,
+}: {
+  health: Health;
+  alertEvents: AlertEvent[];
+  isAdmin: boolean;
+  loading: boolean;
+}) => {
   const actions: Array<{ icon: ReactNode; label: string; href: string; external?: boolean }> = [
-    {
-      icon: <StorageOutlinedIcon sx={{ fontSize: 16 }} />,
-      label: "Manage hosts",
-      href: "/hosts",
-    },
+    { icon: <StorageOutlinedIcon sx={{ fontSize: 16 }} />, label: "Manage hosts", href: "/hosts" },
     {
       icon: <DashboardOutlinedIcon sx={{ fontSize: 16 }} />,
       label: "Dashboard",
@@ -337,30 +472,66 @@ const QuickActionsPanel = ({ isAdmin }: { isAdmin: boolean }) => {
       external: true,
     },
   ];
+
   return (
-    <Card sx={{ flex: 1 }}>
-      <Box sx={{ px: 2, py: 1.25, borderBottom: "1px solid", borderColor: "divider" }}>
-        <Typography variant="subtitle2">Quick actions</Typography>
+    <>
+      <SectionLabel>System status</SectionLabel>
+      <Box sx={{ px: 2, py: 1.5, display: "flex", flexDirection: "column", gap: 1.25 }}>
+        <StatusRow label="Backend API" ok={health?.ok ?? false} loading={loading} />
+        <StatusRow label="Zabbix" ok={health?.zabbix ?? false} loading={loading} />
+        <StatusRow label="Database" ok={health?.ok ?? false} loading={loading} />
       </Box>
+
+      <SectionLabel>Recent alerts</SectionLabel>
+      <Box sx={{ px: 2, py: 1 }}>
+        {alertEvents.length === 0 ? (
+          <Typography variant="caption" color="text.disabled">
+            Custom rules have not fired recently.
+          </Typography>
+        ) : (
+          alertEvents.slice(0, 4).map((e) => <AlertEventRow key={e.id} event={e} />)
+        )}
+      </Box>
+
+      <SectionLabel>Quick actions</SectionLabel>
       <List dense disablePadding sx={{ py: 0.5 }}>
         {actions.map((a) => (
           <ListItemButton
             key={a.label}
             component={a.external ? "a" : Link}
             href={a.href}
-            sx={{ px: 2, py: 0.6, borderRadius: 0 }}
+            sx={{ px: 2, py: 0.6 }}
           >
             <ListItemIcon sx={{ minWidth: 30, color: "text.secondary" }}>{a.icon}</ListItemIcon>
             <ListItemText
+              slotProps={{ primary: { sx: { fontSize: "0.8125rem" }, color: "text.primary" } }}
               primary={a.label}
-              primaryTypographyProps={{ fontSize: "0.8125rem", color: "text.primary" }}
             />
           </ListItemButton>
         ))}
       </List>
-    </Card>
+    </>
   );
 };
+
+const SectionLabel = ({ children }: { children: ReactNode }) => (
+  <Typography
+    sx={{
+      px: 2,
+      pt: 1.5,
+      pb: 0.75,
+      fontSize: "0.625rem",
+      fontWeight: 700,
+      textTransform: "uppercase",
+      letterSpacing: "0.1em",
+      color: "text.secondary",
+      borderBottom: "1px solid",
+      borderColor: "divider",
+    }}
+  >
+    {children}
+  </Typography>
+);
 
 // ── Page ──────────────────────────────────────────────────────────────
 
@@ -370,10 +541,11 @@ export const Overview = () => {
   const { lastSync } = useSync();
 
   const [stats, setStats] = useState<Stats | null>(null);
-  const [health, setHealth] = useState<{ ok: boolean; zabbix: boolean } | null>(null);
+  const [health, setHealth] = useState<Health>(null);
   const [problems, setProblems] = useState<Problem[]>([]);
   const [alertEvents, setAlertEvents] = useState<AlertEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) {
@@ -422,36 +594,89 @@ export const Overview = () => {
   }, [tick]);
 
   const offlineCount = stats ? stats.totalHosts - stats.onlineHosts : 0;
-
   const roles = user?.roles ?? [];
   const isAdmin = roles.includes("root") || roles.includes("team_lead");
 
+  const sorted = [...problems].sort((a, b) => b.severity - a.severity || b.clock - a.clock);
+  const selected = sorted.find((p) => p.eventid === selectedId) ?? null;
+
   return (
     <Box>
-      <SummaryStrip
+      <SeverityBand problems={problems} loading={loading} />
+      <EstateTicker
         stats={stats}
         offlineCount={offlineCount}
-        problems={problems}
         alertEvents={alertEvents}
+        health={health}
         loading={loading}
       />
 
-      <Grid container spacing={2}>
-        <Grid item xs={12} md={5}>
-          <ActiveProblemsPanel loading={loading} problems={problems} />
-        </Grid>
+      {/* Operations workspace: problem feed (master) · inspector (detail) */}
+      <Paper
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", md: "minmax(0, 1fr) 340px" },
+          alignItems: "stretch",
+          overflow: "hidden",
+        }}
+      >
+        <Box
+          sx={{
+            borderRight: { md: "1px solid" },
+            borderColor: { md: "divider" },
+            display: "flex",
+            flexDirection: "column",
+            minHeight: 420,
+          }}
+        >
+          <SectionLabel>
+            Problem feed{!loading && problems.length > 0 ? ` — ${problems.length}` : ""}
+          </SectionLabel>
+          {loading ? (
+            <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1 }}>
+              {Array.from({ length: 5 }).map((_, n) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length skeletons
+                <Skeleton key={n} variant="rectangular" height={44} />
+              ))}
+            </Box>
+          ) : sorted.length === 0 ? (
+            <Box sx={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <EmptyState
+                icon={<CheckCircleOutlineIcon sx={{ fontSize: 22 }} />}
+                title="No active problems"
+                description="All monitored hosts are healthy"
+              />
+            </Box>
+          ) : (
+            <Box sx={{ flex: 1, overflowY: "auto", maxHeight: 520 }}>
+              {sorted.map((p) => (
+                <FeedRow
+                  key={p.eventid}
+                  problem={p}
+                  selected={p.eventid === selectedId}
+                  onSelect={() => setSelectedId((cur) => (cur === p.eventid ? null : p.eventid))}
+                />
+              ))}
+            </Box>
+          )}
+        </Box>
 
-        <Grid item xs={12} md={4}>
-          <RecentAlertsPanel loading={loading} alertEvents={alertEvents} />
-        </Grid>
-
-        <Grid item xs={12} md={3}>
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, height: "100%" }}>
-            <SystemStatusPanel loading={loading} health={health} />
-            <QuickActionsPanel isAdmin={isAdmin} />
-          </Box>
-        </Grid>
-      </Grid>
+        <Box sx={{ minWidth: 0 }}>
+          {selected ? (
+            <>
+              <SectionLabel>Inspector</SectionLabel>
+              <ProblemInspector problem={selected} />
+            </>
+          ) : (
+            <InspectorHome
+              health={health}
+              alertEvents={alertEvents}
+              isAdmin={isAdmin}
+              loading={loading}
+            />
+          )}
+        </Box>
+      </Paper>
     </Box>
   );
 };

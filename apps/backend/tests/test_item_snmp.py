@@ -12,6 +12,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from api.schemas.items import SnmpItemRequest
+
 
 @pytest.fixture()
 def mgr():
@@ -39,7 +41,13 @@ def test_add_snmp_item_success_v2c(mgr):
     _host_ok(mgr)
     mgr.zapi.hostinterface.get.return_value = _iface("2")
     mgr.zapi.item.create.return_value = {"itemids": ["20"]}
-    item_id, err = mgr.add_snmp_item("h1", "CPU via SNMP", "snmp.cpu", ".1.3.6.1.4.1.2021.11.11.0")
+    req = SnmpItemRequest(
+        hostname="h1",
+        item_name="CPU via SNMP",
+        item_key="snmp.cpu",
+        snmp_oid=".1.3.6.1.4.1.2021.11.11.0",
+    )
+    item_id, err = mgr.add_snmp_item(req)
     assert item_id == "20"
     assert err is None
     call_kwargs = mgr.zapi.item.create.call_args[1]
@@ -52,11 +60,11 @@ def test_add_snmp_item_success_v3(mgr):
     _host_ok(mgr)
     mgr.zapi.hostinterface.get.return_value = _iface("2")
     mgr.zapi.item.create.return_value = {"itemids": ["21"]}
-    item_id, err = mgr.add_snmp_item(
-        "h1",
-        "CPU v3",
-        "snmp.cpu.v3",
-        ".1.3.6.1.4.1.2021.11.11.0",
+    req = SnmpItemRequest(
+        hostname="h1",
+        item_name="CPU v3",
+        item_key="snmp.cpu.v3",
+        snmp_oid=".1.3.6.1.4.1.2021.11.11.0",
         snmp_version=3,
         snmpv3_securityname="admin",
         snmpv3_securitylevel=2,
@@ -66,6 +74,7 @@ def test_add_snmp_item_success_v3(mgr):
         snmpv3_privpassphrase="privpass",
         snmpv3_contextname="ctx",
     )
+    item_id, err = mgr.add_snmp_item(req)
     assert item_id == "21"
     assert err is None
     call_kwargs = mgr.zapi.item.create.call_args[1]
@@ -79,16 +88,17 @@ def test_add_snmp_item_v3_auth_only(mgr):
     _host_ok(mgr)
     mgr.zapi.hostinterface.get.return_value = _iface("2")
     mgr.zapi.item.create.return_value = {"itemids": ["22"]}
-    item_id, err = mgr.add_snmp_item(
-        "h1",
-        "CPU auth",
-        "snmp.cpu.auth",
-        ".1.3.6",
+    req = SnmpItemRequest(
+        hostname="h1",
+        item_name="CPU auth",
+        item_key="snmp.cpu.auth",
+        snmp_oid=".1.3.6",
         snmp_version=3,
         snmpv3_securitylevel=1,
         snmpv3_authprotocol=0,
         snmpv3_authpassphrase="authonly",
     )
+    item_id, err = mgr.add_snmp_item(req)
     assert item_id == "22"
     call_kwargs = mgr.zapi.item.create.call_args[1]
     assert call_kwargs["snmpv3_authpassphrase"] == "authonly"
@@ -100,7 +110,10 @@ def test_add_snmp_item_auto_names(mgr):
     mgr.zapi.hostinterface.get.return_value = _iface("2")
     mgr.zapi.item.create.return_value = {"itemids": ["23"]}
     # Pass empty name and key — should be auto-generated
-    item_id, err = mgr.add_snmp_item("h1", "", "", ".1.3.6.1.4.1.2021.11.11.0")
+    req = SnmpItemRequest(
+        hostname="h1", item_name="", item_key="", snmp_oid=".1.3.6.1.4.1.2021.11.11.0"
+    )
+    item_id, err = mgr.add_snmp_item(req)
     assert item_id == "23"
     call_kwargs = mgr.zapi.item.create.call_args[1]
     assert "SNMP:" in call_kwargs["name"]
@@ -111,15 +124,15 @@ def test_add_snmp_item_with_units_description_team(mgr):
     _host_ok(mgr)
     mgr.zapi.hostinterface.get.return_value = _iface("2")
     mgr.zapi.item.create.return_value = {"itemids": ["24"]}
-    item_id, err = mgr.add_snmp_item(
-        "h1",
-        "CPU",
-        "snmp.cpu",
-        ".1.3.6",
+    req = SnmpItemRequest(
+        hostname="h1",
+        item_name="CPU",
+        item_key="snmp.cpu",
+        snmp_oid=".1.3.6",
         units="%",
         description="CPU load",
-        team_name="ops",
     )
+    item_id, err = mgr.add_snmp_item(req, team_name="ops")
     assert item_id == "24"
     call_kwargs = mgr.zapi.item.create.call_args[1]
     assert call_kwargs["units"] == "%"
@@ -128,21 +141,24 @@ def test_add_snmp_item_with_units_description_team(mgr):
 
 
 def test_add_snmp_item_no_oid_returns_error(mgr):
-    item_id, err = mgr.add_snmp_item("h1", "CPU", "snmp.cpu", "")
+    req = SnmpItemRequest(hostname="h1", item_name="CPU", item_key="snmp.cpu", snmp_oid="")
+    item_id, err = mgr.add_snmp_item(req)
     assert item_id is None
     assert "OID" in err
 
 
 def test_add_snmp_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_snmp_item("h1", "CPU", "key", ".1.3.6")
+    req = SnmpItemRequest(hostname="h1", item_name="CPU", item_key="key", snmp_oid=".1.3.6")
+    item_id, err = mgr.add_snmp_item(req)
     assert item_id is None
     assert err is not None
 
 
 def test_add_snmp_item_host_not_found(mgr):
     mgr.zapi.host.get.return_value = []
-    item_id, err = mgr.add_snmp_item("ghost", "CPU", "key", ".1.3.6")
+    req = SnmpItemRequest(hostname="ghost", item_name="CPU", item_key="key", snmp_oid=".1.3.6")
+    item_id, err = mgr.add_snmp_item(req)
     assert item_id is None
     assert "not found" in err
 
@@ -150,7 +166,8 @@ def test_add_snmp_item_host_not_found(mgr):
 def test_add_snmp_item_no_interface(mgr):
     _host_ok(mgr)
     mgr.zapi.hostinterface.get.return_value = []
-    item_id, err = mgr.add_snmp_item("h1", "CPU", "key", ".1.3.6")
+    req = SnmpItemRequest(hostname="h1", item_name="CPU", item_key="key", snmp_oid=".1.3.6")
+    item_id, err = mgr.add_snmp_item(req)
     assert item_id is None
     assert "interface" in err.lower()
 
@@ -160,7 +177,8 @@ def test_add_snmp_item_fallback_to_first_interface(mgr):
     # No type-2 interface, should use first available
     mgr.zapi.hostinterface.get.return_value = [{"interfaceid": "9", "type": "1"}]
     mgr.zapi.item.create.return_value = {"itemids": ["25"]}
-    item_id, err = mgr.add_snmp_item("h1", "CPU", "snmp.cpu", ".1.3.6")
+    req = SnmpItemRequest(hostname="h1", item_name="CPU", item_key="snmp.cpu", snmp_oid=".1.3.6")
+    item_id, err = mgr.add_snmp_item(req)
     assert item_id == "25"
 
 
@@ -168,7 +186,8 @@ def test_add_snmp_item_api_exception(mgr):
     _host_ok(mgr)
     mgr.zapi.hostinterface.get.return_value = _iface("2")
     mgr.zapi.item.create.side_effect = Exception("zabbix error")
-    item_id, err = mgr.add_snmp_item("h1", "CPU", "snmp.cpu", ".1.3.6")
+    req = SnmpItemRequest(hostname="h1", item_name="CPU", item_key="snmp.cpu", snmp_oid=".1.3.6")
+    item_id, err = mgr.add_snmp_item(req)
     assert item_id is None
     assert err is not None
 

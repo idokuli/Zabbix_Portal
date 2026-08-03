@@ -75,3 +75,7 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "f
 
 [lint.per-file-ignores]
 "tests/*" = ["S101", "S105", "S106", "ARG001", "ARG002", "PLR2004", "TRY002"]
+# Operator-facing CLI maintenance scripts: stdout IS their interface (they are run by
+# hand and read in a terminal, never imported by the app), so T20's "no print" rule
+# does not apply. Everything else stays enforced.
+"scripts/*" = ["T201"]

@@ -23,7 +23,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useEffect, useState } from "react";
-import { type DashboardGraph, type Host, type Team, api } from "../../app/api";
+import { api, type DashboardGraph, type Host, type Team } from "../../app/api";
 import { SearchableSelect } from "../../components/SearchableSelect";
 
 export const AddGraphDialog = ({
@@ -85,7 +85,7 @@ export const AddGraphDialog = ({
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <Typography fontWeight={700}>Add Graph</Typography>
+        <Typography sx={{ fontWeight: 700 }}>Add Graph</Typography>
         <IconButton size="small" onClick={onClose}>
           <CloseIcon fontSize="small" />
         </IconButton>
@@ -151,18 +151,20 @@ export const AddGraphDialog = ({
                 Step 2 — Select a graph
               </Typography>
               <TextField
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <ShowChartOutlinedIcon sx={{ fontSize: 16, color: "text.disabled" }} />
+                      </InputAdornment>
+                    ),
+                  },
+                }}
                 size="small"
                 fullWidth
                 placeholder="Search graphs…"
                 value={graphSearch}
                 onChange={(e) => setGraphSearch(e.target.value)}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <ShowChartOutlinedIcon sx={{ fontSize: 16, color: "text.disabled" }} />
-                    </InputAdornment>
-                  ),
-                }}
               />
             </Box>
             <Divider />
@@ -186,8 +188,8 @@ export const AddGraphDialog = ({
                   return (
                     <ListItem key={g.graphid} sx={{ opacity: added ? 0.45 : 1 }}>
                       <ListItemText
+                        slotProps={{ primary: { sx: { fontSize: "0.82rem", fontWeight: 500 } } }}
                         primary={g.name}
-                        primaryTypographyProps={{ fontSize: "0.82rem", fontWeight: 500 }}
                       />
                       <ListItemSecondaryAction>
                         <Button

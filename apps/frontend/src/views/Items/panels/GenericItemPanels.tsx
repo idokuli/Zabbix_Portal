@@ -1228,6 +1228,7 @@ export const ZabbixScriptItemPanel = ({
         placeholder="e.g. custom.js.check"
       />
       <TextField
+        slotProps={{ htmlInput: { style: { fontFamily: "monospace", fontSize: "0.82rem" } } }}
         size="small"
         label="JavaScript *"
         value={script}
@@ -1235,7 +1236,6 @@ export const ZabbixScriptItemPanel = ({
         multiline
         minRows={5}
         placeholder={"var r = new HttpRequest();\nreturn r.get('http://example.com/health');"}
-        inputProps={{ style: { fontFamily: "monospace", fontSize: "0.82rem" } }}
       />
       <Box>
         <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
@@ -1243,7 +1243,7 @@ export const ZabbixScriptItemPanel = ({
         </Typography>
         <Stack spacing={1}>
           {params.map((p, i) => (
-            <Stack key={p._key} direction="row" spacing={1} alignItems="center">
+            <Stack sx={{ alignItems: "center" }} key={p._key} direction="row" spacing={1}>
               <TextField
                 size="small"
                 placeholder="name"
@@ -1405,6 +1405,7 @@ export const BrowserItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: 
         placeholder="e.g. browser.login.check"
       />
       <TextField
+        slotProps={{ htmlInput: { style: { fontFamily: "monospace", fontSize: "0.82rem" } } }}
         size="small"
         label="Browser script *"
         value={script}
@@ -1414,7 +1415,6 @@ export const BrowserItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: 
         placeholder={
           "var page = new WebPage();\npage.navigate('https://example.com');\nreturn page.title;"
         }
-        inputProps={{ style: { fontFamily: "monospace", fontSize: "0.82rem" } }}
       />
       <Box>
         <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
@@ -1422,7 +1422,7 @@ export const BrowserItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: 
         </Typography>
         <Stack spacing={1}>
           {params.map((p, i) => (
-            <Stack key={p._key} direction="row" spacing={1} alignItems="center">
+            <Stack sx={{ alignItems: "center" }} key={p._key} direction="row" spacing={1}>
               <TextField
                 size="small"
                 placeholder="name"

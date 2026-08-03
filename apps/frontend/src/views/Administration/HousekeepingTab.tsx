@@ -41,7 +41,9 @@ const HK_FIELDS: Array<{ key: string; label: string; unit?: string }> = [
 
 export const HousekeepingTab = ({
   showToast,
-}: { showToast: (m: string, s: "success" | "error") => void }) => {
+}: {
+  showToast: (m: string, s: "success" | "error") => void;
+}) => {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -104,27 +106,24 @@ export const HousekeepingTab = ({
       <TabHeader
         title="Housekeeping"
         description="Configure data retention periods and automatic cleanup settings."
+        actions={
+          <>
+            <Tooltip title="Refresh">
+              <IconButton size="small" onClick={() => void load()} disabled={loading}>
+                <RefreshIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+            <Button
+              size="small"
+              variant="contained"
+              onClick={onSave}
+              disabled={saving || Object.keys(edited).length === 0}
+            >
+              {saving ? <CircularProgress size={14} /> : "Save changes"}
+            </Button>
+          </>
+        }
       />
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-          Housekeeping
-        </Typography>
-        <Stack direction="row" spacing={1}>
-          <Tooltip title="Refresh">
-            <IconButton size="small" onClick={() => void load()} disabled={loading}>
-              <RefreshIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
-          <Button
-            size="small"
-            variant="contained"
-            onClick={onSave}
-            disabled={saving || Object.keys(edited).length === 0}
-          >
-            {saving ? <CircularProgress size={14} /> : "Save changes"}
-          </Button>
-        </Stack>
-      </Box>
       {Object.keys(settings).length === 0 && !loading && (
         <Alert severity="warning">
           Could not load Zabbix settings. Check that the backend Zabbix user has admin rights.
@@ -163,18 +162,20 @@ export const HousekeepingTab = ({
                   />
                 ) : (
                   <TextField
+                    slotProps={{
+                      input: {
+                        endAdornment: f.unit ? (
+                          <Typography variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                            {f.unit}
+                          </Typography>
+                        ) : undefined,
+                      },
+                      htmlInput: { style: { textAlign: "right" } },
+                    }}
                     size="small"
                     value={val}
                     onChange={(e) => setEdited((prev) => ({ ...prev, [f.key]: e.target.value }))}
                     sx={{ width: 120 }}
-                    inputProps={{ style: { textAlign: "right" } }}
-                    InputProps={{
-                      endAdornment: f.unit ? (
-                        <Typography variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
-                          {f.unit}
-                        </Typography>
-                      ) : undefined,
-                    }}
                   />
                 )}
               </Box>

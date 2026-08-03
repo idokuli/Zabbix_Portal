@@ -22,6 +22,8 @@ MEDIATYPE_TYPES = {
 SCRIPT_EXECUTE_ON = {0: "Agent", 1: "Server", 2: "Proxy or server"}
 SCRIPT_SCOPE = {1: "Action operation", 2: "Manual host", 4: "Manual event"}
 
+_ZABBIX_NOT_CONNECTED = "Zabbix not connected"
+
 
 class Actions_Manager(Zabbix_Base):
     def __init__(self):
@@ -73,7 +75,7 @@ class Actions_Manager(Zabbix_Base):
 
     def create_action(self, name: str, eventsource: int, esc_period: str = "1h") -> str:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(_ZABBIX_NOT_CONNECTED)
         try:
             result = self.zapi.action.create(
                 name=name,
@@ -89,7 +91,7 @@ class Actions_Manager(Zabbix_Base):
 
     def delete_action(self, actionid: str) -> bool:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(_ZABBIX_NOT_CONNECTED)
         try:
             self.zapi.action.delete([actionid])
             return True
@@ -98,7 +100,7 @@ class Actions_Manager(Zabbix_Base):
 
     def toggle_action(self, actionid: str, status: int) -> bool:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(_ZABBIX_NOT_CONNECTED)
         try:
             self.zapi.action.update(actionid=actionid, status=status)
             return True
@@ -144,7 +146,7 @@ class Actions_Manager(Zabbix_Base):
         webhook_script: str = "",
     ) -> str:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(_ZABBIX_NOT_CONNECTED)
         try:
             params: dict = {
                 "name": name,
@@ -181,7 +183,7 @@ class Actions_Manager(Zabbix_Base):
         webhook_script: str = "",
     ) -> bool:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(_ZABBIX_NOT_CONNECTED)
         try:
             params: dict = {
                 "mediatypeid": mediatypeid,
@@ -207,7 +209,7 @@ class Actions_Manager(Zabbix_Base):
 
     def delete_media_type(self, mediatypeid: str) -> bool:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(_ZABBIX_NOT_CONNECTED)
         try:
             self.zapi.mediatype.delete([mediatypeid])
             return True
@@ -216,7 +218,7 @@ class Actions_Manager(Zabbix_Base):
 
     def toggle_media_type(self, mediatypeid: str, status: int) -> bool:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(_ZABBIX_NOT_CONNECTED)
         try:
             self.zapi.mediatype.update(mediatypeid=mediatypeid, status=status)
             return True
@@ -270,7 +272,7 @@ class Actions_Manager(Zabbix_Base):
         description: str = "",
     ) -> str:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(_ZABBIX_NOT_CONNECTED)
         try:
             result = self.zapi.script.create(
                 name=name,
@@ -285,7 +287,7 @@ class Actions_Manager(Zabbix_Base):
 
     def delete_script(self, scriptid: str) -> bool:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(_ZABBIX_NOT_CONNECTED)
         try:
             self.zapi.script.delete([scriptid])
             return True

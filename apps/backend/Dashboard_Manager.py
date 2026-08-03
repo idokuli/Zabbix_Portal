@@ -223,31 +223,58 @@ class Dashboard_Manager(Zabbix_Base):
 
     # ── All-hosts metrics overview ────────────────────────────────────
 
+    def _batch_lastvalue_by_host(self, key: str) -> dict[str, str]:
+        """Return {hostid: lastvalue} for all items matching key."""
+        items = self.zapi.item.get(
+            search={"key_": key},
+            searchWildcardsEnabled=True,
+            output=["lastvalue"],
+            selectHosts=["hostid"],
+            filter={"state": "0"},
+        )
+        result: dict[str, str] = {}
+        for item in items:
+            for host in item.get("hosts", []):
+                result[host["hostid"]] = item.get("lastvalue", "")
+        return result
+
+    @staticmethod
+    def _build_host_metrics_entry(
+        host: dict, cpu_map: dict, mem_map: dict, mem_avail_map: dict, disk_map: dict
+    ) -> dict:
+        hid = host["hostid"]
+        entry: dict = {"hostid": hid, "hostname": host["host"]}
+
+        if cpu_map.get(hid):
+            v = _safe_float(cpu_map[hid])
+            if v is not None:
+                entry["cpu_util"] = round(v, 1)
+
+        if mem_map.get(hid):
+            v = _safe_float(mem_map[hid])
+            if v is not None:
+                entry["mem_util"] = round(v, 1)
+        elif mem_avail_map.get(hid):
+            v = _safe_float(mem_avail_map[hid])
+            if v is not None:
+                entry["mem_util"] = round(100 - v, 1)
+
+        if disk_map.get(hid):
+            v = _safe_float(disk_map[hid])
+            if v is not None:
+                entry["disk_util"] = round(v, 1)
+
+        return entry
+
     def get_hosts_metrics(self) -> list[dict]:
         """Return last CPU / memory / disk values for every enabled host."""
         if not self.zapi:
             return []
         try:
-
-            def _batch(key: str) -> dict[str, str]:
-                """Return {hostid: lastvalue} for all items matching key."""
-                items = self.zapi.item.get(
-                    search={"key_": key},
-                    searchWildcardsEnabled=True,
-                    output=["lastvalue"],
-                    selectHosts=["hostid"],
-                    filter={"state": "0"},
-                )
-                result: dict[str, str] = {}
-                for item in items:
-                    for host in item.get("hosts", []):
-                        result[host["hostid"]] = item.get("lastvalue", "")
-                return result
-
-            cpu_map = _batch("system.cpu.util")
-            mem_map = _batch("vm.memory.utilization")
-            mem_avail_map = _batch("vm.memory.size[pavailable]")
-            disk_map = _batch("vfs.fs.size[/,pused]")
+            cpu_map = self._batch_lastvalue_by_host("system.cpu.util")
+            mem_map = self._batch_lastvalue_by_host("vm.memory.utilization")
+            mem_avail_map = self._batch_lastvalue_by_host("vm.memory.size[pavailable]")
+            disk_map = self._batch_lastvalue_by_host("vfs.fs.size[/,pused]")
 
             hosts = self.zapi.host.get(
                 output=["hostid", "host", "status"],
@@ -255,32 +282,10 @@ class Dashboard_Manager(Zabbix_Base):
                 limit=200,
             )
 
-            result = []
-            for host in hosts:
-                hid = host["hostid"]
-                entry: dict = {"hostid": hid, "hostname": host["host"]}
-
-                if cpu_map.get(hid):
-                    v = _safe_float(cpu_map[hid])
-                    if v is not None:
-                        entry["cpu_util"] = round(v, 1)
-
-                if mem_map.get(hid):
-                    v = _safe_float(mem_map[hid])
-                    if v is not None:
-                        entry["mem_util"] = round(v, 1)
-                elif mem_avail_map.get(hid):
-                    v = _safe_float(mem_avail_map[hid])
-                    if v is not None:
-                        entry["mem_util"] = round(100 - v, 1)
-
-                if disk_map.get(hid):
-                    v = _safe_float(disk_map[hid])
-                    if v is not None:
-                        entry["disk_util"] = round(v, 1)
-
-                result.append(entry)
-            return result
+            return [
+                self._build_host_metrics_entry(host, cpu_map, mem_map, mem_avail_map, disk_map)
+                for host in hosts
+            ]
         except Exception:
             logger.exception("get_hosts_metrics failed")
             return []

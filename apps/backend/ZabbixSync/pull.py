@@ -61,6 +61,39 @@ class SyncPullMixin:
 
         logger.info("ZabbixSync.bootstrap_teams: bootstrapped %d team(s).", len(teams))
 
+    def _resolve_role_and_team(
+        self, zu: dict, roleid_to_type: dict, portal_teams: dict[str, int]
+    ) -> tuple[list[str], int | None]:
+        """Resolve (roles, team_id) for a Zabbix user from their usrgrps.
+
+        Creates a portal team for any new Zabbix group encountered.
+        Mutates portal_teams in place when a new team is created.
+        """
+        import User_Management as um
+
+        if self._zabbix_major >= 6:
+            user_type = roleid_to_type.get(str(zu.get("roleid", "1")), 1)
+        else:
+            user_type = int(zu.get("type", 1))
+        roles = list(TYPE_TO_ROLES.get(user_type, ["member"]))
+        team_id = None
+
+        for grp in zu.get("usrgrps", []):
+            grp_name = grp.get("name", "").strip()
+            if not grp_name or grp_name in SKIP_GROUPS:
+                continue
+            if grp_name in GROUP_ROLE_MAP:
+                roles = [GROUP_ROLE_MAP[grp_name]]
+            else:
+                if grp_name not in portal_teams:
+                    team = um.create_team(grp_name)
+                    if team:
+                        portal_teams[grp_name] = team["id"]
+                team_id = portal_teams.get(grp_name)
+            break
+
+        return roles, team_id
+
     def pull_users(self) -> None:
         """Import Zabbix users and groups into the portal (runs on startup).
 
@@ -94,26 +127,7 @@ class SyncPullMixin:
             if username.lower() in existing_usernames:
                 continue
 
-            if self._zabbix_major >= 6:
-                user_type = roleid_to_type.get(str(zu.get("roleid", "1")), 1)
-            else:
-                user_type = int(zu.get("type", 1))
-            roles = list(TYPE_TO_ROLES.get(user_type, ["member"]))
-            team_id = None
-
-            for grp in zu.get("usrgrps", []):
-                grp_name = grp.get("name", "").strip()
-                if not grp_name or grp_name in SKIP_GROUPS:
-                    continue
-                if grp_name in GROUP_ROLE_MAP:
-                    roles = [GROUP_ROLE_MAP[grp_name]]
-                else:
-                    if grp_name not in portal_teams:
-                        team = um.create_team(grp_name)
-                        if team:
-                            portal_teams[grp_name] = team["id"]
-                    team_id = portal_teams.get(grp_name)
-                break
+            roles, team_id = self._resolve_role_and_team(zu, roleid_to_type, portal_teams)
 
             temp_password = secrets.token_urlsafe(16)
             um.create_user(
@@ -130,11 +144,44 @@ class SyncPullMixin:
                 team_id,
             )
 
+    @staticmethod
+    def _update_existing_zabbix_user(
+        existing: dict, roles: list[str], team_id: int | None, username: str
+    ) -> None:
+        import User_Management as um
+
+        current_roles = set(existing.get("roles") or [])
+        if current_roles != set(roles) or existing.get("team_id") != team_id:
+            um.update_user_profile(existing["id"], roles, team_id)
+            logger.info(
+                "ZabbixSync: updated %r → roles=%s, team_id=%s.",
+                username,
+                roles,
+                team_id,
+            )
+
+    @staticmethod
+    def _import_new_zabbix_user(username: str, roles: list[str], team_id: int | None) -> None:
+        import User_Management as um
+        from Auth import hash_password
+
+        temp_password = secrets.token_urlsafe(16)
+        um.create_user(
+            username=username,
+            password_hash=hash_password(temp_password),
+            roles=roles,
+            team_id=team_id,
+            source="zabbix",
+        )
+        logger.info(
+            "ZabbixSync: auto-imported new Zabbix user %r → portal.",
+            username,
+        )
+
     def _sync_users_import(self, zabbix_users: list[dict]) -> None:
         """Import new Zabbix users not yet in the portal, and update role/team on
         existing Zabbix-sourced users when Zabbix's own group membership changed."""
         import User_Management as um
-        from Auth import hash_password
 
         roleid_to_type = {v: k for k, v in self._roleids.items()}
         try:
@@ -145,55 +192,17 @@ class SyncPullMixin:
                 if not username or username.lower() == "guest":
                     continue
 
-                # Resolve role and team from Zabbix
-                if self._zabbix_major >= 6:
-                    user_type = roleid_to_type.get(str(zu.get("roleid", "1")), 1)
-                else:
-                    user_type = int(zu.get("type", 1))
-                roles = list(TYPE_TO_ROLES.get(user_type, ["member"]))
-                team_id = None
-                for grp in zu.get("usrgrps", []):
-                    grp_name = grp.get("name", "").strip()
-                    if not grp_name or grp_name in SKIP_GROUPS:
-                        continue
-                    if grp_name in GROUP_ROLE_MAP:
-                        roles = [GROUP_ROLE_MAP[grp_name]]
-                    else:
-                        if grp_name not in portal_teams:
-                            team = um.create_team(grp_name)
-                            if team:
-                                portal_teams[grp_name] = team["id"]
-                        team_id = portal_teams.get(grp_name)
-                    break
-
+                roles, team_id = self._resolve_role_and_team(zu, roleid_to_type, portal_teams)
                 existing = portal_users.get(username.lower())
-                if existing:
-                    # Only let Zabbix drive roles/team for users that originated from Zabbix.
-                    # Local and LDAP users are managed by the portal — don't overwrite them.
-                    if existing.get("source") != "zabbix":
-                        continue
-                    current_roles = set(existing.get("roles") or [])
-                    if current_roles != set(roles) or existing.get("team_id") != team_id:
-                        um.update_user_profile(existing["id"], roles, team_id)
-                        logger.info(
-                            "ZabbixSync: updated %r → roles=%s, team_id=%s.",
-                            username,
-                            roles,
-                            team_id,
-                        )
+
+                # Only let Zabbix drive roles/team for users that originated from Zabbix.
+                # Local and LDAP users are managed by the portal — don't overwrite them.
+                if existing is not None and existing.get("source") != "zabbix":
+                    continue
+                if existing is not None:
+                    self._update_existing_zabbix_user(existing, roles, team_id, username)
                 else:
-                    temp_password = secrets.token_urlsafe(16)
-                    um.create_user(
-                        username=username,
-                        password_hash=hash_password(temp_password),
-                        roles=roles,
-                        team_id=team_id,
-                        source="zabbix",
-                    )
-                    logger.info(
-                        "ZabbixSync: auto-imported new Zabbix user %r → portal.",
-                        username,
-                    )
+                    self._import_new_zabbix_user(username, roles, team_id)
         except Exception:
             logger.exception("ZabbixSync.full_sync: user import failed")
 
@@ -255,6 +264,56 @@ class SyncPullMixin:
         except Exception:
             logger.exception("ZabbixSync.full_sync: group sync failed")
 
+    @staticmethod
+    def _collect_zabbix_host_assignments(
+        zabbix_hosts: list[dict], host_hg_key: str, portal_team_map: dict[str, int]
+    ) -> set[tuple[str, str]]:
+        """Build the set of (hostname, team_name) pairs that Zabbix currently has.
+
+        A host counts as "assigned" to a team via either:
+          a) Zabbix host group membership (group name matches a portal team)
+          b) A "team" tag set by create_host / tag_host
+        """
+        import User_Management as um
+
+        zabbix_assignments: set[tuple[str, str]] = set()
+        for zh in zabbix_hosts:
+            hostname = zh.get("host", "").strip()
+            if not hostname:
+                continue
+            # (a) host group membership
+            for hg in zh.get(host_hg_key, []):
+                grp_name = hg.get("name", "").strip()
+                if grp_name in portal_team_map:
+                    zabbix_assignments.add((hostname, grp_name))
+                    um.assign_host(portal_team_map[grp_name], hostname)
+            # (b) "team" tag — created when a team user adds a host via the portal
+            for tag in zh.get("tags", []):
+                if tag.get("tag") == "team":
+                    tag_team = tag.get("value", "").strip()
+                    if tag_team in portal_team_map:
+                        zabbix_assignments.add((hostname, tag_team))
+        return zabbix_assignments
+
+    @staticmethod
+    def _remove_stale_host_assignments(
+        portal_team_map: dict[str, int], zabbix_assignments: set[tuple[str, str]]
+    ) -> None:
+        import User_Management as um
+
+        for team in um.get_overview():
+            team_name = team["name"]
+            if team_name not in portal_team_map:
+                continue
+            for hostname in team.get("hosts", []):
+                if (hostname, team_name) not in zabbix_assignments:
+                    um.unassign_host(team["id"], hostname)
+                    logger.info(
+                        "ZabbixSync: removed portal assignment %r → %r — no longer in Zabbix.",
+                        hostname,
+                        team_name,
+                    )
+
     def _sync_host_assignments(self) -> None:
         """Sync Zabbix host group membership (and "team" tags) → portal host
         assignments, and remove portal assignments no longer present in Zabbix."""
@@ -270,41 +329,10 @@ class SyncPullMixin:
                 **{self._select_hg_param: ["groupid", "name"]},
             )
 
-            # Build the set of (hostname, team_name) pairs that Zabbix currently has.
-            # A host counts as "assigned" to a team via either:
-            #   a) Zabbix host group membership (group name matches a portal team)
-            #   b) A "team" tag set by create_host / tag_host
-            zabbix_assignments: set[tuple[str, str]] = set()
-            for zh in zabbix_hosts:
-                hostname = zh.get("host", "").strip()
-                if not hostname:
-                    continue
-                # (a) host group membership
-                for hg in zh.get(self._host_hg_key, []):
-                    grp_name = hg.get("name", "").strip()
-                    if grp_name in portal_team_map:
-                        zabbix_assignments.add((hostname, grp_name))
-                        um.assign_host(portal_team_map[grp_name], hostname)
-                # (b) "team" tag — created when a team user adds a host via the portal
-                for tag in zh.get("tags", []):
-                    if tag.get("tag") == "team":
-                        tag_team = tag.get("value", "").strip()
-                        if tag_team in portal_team_map:
-                            zabbix_assignments.add((hostname, tag_team))
-
-            # Remove portal assignments that no longer exist in Zabbix
-            for team in um.get_overview():
-                team_name = team["name"]
-                if team_name not in portal_team_map:
-                    continue
-                for hostname in team.get("hosts", []):
-                    if (hostname, team_name) not in zabbix_assignments:
-                        um.unassign_host(team["id"], hostname)
-                        logger.info(
-                            "ZabbixSync: removed portal assignment %r → %r — no longer in Zabbix.",
-                            hostname,
-                            team_name,
-                        )
+            zabbix_assignments = self._collect_zabbix_host_assignments(
+                zabbix_hosts, self._host_hg_key, portal_team_map
+            )
+            self._remove_stale_host_assignments(portal_team_map, zabbix_assignments)
         except Exception:
             logger.exception("ZabbixSync.full_sync: host assignment sync failed")
 

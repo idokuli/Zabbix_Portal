@@ -30,9 +30,10 @@ import {
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { type Host, api } from "../../app/api";
+import { api, type Host } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
+import { formatDateTime, formatTime } from "../../app/datetime";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { parseDelaySecs } from "../Items/shared";
 
@@ -205,12 +206,7 @@ const LatestItemRow = ({ item }: { item: LatestItem }) => {
       </TableCell>
       <LastValueCell item={item} hasValue={hasValue} isStale={isStale} />
       <TableCell sx={{ whiteSpace: "nowrap" }}>
-        <Tooltip
-          title={
-            item.lastclock ? new Date(item.lastclock * 1000).toLocaleString() : "Never collected"
-          }
-          placement="top"
-        >
+        <Tooltip title={formatDateTime(item.lastclock, "Never collected")} placement="top">
           <Typography
             variant="body2"
             sx={{ fontSize: "0.75rem", color: isStale ? "warning.main" : "text.secondary" }}
@@ -262,7 +258,7 @@ const SummaryChips = ({
   filtered: LatestItem[];
   enabledCount: number;
 }) => (
-  <Stack direction="row" spacing={1} flexWrap="wrap">
+  <Stack sx={{ flexWrap: "wrap" }} direction="row" spacing={1}>
     <Chip label={`${items.length} total items`} size="small" variant="outlined" />
     <Chip label={`${enabledCount} enabled`} size="small" color="success" variant="outlined" />
     {items.length - enabledCount > 0 && (
@@ -344,27 +340,29 @@ const LatestDataControls = ({
   onRefresh: () => void;
   lastRefreshed: Date | null;
 }) => (
-  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems="center">
+  <Stack sx={{ alignItems: "center" }} direction={{ xs: "column", sm: "row" }} spacing={1.5}>
     <TextField
+      slotProps={{
+        input: {
+          startAdornment: (
+            <InputAdornment position="start">
+              <ShowChartOutlinedIcon sx={{ fontSize: 16, color: "text.disabled" }} />
+            </InputAdornment>
+          ),
+          endAdornment: search ? (
+            <InputAdornment position="end">
+              <IconButton size="small" onClick={() => setSearch("")}>
+                <CloseIcon sx={{ fontSize: 14 }} />
+              </IconButton>
+            </InputAdornment>
+          ) : undefined,
+        },
+      }}
       size="small"
       placeholder="Search name, key, or value…"
       value={search}
       onChange={(e) => setSearch(e.target.value)}
       sx={{ flex: 1, minWidth: 200 }}
-      InputProps={{
-        startAdornment: (
-          <InputAdornment position="start">
-            <ShowChartOutlinedIcon sx={{ fontSize: 16, color: "text.disabled" }} />
-          </InputAdornment>
-        ),
-        endAdornment: search ? (
-          <InputAdornment position="end">
-            <IconButton size="small" onClick={() => setSearch("")}>
-              <CloseIcon sx={{ fontSize: 14 }} />
-            </IconButton>
-          </InputAdornment>
-        ) : undefined,
-      }}
     />
 
     <FormControl size="small" sx={{ minWidth: 240 }}>
@@ -418,7 +416,7 @@ const LatestDataControls = ({
 
     {lastRefreshed && (
       <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
-        Updated {lastRefreshed.toLocaleTimeString()}
+        Updated {formatTime(lastRefreshed)}
       </Typography>
     )}
   </Stack>

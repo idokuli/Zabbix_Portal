@@ -13,8 +13,8 @@ import {
   Typography,
 } from "@mui/material";
 import { useState } from "react";
-import { api } from "../../../app/api";
 import type { Host } from "../../../app/api";
+import { api } from "../../../app/api";
 import { generateId } from "../../../app/utils";
 import type { BulkResult } from "../shared";
 import { BulkResults, httpMethods } from "../shared";
@@ -51,7 +51,7 @@ const KeyValueListEditor = ({
     </Typography>
     <Stack spacing={1}>
       {items.map((item, i) => (
-        <Stack key={item._key} direction="row" spacing={1} alignItems="center">
+        <Stack sx={{ alignItems: "center" }} key={item._key} direction="row" spacing={1}>
           <TextField
             size="small"
             placeholder={namePlaceholder}
@@ -469,7 +469,7 @@ export const HttpItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
         helperText="Comma-separated, e.g. 200,201,301. The item becomes unsupported if Zabbix gets a different code — alert on that state to catch bad responses."
       />
 
-      <Stack direction="row" spacing={2} flexWrap="wrap">
+      <Stack sx={{ flexWrap: "wrap" }} direction="row" spacing={2}>
         <FormControlLabel
           control={<Switch checked={verifyTLS} onChange={(_, v) => setVerifyTLS(v)} size="small" />}
           label={<Typography variant="body2">Verify TLS certificate</Typography>}
@@ -519,7 +519,7 @@ export const HttpItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
       />
 
       <Divider />
-      <Typography variant="body2" color="text.secondary" fontWeight={500}>
+      <Typography sx={{ fontWeight: 500 }} variant="body2" color="text.secondary">
         SSL / TLS certificate
       </Typography>
       <Stack spacing={2}>

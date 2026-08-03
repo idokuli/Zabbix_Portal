@@ -10,7 +10,6 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   Divider,
   IconButton,
   Skeleton,
@@ -24,30 +23,28 @@ import {
   Tooltip as ChartTooltip,
   Filler,
   Legend,
-  LineElement,
   LinearScale,
+  LineElement,
   PointElement,
   Title,
 } from "chart.js";
 import ZoomPlugin from "chartjs-plugin-zoom";
 import { useCallback, useEffect, useState } from "react";
-import ReactGridLayout, { WidthProvider } from "react-grid-layout";
 import {
   type AlertEvent,
+  api,
   type DashboardGraph,
   type DashboardScope,
   type Problem,
   type WidgetConfig,
-  api,
 } from "../../app/api";
+import { AutoWidthGridLayout } from "../../app/components/AutoWidthGridLayout";
 import { LayoutScopeSelect } from "../../app/components/LayoutScopeSelect";
 import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { DashboardPageManager } from "../../components/DashboardPageManager";
 import { AddGraphDialog } from "./AddGraphDialog";
 import { WidgetCard } from "./WidgetCard";
-
-const GridLayout = WidthProvider(ReactGridLayout);
 
 ChartJS.register(
   CategoryScale,
@@ -128,7 +125,8 @@ export const GraphsTab = () => {
   }, []);
 
   const handleLayoutChange = useCallback(
-    (layout: { i: string; x: number; y: number; w: number; h: number }[]) => {
+    // v2 hands back a readonly Layout; these handlers only read from it.
+    (layout: readonly { i: string; x: number; y: number; w: number; h: number }[]) => {
       setWidgets((prev) => {
         const next = prev.map((w) => {
           const l = layout.find((item) => item.i === w.i);
@@ -227,7 +225,7 @@ export const GraphsTab = () => {
       <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
         {Array.from({ length: 4 }).map((_, i) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: skeleton
-          <Skeleton key={i} variant="rectangular" height={320} sx={{ borderRadius: 1 }} />
+          <Skeleton key={i} variant="rectangular" height={320} sx={{}} />
         ))}
       </Box>
     );
@@ -238,21 +236,12 @@ export const GraphsTab = () => {
       <TabHeader
         title="Graphs"
         description="Zabbix native graphs arranged in a customisable drag-and-drop layout."
+        count={widgets.length}
       />
       {/* Toolbar */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: "0.85rem" }}>
-          Graphs
-        </Typography>
-        {widgets.length > 0 && (
-          <Chip
-            label={widgets.length}
-            size="small"
-            sx={{ height: 18, fontSize: "0.68rem", minWidth: 24 }}
-          />
-        )}
-        <Box sx={{ flex: 1 }} />
-
+      <Box
+        sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 1, mb: 2 }}
+      >
         {/* Add graph */}
         <Tooltip title={isAllScope ? "Read-only across teams" : ""}>
           <span>
@@ -341,7 +330,6 @@ export const GraphsTab = () => {
             gap: 2,
             border: "1px dashed",
             borderColor: "divider",
-            borderRadius: 2,
           }}
         >
           <ShowChartOutlinedIcon sx={{ fontSize: 48, color: "text.disabled" }} />
@@ -358,13 +346,11 @@ export const GraphsTab = () => {
           </Button>
         </Box>
       ) : (
-        <GridLayout
+        <AutoWidthGridLayout
           layout={layout}
-          cols={12}
-          rowHeight={80}
-          draggableHandle=".drag-handle"
-          isDraggable={!isAllScope}
-          isResizable={!isAllScope}
+          gridConfig={{ cols: 12, rowHeight: 80 }}
+          dragConfig={{ enabled: !isAllScope, handle: ".drag-handle" }}
+          resizeConfig={{ enabled: !isAllScope }}
           onLayoutChange={handleLayoutChange}
           style={{ minHeight: 200 }}
         >
@@ -379,7 +365,7 @@ export const GraphsTab = () => {
               />
             </div>
           ))}
-        </GridLayout>
+        </AutoWidthGridLayout>
       )}
 
       <AddGraphDialog

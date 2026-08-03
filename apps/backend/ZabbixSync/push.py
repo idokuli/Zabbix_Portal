@@ -166,15 +166,44 @@ class SyncPushMixin:
                 return
             current_groups = [{"groupid": g["groupid"]} for g in host.get(self._host_hg_key, [])]
             if not any(g["groupid"] == host_grpid for g in current_groups):
-                self.zapi.host.update(
-                    hostid=host["hostid"],
-                    groups=current_groups + [{"groupid": host_grpid}],
-                )
-                logger.info(
-                    "ZabbixSync: host %r added to Zabbix host group %r.",
-                    hostname,
-                    team_name,
-                )
+                try:
+                    self.zapi.host.update(
+                        hostid=host["hostid"],
+                        groups=current_groups + [{"groupid": host_grpid}],
+                    )
+                    logger.info(
+                        "ZabbixSync: host %r added to Zabbix host group %r.",
+                        hostname,
+                        team_name,
+                    )
+                except Exception as exc:
+                    # This read-then-write can race a concurrent call for the same
+                    # host+team (e.g. the periodic sync and a live "assign host" API
+                    # request landing at the same time): both may read "not yet a
+                    # member" before either write commits, so the second INSERT into
+                    # Zabbix's hosts_groups hits its own uniqueness constraint. Confirm
+                    # the end state rather than pattern-matching Zabbix's error text —
+                    # if the host is now actually in the group, someone else's write
+                    # already won and there's nothing left to do; otherwise this is a
+                    # genuine failure and should be logged as one.
+                    refreshed = self.zapi.host.get(
+                        filter={"host": hostname},
+                        output=["hostid"],
+                        **{self._select_hg_param: ["groupid"]},
+                    )
+                    now_in_group = refreshed and any(
+                        g["groupid"] == host_grpid for g in refreshed[0].get(self._host_hg_key, [])
+                    )
+                    if now_in_group:
+                        logger.debug(
+                            "ZabbixSync: host %r already added to group %r by a concurrent "
+                            "sync — ignoring race: %s",
+                            hostname,
+                            team_name,
+                            exc,
+                        )
+                    else:
+                        raise
             else:
                 logger.debug("ZabbixSync: host %r already in host group %r.", hostname, team_name)
         except Exception:

@@ -1,5 +1,5 @@
-import { TOKEN_COOKIE } from "@/lib/auth";
 import { type NextRequest, NextResponse } from "next/server";
+import { TOKEN_COOKIE } from "@/lib/auth";
 
 export const POST = (_request: NextRequest) => {
   const response = NextResponse.json({ ok: true });

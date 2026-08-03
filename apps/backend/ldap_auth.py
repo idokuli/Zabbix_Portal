@@ -85,6 +85,84 @@ class LdapUserNotFoundError(Exception):
     """Raised when the username doesn't exist in the LDAP directory at all."""
 
 
+def _build_ldap_search_filter(search_attribute: str, search_filter_tpl: str, safe_user: str) -> str:
+    if not search_filter_tpl:
+        return f"({search_attribute}={safe_user})"
+    return (
+        search_filter_tpl.replace("%(attr)s", search_attribute)
+        .replace("%(user)s", safe_user)
+        .replace("%(attr)", search_attribute)
+        .replace("%(user)", safe_user)
+    )
+
+
+def _find_ldap_user(
+    server,
+    bind_dn: str,
+    bind_password: str,
+    start_tls: bool,
+    base_dn: str,
+    search_filter: str,
+    username: str,
+) -> tuple[str, str]:
+    """Service-account bind + directory search for the user's DN and display name.
+    Returns (user_dn, display_name). Raises LdapUserNotFoundError / RuntimeError."""
+    import ldap3
+
+    service_conn = ldap3.Connection(
+        server,
+        user=bind_dn or None,
+        password=bind_password or None,
+        auto_bind=ldap3.AUTO_BIND_NONE,
+        raise_exceptions=False,
+    )
+    if start_tls:
+        service_conn.start_tls()
+    if not service_conn.bind():
+        err = service_conn.last_error or "unknown error"
+        logger.error("LDAP service-account bind failed: %s", err)
+        raise RuntimeError(f"LDAP service-account bind failed: {err}")
+
+    service_conn.search(base_dn, search_filter, attributes=["dn", "displayName", "cn"])
+    if not service_conn.entries:
+        logger.info("LDAP: user %r not found in directory", username)
+        service_conn.unbind()
+        raise LdapUserNotFoundError(username)
+
+    entry = service_conn.entries[0]
+    user_dn = entry.entry_dn
+
+    def _attr(name: str) -> str:
+        try:
+            v = entry[name].value
+            return str(v).strip() if v else ""
+        except Exception:
+            return ""
+
+    display_name = _attr("displayName") or _attr("cn")
+    service_conn.unbind()
+    return user_dn, display_name
+
+
+def _verify_ldap_password(server, user_dn: str, password: str, username: str) -> bool:
+    import ldap3
+
+    user_conn = ldap3.Connection(
+        server,
+        user=user_dn,
+        password=password,
+        auto_bind=ldap3.AUTO_BIND_NONE,
+        raise_exceptions=False,
+    )
+    if user_conn.bind():
+        user_conn.unbind()
+        logger.info("LDAP: authentication succeeded for %r", username)
+        return True
+
+    logger.warning("LDAP: wrong password for %r: %s", username, user_conn.last_error)
+    return False
+
+
 def _do_ldap_auth(cfg: dict, username: str, password: str) -> tuple[bool, str]:
     """
     Core LDAP auth against a given config dict.
@@ -113,70 +191,19 @@ def _do_ldap_auth(cfg: dict, username: str, password: str) -> tuple[bool, str]:
     search_filter_tpl = (cfg.get("search_filter") or "").strip()
 
     safe_user = escape_filter_chars(username.strip())
-    if search_filter_tpl:
-        search_filter = (
-            search_filter_tpl.replace("%(attr)s", search_attribute)
-            .replace("%(user)s", safe_user)
-            .replace("%(attr)", search_attribute)
-            .replace("%(user)", safe_user)
-        )
-    else:
-        search_filter = f"({search_attribute}={safe_user})"
+    search_filter = _build_ldap_search_filter(search_attribute, search_filter_tpl, safe_user)
     logger.debug("LDAP search: base=%r filter=%r", base_dn, search_filter)
 
     try:
         server = ldap3.Server(
             host, port=port, use_ssl=use_ssl, get_info=ldap3.NONE, connect_timeout=10
         )
-
-        service_conn = ldap3.Connection(
-            server,
-            user=bind_dn or None,
-            password=bind_password or None,
-            auto_bind=ldap3.AUTO_BIND_NONE,
-            raise_exceptions=False,
+        user_dn, display_name = _find_ldap_user(
+            server, bind_dn, bind_password, start_tls, base_dn, search_filter, username
         )
-        if start_tls:
-            service_conn.start_tls()
-        if not service_conn.bind():
-            err = service_conn.last_error or "unknown error"
-            logger.error("LDAP service-account bind failed: %s", err)
-            raise RuntimeError(f"LDAP service-account bind failed: {err}")
-
-        service_conn.search(base_dn, search_filter, attributes=["dn", "displayName", "cn"])
-        if not service_conn.entries:
-            logger.info("LDAP: user %r not found in directory", username)
-            service_conn.unbind()
-            raise LdapUserNotFoundError(username)
-
-        entry = service_conn.entries[0]
-        user_dn = entry.entry_dn
-
-        def _attr(name: str) -> str:
-            try:
-                v = entry[name].value
-                return str(v).strip() if v else ""
-            except Exception:
-                return ""
-
-        display_name = _attr("displayName") or _attr("cn")
-        service_conn.unbind()
-
-        user_conn = ldap3.Connection(
-            server,
-            user=user_dn,
-            password=password,
-            auto_bind=ldap3.AUTO_BIND_NONE,
-            raise_exceptions=False,
-        )
-        if user_conn.bind():
-            user_conn.unbind()
-            logger.info("LDAP: authentication succeeded for %r", username)
+        if _verify_ldap_password(server, user_dn, password, username):
             return True, display_name
-
-        logger.warning("LDAP: wrong password for %r: %s", username, user_conn.last_error)
         return False, ""
-
     except (LdapUserNotFoundError, RuntimeError):
         raise
     except Exception as exc:

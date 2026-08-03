@@ -17,7 +17,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useEffect, useState } from "react";
-import { type Host, type MetricWidgetConfig, api } from "../../app/api";
+import { api, type Host, type MetricWidgetConfig } from "../../app/api";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { PRESET_COLORS } from "./shared";
 
@@ -93,7 +93,7 @@ export const MetricConfigDialog = ({
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <Typography fontWeight={700}>Configure Metric</Typography>
+        <Typography sx={{ fontWeight: 700 }}>Configure Metric</Typography>
         <IconButton size="small" onClick={onClose}>
           <CloseIcon fontSize="small" />
         </IconButton>

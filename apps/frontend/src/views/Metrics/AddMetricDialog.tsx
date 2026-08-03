@@ -22,7 +22,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useEffect, useState } from "react";
-import { type Host, api } from "../../app/api";
+import { api, type Host } from "../../app/api";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import type { ItemDef } from "./shared";
 
@@ -79,7 +79,7 @@ export const AddMetricDialog = ({
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <Typography fontWeight={700}>Add Metric Widget</Typography>
+        <Typography sx={{ fontWeight: 700 }}>Add Metric Widget</Typography>
         <IconButton size="small" onClick={onClose}>
           <CloseIcon fontSize="small" />
         </IconButton>
@@ -115,18 +115,20 @@ export const AddMetricDialog = ({
             <>
               <Box sx={{ p: 2, pb: 1 }}>
                 <TextField
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <ShowChartOutlinedIcon sx={{ fontSize: 16, color: "text.disabled" }} />
+                        </InputAdornment>
+                      ),
+                    },
+                  }}
                   size="small"
                   fullWidth
                   placeholder="Search items…"
                   value={itemSearch}
                   onChange={(e) => setItemSearch(e.target.value)}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <ShowChartOutlinedIcon sx={{ fontSize: 16, color: "text.disabled" }} />
-                      </InputAdornment>
-                    ),
-                  }}
                 />
               </Box>
               <Divider />
@@ -143,13 +145,14 @@ export const AddMetricDialog = ({
                     return (
                       <ListItem key={item.itemid} sx={{ opacity: added ? 0.45 : 1 }}>
                         <ListItemText
+                          slotProps={{
+                            primary: { sx: { fontSize: "0.82rem", fontWeight: 500 } },
+                            secondary: {
+                              sx: { fontSize: "0.72rem", fontFamily: "monospace" },
+                            },
+                          }}
                           primary={item.name}
                           secondary={item.key_}
-                          primaryTypographyProps={{ fontSize: "0.82rem", fontWeight: 500 }}
-                          secondaryTypographyProps={{
-                            fontSize: "0.72rem",
-                            fontFamily: "monospace",
-                          }}
                         />
                         <ListItemSecondaryAction>
                           <Button

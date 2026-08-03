@@ -12,6 +12,17 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from api.schemas.items import (
+    BrowserItemRequest,
+    DbOdbcRequest,
+    HttpItemRequest,
+    JmxItemRequest,
+    ScriptItemRequest,
+    SnmpItemRequest,
+    SshItemRequest,
+    ZabbixScriptItemRequest,
+)
+
 
 @pytest.fixture()
 def mgr():
@@ -208,14 +219,16 @@ def test_add_item_to_template_zapi_none(mgr):
 def test_add_http_item_success(mgr):
     _mock_host_iface(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["10"]}
-    item_id, err = mgr.add_http_item("h1", "HTTP check", "http://example.com")
+    req = HttpItemRequest(hostname="h1", item_name="HTTP check", url="http://example.com")
+    item_id, err = mgr.add_http_item(req)
     assert item_id == "10"
     assert err is None
 
 
 def test_add_http_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_http_item("h1", "x", "http://x")
+    req = HttpItemRequest(hostname="h1", item_name="x", url="http://x")
+    item_id, err = mgr.add_http_item(req)
     assert item_id is None
 
 
@@ -236,28 +249,42 @@ def test_add_snmp_item_success(mgr):
     _mock_host_iface(mgr)
     mgr.zapi.hostinterface.get.return_value = [{"interfaceid": "5", "type": "2"}]
     mgr.zapi.item.create.return_value = {"itemids": ["30"]}
-    item_id, err = mgr.add_snmp_item(
-        "h1", "SNMP item", "snmp.key", "1.3.6.1.2.1.1.1.0", value_type=4
+    req = SnmpItemRequest(
+        hostname="h1",
+        item_name="SNMP item",
+        item_key="snmp.key",
+        snmp_oid="1.3.6.1.2.1.1.1.0",
+        value_type=4,
     )
+    item_id, err = mgr.add_snmp_item(req)
     assert item_id == "30"
     assert err is None
 
 
 def test_add_snmp_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_snmp_item("h1", "x", "k", "1.3.6", value_type=4)
+    req = SnmpItemRequest(
+        hostname="h1", item_name="x", item_key="k", snmp_oid="1.3.6", value_type=4
+    )
+    item_id, err = mgr.add_snmp_item(req)
     assert item_id is None
 
 
 def test_add_snmp_item_no_oid(mgr):
-    item_id, err = mgr.add_snmp_item("h1", "SNMP", "snmp.key", "", value_type=4)
+    req = SnmpItemRequest(
+        hostname="h1", item_name="SNMP", item_key="snmp.key", snmp_oid="", value_type=4
+    )
+    item_id, err = mgr.add_snmp_item(req)
     assert item_id is None
     assert "OID" in err
 
 
 def test_add_snmp_item_host_not_found(mgr):
     mgr.zapi.host.get.return_value = []
-    item_id, err = mgr.add_snmp_item("ghost", "SNMP", "snmp.key", "1.3.6", value_type=4)
+    req = SnmpItemRequest(
+        hostname="ghost", item_name="SNMP", item_key="snmp.key", snmp_oid="1.3.6", value_type=4
+    )
+    item_id, err = mgr.add_snmp_item(req)
     assert item_id is None
     assert "not found" in err
 
@@ -265,7 +292,10 @@ def test_add_snmp_item_host_not_found(mgr):
 def test_add_snmp_item_no_interface(mgr):
     mgr.zapi.host.get.return_value = [{"hostid": "10"}]
     mgr.zapi.hostinterface.get.return_value = []
-    item_id, err = mgr.add_snmp_item("h1", "SNMP", "snmp.key", "1.3.6", value_type=4)
+    req = SnmpItemRequest(
+        hostname="h1", item_name="SNMP", item_key="snmp.key", snmp_oid="1.3.6", value_type=4
+    )
+    item_id, err = mgr.add_snmp_item(req)
     assert item_id is None
     assert "interface" in err.lower()
 
@@ -275,7 +305,14 @@ def test_add_snmp_item_uses_first_iface_if_no_snmp(mgr):
     mgr.zapi.host.get.return_value = [{"hostid": "10"}]
     mgr.zapi.hostinterface.get.return_value = [{"interfaceid": "9", "type": "1"}]
     mgr.zapi.item.create.return_value = {"itemids": ["31"]}
-    item_id, err = mgr.add_snmp_item("h1", "SNMP", "snmp.key", "1.3.6.1.2.1.1.1.0", value_type=4)
+    req = SnmpItemRequest(
+        hostname="h1",
+        item_name="SNMP",
+        item_key="snmp.key",
+        snmp_oid="1.3.6.1.2.1.1.1.0",
+        value_type=4,
+    )
+    item_id, err = mgr.add_snmp_item(req)
     assert item_id == "31"
 
 
@@ -284,11 +321,11 @@ def test_add_snmp_item_v3_auth_priv(mgr):
     mgr.zapi.host.get.return_value = [{"hostid": "10"}]
     mgr.zapi.hostinterface.get.return_value = [{"interfaceid": "5", "type": "2"}]
     mgr.zapi.item.create.return_value = {"itemids": ["32"]}
-    item_id, err = mgr.add_snmp_item(
-        "h1",
-        "SNMP v3",
-        "snmp.v3",
-        "1.3.6.1.2.1.1.1.0",
+    req = SnmpItemRequest(
+        hostname="h1",
+        item_name="SNMP v3",
+        item_key="snmp.v3",
+        snmp_oid="1.3.6.1.2.1.1.1.0",
         value_type=4,
         snmp_version=3,
         snmpv3_securityname="admin",
@@ -299,6 +336,7 @@ def test_add_snmp_item_v3_auth_priv(mgr):
         snmpv3_privpassphrase="privpass",
         snmpv3_contextname="ctx",
     )
+    item_id, err = mgr.add_snmp_item(req)
     assert item_id == "32"
     call_kwargs = mgr.zapi.item.create.call_args[1]
     assert "snmpv3_privpassphrase" in call_kwargs
@@ -309,7 +347,10 @@ def test_add_snmp_item_auto_key_and_name(mgr):
     mgr.zapi.host.get.return_value = [{"hostid": "10"}]
     mgr.zapi.hostinterface.get.return_value = [{"interfaceid": "5", "type": "2"}]
     mgr.zapi.item.create.return_value = {"itemids": ["33"]}
-    item_id, err = mgr.add_snmp_item("h1", "", "", "1.3.6.1.2.1.1.1.0", value_type=4)
+    req = SnmpItemRequest(
+        hostname="h1", item_name="", item_key="", snmp_oid="1.3.6.1.2.1.1.1.0", value_type=4
+    )
+    item_id, err = mgr.add_snmp_item(req)
     assert item_id == "33"
     call_kwargs = mgr.zapi.item.create.call_args[1]
     assert "SNMP:" in call_kwargs["name"]
@@ -361,9 +402,14 @@ def test_add_snmp_trap_item_with_team(mgr):
 def test_add_ssh_item_success(mgr):
     _mock_host_iface(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["40"]}
-    item_id, err = mgr.add_ssh_item(
-        "h1", "SSH uptime", "uptime", "ssh.run[uptime]", username="root"
+    req = SshItemRequest(
+        hostname="h1",
+        item_name="SSH uptime",
+        params="uptime",
+        item_key="ssh.run[uptime]",
+        username="root",
     )
+    item_id, err = mgr.add_ssh_item(req)
     assert item_id == "40"
     assert err is None
 
@@ -375,12 +421,13 @@ def test_add_jmx_item_success(mgr):
     _mock_host_iface(mgr)
     mgr.zapi.hostinterface.get.return_value = [{"interfaceid": "5", "type": "4"}]
     mgr.zapi.item.create.return_value = {"itemids": ["50"]}
-    item_id, err = mgr.add_jmx_item(
-        "h1",
-        "JMX heap",
-        "jmx.heap",
-        "service:jmx:rmi:///jndi/rmi://localhost:9999/jmxrmi",
+    req = JmxItemRequest(
+        hostname="h1",
+        item_name="JMX heap",
+        item_key="jmx.heap",
+        jmx_endpoint="service:jmx:rmi:///jndi/rmi://localhost:9999/jmxrmi",
     )
+    item_id, err = mgr.add_jmx_item(req)
     assert item_id == "50"
 
 
@@ -769,40 +816,50 @@ def test_add_dependent_item_zapi_none(mgr):
 def test_add_zabbix_script_item_ok(mgr):
     _mock_host(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["105"]}
-    item_id, err = mgr.add_zabbix_script_item("h1", "Script", "script.key", "return 1;")
+    req = ZabbixScriptItemRequest(
+        hostname="h1", item_name="Script", item_key="script.key", params="return 1;"
+    )
+    item_id, err = mgr.add_zabbix_script_item(req)
     assert item_id == "105"
     assert err is None
 
 
 def test_add_zabbix_script_item_host_not_found(mgr):
     mgr.zapi.host.get.return_value = []
-    item_id, err = mgr.add_zabbix_script_item("ghost", "Script", "k", "code")
+    req = ZabbixScriptItemRequest(hostname="ghost", item_name="Script", item_key="k", params="code")
+    item_id, err = mgr.add_zabbix_script_item(req)
     assert item_id is None
 
 
 def test_add_zabbix_script_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_zabbix_script_item("h1", "Script", "k", "code")
+    req = ZabbixScriptItemRequest(hostname="h1", item_name="Script", item_key="k", params="code")
+    item_id, err = mgr.add_zabbix_script_item(req)
     assert item_id is None
 
 
 def test_add_browser_item_ok(mgr):
     _mock_host(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["106"]}
-    item_id, err = mgr.add_browser_item("h1", "Browser", "browser.key", "return 1;")
+    req = BrowserItemRequest(
+        hostname="h1", item_name="Browser", item_key="browser.key", params="return 1;"
+    )
+    item_id, err = mgr.add_browser_item(req)
     assert item_id == "106"
     assert err is None
 
 
 def test_add_browser_item_host_not_found(mgr):
     mgr.zapi.host.get.return_value = []
-    item_id, err = mgr.add_browser_item("ghost", "Browser", "k", "code")
+    req = BrowserItemRequest(hostname="ghost", item_name="Browser", item_key="k", params="code")
+    item_id, err = mgr.add_browser_item(req)
     assert item_id is None
 
 
 def test_add_browser_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_browser_item("h1", "Browser", "k", "code")
+    req = BrowserItemRequest(hostname="h1", item_name="Browser", item_key="k", params="code")
+    item_id, err = mgr.add_browser_item(req)
     assert item_id is None
 
 
@@ -833,21 +890,29 @@ def test_add_file_watch_item_zapi_none(mgr):
 def test_add_script_item_ok(mgr):
     _mock_host_iface(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["108"]}
-    # signature: hostname, script_type, script_mode, script
-    item_id, err = mgr.add_script_item("h1", "bash", "command", "uptime")
+    req = ScriptItemRequest(
+        hostname="h1", script_type="bash", script_mode="command", script="uptime"
+    )
+    item_id, err = mgr.add_script_item(req)
     assert item_id == "108"
     assert err is None
 
 
 def test_add_script_item_host_not_found(mgr):
     mgr.zapi.host.get.return_value = []
-    item_id, err = mgr.add_script_item("ghost", "bash", "command", "uptime")
+    req = ScriptItemRequest(
+        hostname="ghost", script_type="bash", script_mode="command", script="uptime"
+    )
+    item_id, err = mgr.add_script_item(req)
     assert item_id is None
 
 
 def test_add_script_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_script_item("h1", "bash", "command", "uptime")
+    req = ScriptItemRequest(
+        hostname="h1", script_type="bash", script_mode="command", script="uptime"
+    )
+    item_id, err = mgr.add_script_item(req)
     assert item_id is None
 
 
@@ -857,22 +922,33 @@ def test_add_script_item_zapi_none(mgr):
 def test_add_db_odbc_item_ok(mgr):
     _mock_host_iface(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["109"]}
-    item_id, err = mgr.add_db_odbc_item(
-        "h1", "DB query", "db.odbc.select[rows,dsn]", "SELECT 1", "mydsn"
+    req = DbOdbcRequest(
+        hostname="h1",
+        dsn="DB query",
+        sql_query="db.odbc.select[rows,dsn]",
+        description="SELECT 1",
+        item_name="mydsn",
     )
+    item_id, err = mgr.add_db_odbc_item(req)
     assert item_id == "109"
     assert err is None
 
 
 def test_add_db_odbc_item_host_not_found(mgr):
     mgr.zapi.host.get.return_value = []
-    item_id, err = mgr.add_db_odbc_item("ghost", "DB", "key", "SELECT 1", "dsn")
+    req = DbOdbcRequest(
+        hostname="ghost", dsn="DB", sql_query="key", description="SELECT 1", item_name="dsn"
+    )
+    item_id, err = mgr.add_db_odbc_item(req)
     assert item_id is None
 
 
 def test_add_db_odbc_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_db_odbc_item("h1", "DB", "key", "SELECT 1", "dsn")
+    req = DbOdbcRequest(
+        hostname="h1", dsn="DB", sql_query="key", description="SELECT 1", item_name="dsn"
+    )
+    item_id, err = mgr.add_db_odbc_item(req)
     assert item_id is None
 
 

@@ -1,6 +1,6 @@
 "use client";
 import AddIcon from "@mui/icons-material/Add";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import {
   Box,
   Button,
@@ -160,7 +160,6 @@ const GroupMappingDialog = ({
                 mt: 0.5,
                 border: "1px solid",
                 borderColor: "divider",
-                borderRadius: 1,
                 maxHeight: 180,
                 overflowY: "auto",
               }}
@@ -595,6 +594,7 @@ export const LdapServerDialog = ({
               placeholder="ldap.example.com"
             />
             <TextField
+              slotProps={{ htmlInput: { min: 1, max: 65535 } }}
               size="small"
               label="Port"
               required
@@ -602,7 +602,6 @@ export const LdapServerDialog = ({
               value={form.port}
               onChange={(e) => set("port", e.target.value)}
               sx={{ maxWidth: 120 }}
-              inputProps={{ min: 1, max: 65535 }}
             />
             <TextField
               size="small"
@@ -731,9 +730,7 @@ export const LdapServerDialog = ({
                   <Box>
                     <Stack
                       direction="row"
-                      alignItems="center"
-                      justifyContent="space-between"
-                      sx={{ mb: 0.75 }}
+                      sx={{ alignItems: "center", justifyContent: "space-between", mb: 0.75 }}
                     >
                       <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
                         User group mapping
@@ -754,10 +751,7 @@ export const LdapServerDialog = ({
                         No mappings defined.
                       </Typography>
                     ) : (
-                      <Table
-                        size="small"
-                        sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1 }}
-                      >
+                      <Table size="small" sx={{ border: "1px solid", borderColor: "divider" }}>
                         <TableHead>
                           <TableRow>
                             <TableCell sx={{ fontWeight: 700, fontSize: "0.72rem" }}>
@@ -829,9 +823,7 @@ export const LdapServerDialog = ({
                   <Box>
                     <Stack
                       direction="row"
-                      alignItems="center"
-                      justifyContent="space-between"
-                      sx={{ mb: 0.75 }}
+                      sx={{ alignItems: "center", justifyContent: "space-between", mb: 0.75 }}
                     >
                       <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
                         Media type mapping
@@ -852,10 +844,7 @@ export const LdapServerDialog = ({
                         No mappings defined.
                       </Typography>
                     ) : (
-                      <Table
-                        size="small"
-                        sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1 }}
-                      >
+                      <Table size="small" sx={{ border: "1px solid", borderColor: "divider" }}>
                         <TableHead>
                           <TableRow>
                             <TableCell sx={{ fontWeight: 700, fontSize: "0.72rem" }}>

@@ -10,8 +10,8 @@ import {
   Typography,
 } from "@mui/material";
 import { useState } from "react";
-import { api } from "../../../app/api";
 import type { Host } from "../../../app/api";
+import { api } from "../../../app/api";
 import type { BulkResult } from "../shared";
 import { BulkResults, valueTypes } from "../shared";
 import {

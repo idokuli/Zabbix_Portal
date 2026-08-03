@@ -67,6 +67,36 @@ def test_local_login_wrong_password(auth_client):
     assert res.status_code == 401
 
 
+def test_login_passes_username_through_uncased(auth_client):
+    """The login route must NOT lowercase the input — case-insensitivity is the DB
+    lookup's job. Lowercasing here locked out every row stored with other casing,
+    including the seeded root account, which is created as 'Admin'."""
+    get_user_by_username = MagicMock(return_value=LOCAL_USER)
+    with (
+        patch("api.routes.auth.um.get_user_by_username", get_user_by_username),
+        patch("api.routes.auth.is_ldap_enabled", return_value=False),
+        patch("api.routes.auth.verify_password", return_value=True),
+        patch("api.routes.auth.create_token", return_value=FAKE_TOKEN),
+    ):
+        res = _post(auth_client, "  AlIcE  ", "correct")
+    assert res.status_code == 200
+    # Whitespace trimmed, casing preserved and handed to the case-insensitive lookup.
+    get_user_by_username.assert_called_once_with("AlIcE")
+
+
+def test_seeded_root_with_capitalised_username_can_log_in(auth_client):
+    """Regression: seed_root() stores 'Admin'. Logging in as 'Admin' (or any casing)
+    must reach that row rather than 401."""
+    with (
+        patch("api.routes.auth.um.get_user_by_username", return_value=ROOT_USER),
+        patch("api.routes.auth.is_ldap_enabled", return_value=False),
+        patch("api.routes.auth.verify_password", return_value=True),
+        patch("api.routes.auth.create_token", return_value=FAKE_TOKEN),
+    ):
+        res = _post(auth_client, "Admin", "change-me")
+    assert res.status_code == 200
+
+
 def test_unknown_user_returns_401(auth_client):
     with (
         patch("api.routes.auth.um.get_user_by_username", return_value=None),
@@ -93,6 +123,24 @@ def test_ldap_jit_provisioning(auth_client):
         res = _post(auth_client, "newbie", "ldappass")
     assert res.status_code == 200
     assert res.json()["access_token"] == FAKE_TOKEN
+
+
+def test_ldap_jit_provisioning_stores_lowercase(auth_client):
+    """LDAP-provisioned accounts are stored lowercase, so a directory user who types a
+    new capitalisation each time never accumulates duplicate portal accounts."""
+    provisioned = {**LOCAL_USER, "id": 99, "username": "idokuli", "source": "ldap"}
+    create_user = MagicMock(return_value=provisioned)
+    with (
+        patch("api.routes.auth.um.get_user_by_username", return_value=None),
+        patch("api.routes.auth.is_ldap_enabled", return_value=True),
+        patch("api.routes.auth.authenticate_ldap", return_value=(True, "Ido Kulishevski")),
+        patch("api.routes.auth.um.create_user", create_user),
+        patch("api.routes.auth.hash_password", return_value="unusable"),
+        patch("api.routes.auth.create_token", return_value=FAKE_TOKEN),
+    ):
+        res = _post(auth_client, "IdOkUlI", "ldappass")
+    assert res.status_code == 200
+    assert create_user.call_args.kwargs["username"] == "idokuli"
 
 
 def test_ldap_jit_wrong_credentials(auth_client):

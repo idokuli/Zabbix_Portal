@@ -20,6 +20,8 @@ SLA_PERIOD = {
     "PERIOD_ANNUALLY": "Annually",
 }
 
+_ZABBIX_NOT_CONNECTED = "Zabbix not connected"
+
 
 class Services_Manager(Zabbix_Base):
     def __init__(self):
@@ -81,7 +83,7 @@ class Services_Manager(Zabbix_Base):
         description: str = "",
     ) -> str:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(_ZABBIX_NOT_CONNECTED)
         try:
             result = self.zapi.service.create(
                 name=name,
@@ -96,7 +98,7 @@ class Services_Manager(Zabbix_Base):
 
     def delete_service(self, serviceid: str) -> bool:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(_ZABBIX_NOT_CONNECTED)
         try:
             self.zapi.service.delete([serviceid])
             return True
@@ -111,7 +113,7 @@ class Services_Manager(Zabbix_Base):
         description: str | None = None,
     ) -> bool:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(_ZABBIX_NOT_CONNECTED)
         try:
             params: dict = {"serviceid": serviceid}
             if name is not None:
@@ -176,7 +178,7 @@ class Services_Manager(Zabbix_Base):
         service_tags: list | None = None,
     ) -> str:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(_ZABBIX_NOT_CONNECTED)
         try:
             result = self.zapi.sla.create(
                 name=name,
@@ -195,7 +197,7 @@ class Services_Manager(Zabbix_Base):
 
     def delete_sla(self, slaid: str) -> bool:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(_ZABBIX_NOT_CONNECTED)
         try:
             self.zapi.sla.delete([slaid])
             return True
@@ -228,7 +230,7 @@ class Services_Manager(Zabbix_Base):
         process_name: str | None = None,
     ) -> dict:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(_ZABBIX_NOT_CONNECTED)
         try:
             http_key = f"health.http[{self._hm_slug(name)}]"
             if self.zapi.item.get(hostids=[hostid], filter={"key_": http_key}, output=["itemid"]):
@@ -285,6 +287,71 @@ class Services_Manager(Zabbix_Base):
         except Exception as e:
             raise RuntimeError(str(e)) from e
 
+    @staticmethod
+    def _parse_health_monitor_configs(items: list[dict]) -> tuple[list[dict], list[str]]:
+        configs = []
+        proc_itemids = []
+        for item in items:
+            try:
+                config = json.loads(item.get("description", "{}") or "{}")
+            except Exception:
+                config = {}
+            configs.append(config)
+            if config.get("proc_itemid"):
+                proc_itemids.append(config["proc_itemid"])
+        return configs, proc_itemids
+
+    def _fetch_proc_states(self, proc_itemids: list[str]) -> dict:
+        if not proc_itemids:
+            return {}
+        proc_items = self.zapi.item.get(
+            itemids=proc_itemids,
+            output=["itemid", "lastvalue", "lastclock", "state"],
+        )
+        return {p["itemid"]: p for p in proc_items}
+
+    @staticmethod
+    def _health_monitor_running(item: dict, config: dict, proc_map: dict, now: float) -> bool:
+        proc_itemid = config.get("proc_itemid")
+        if proc_itemid and proc_itemid in proc_map:
+            proc = proc_map[proc_itemid]
+            proc_clock = int(proc.get("lastclock") or 0)
+            return (
+                int(proc.get("state", 1)) == 0
+                and proc_clock > 0
+                and (now - proc_clock) < 600
+                and (proc.get("lastvalue") or "0").strip() == "1"
+            )
+        state = int(item.get("state", 0))
+        lastclock = int(item.get("lastclock") or 0)
+        return state == 0 and lastclock > 0 and (now - lastclock) < 600
+
+    @classmethod
+    def _build_health_monitor_entry(
+        cls, item: dict, config: dict, proc_map: dict, now: float
+    ) -> dict:
+        lastclock = int(item.get("lastclock") or 0)
+        lastvalue = item.get("lastvalue", "") or ""
+        expected = config.get("expected", "ok")
+        proc_itemid = config.get("proc_itemid")
+        running = cls._health_monitor_running(item, config, proc_map, now)
+        working = running and expected.lower() in lastvalue.lower()
+        host_info = (item.get("hosts") or [{}])[0]
+        return {
+            "itemid": item["itemid"],
+            "name": item["name"].removeprefix("[HealthMon] "),
+            "host": host_info.get("host", ""),
+            "hostid": item.get("hostid", ""),
+            "url": config.get("url", ""),
+            "expected": expected,
+            "running": running,
+            "working": working,
+            "last_value": lastvalue[:200] if lastvalue else None,
+            "last_check": lastclock or None,
+            "proc_itemid": proc_itemid,
+            "has_proc_check": bool(proc_itemid),
+        }
+
     def list_health_monitors(self, hostid: str | None = None) -> list[dict]:
         if not self.zapi:
             return []
@@ -308,73 +375,21 @@ class Services_Manager(Zabbix_Base):
                 params["hostids"] = [hostid]
             items = self.zapi.item.get(**params)
 
-            configs = []
-            proc_itemids = []
-            for item in items:
-                try:
-                    config = json.loads(item.get("description", "{}") or "{}")
-                except Exception:
-                    config = {}
-                configs.append(config)
-                if config.get("proc_itemid"):
-                    proc_itemids.append(config["proc_itemid"])
-
-            proc_map: dict = {}
-            if proc_itemids:
-                proc_items = self.zapi.item.get(
-                    itemids=proc_itemids,
-                    output=["itemid", "lastvalue", "lastclock", "state"],
-                )
-                proc_map = {p["itemid"]: p for p in proc_items}
+            configs, proc_itemids = self._parse_health_monitor_configs(items)
+            proc_map = self._fetch_proc_states(proc_itemids)
 
             now = time.time()
-            result = []
-            for item, config in zip(items, configs, strict=True):
-                state = int(item.get("state", 0))
-                lastclock = int(item.get("lastclock") or 0)
-                lastvalue = item.get("lastvalue", "") or ""
-                expected = config.get("expected", "ok")
-                proc_itemid = config.get("proc_itemid")
-
-                if proc_itemid and proc_itemid in proc_map:
-                    proc = proc_map[proc_itemid]
-                    proc_clock = int(proc.get("lastclock") or 0)
-                    running = (
-                        int(proc.get("state", 1)) == 0
-                        and proc_clock > 0
-                        and (now - proc_clock) < 600
-                        and (proc.get("lastvalue") or "0").strip() == "1"
-                    )
-                else:
-                    running = state == 0 and lastclock > 0 and (now - lastclock) < 600
-
-                working = running and expected.lower() in lastvalue.lower()
-                host_info = (item.get("hosts") or [{}])[0]
-
-                result.append(
-                    {
-                        "itemid": item["itemid"],
-                        "name": item["name"].removeprefix("[HealthMon] "),
-                        "host": host_info.get("host", ""),
-                        "hostid": item.get("hostid", ""),
-                        "url": config.get("url", ""),
-                        "expected": expected,
-                        "running": running,
-                        "working": working,
-                        "last_value": lastvalue[:200] if lastvalue else None,
-                        "last_check": lastclock or None,
-                        "proc_itemid": proc_itemid,
-                        "has_proc_check": bool(proc_itemid),
-                    }
-                )
-            return result
+            return [
+                self._build_health_monitor_entry(item, config, proc_map, now)
+                for item, config in zip(items, configs, strict=True)
+            ]
         except Exception as e:
             logger.exception("list_health_monitors failed")
             raise RuntimeError(str(e)) from e
 
     def delete_health_monitor(self, itemid: str) -> bool:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(_ZABBIX_NOT_CONNECTED)
         try:
             items = self.zapi.item.get(itemids=[itemid], output=["itemid", "description"])
             if not items:

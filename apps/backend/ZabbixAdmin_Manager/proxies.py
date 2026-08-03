@@ -37,27 +37,63 @@ class ProxiesMixin:
     TLS_PSK = 2
     TLS_CERT = 4
 
-    def _build_proxy_params(
+    _ZABBIX_NOT_CONNECTED = "Zabbix not connected"
+
+    def _passive_proxy_tls_params(
         self,
-        *,
-        name: str,
-        operating_mode: int = 0,
-        description: str = "",
-        proxy_groupid: str = "",
-        local_address: str = "",
-        local_port: str = "10051",
-        address: str = "127.0.0.1",
-        port: str = "10051",
-        allowed_addresses: str = "",
-        tls_connect: int = 1,
-        tls_accept: int = 1,
-        tls_issuer: str = "",
-        tls_subject: str = "",
-        tls_psk_identity: str = "",
-        tls_psk: str = "",
-        custom_timeouts: int = 0,
-        timeouts: dict[str, str] | None = None,
+        tls_connect: int,
+        tls_psk_identity: str,
+        tls_psk: str,
+        tls_issuer: str,
+        tls_subject: str,
     ) -> dict:
+        params: dict = {"tls_connect": tls_connect}
+        if tls_connect == self.TLS_PSK:
+            params["tls_psk_identity"] = tls_psk_identity
+            if tls_psk:
+                params["tls_psk"] = tls_psk
+        elif tls_connect == self.TLS_CERT:
+            params["tls_issuer"] = tls_issuer
+            params["tls_subject"] = tls_subject
+        return params
+
+    def _active_proxy_tls_params(
+        self,
+        tls_accept: int,
+        tls_psk_identity: str,
+        tls_psk: str,
+        tls_issuer: str,
+        tls_subject: str,
+    ) -> dict:
+        params: dict = {"tls_accept": tls_accept}
+        if tls_accept & self.TLS_PSK:
+            params["tls_psk_identity"] = tls_psk_identity
+            if tls_psk:
+                params["tls_psk"] = tls_psk
+        if tls_accept & self.TLS_CERT:
+            params["tls_issuer"] = tls_issuer
+            params["tls_subject"] = tls_subject
+        return params
+
+    def _build_proxy_params(self, **kwargs: Any) -> dict:
+        name: str = kwargs["name"]
+        operating_mode: int = kwargs.get("operating_mode", 0)
+        description: str = kwargs.get("description", "")
+        proxy_groupid: str = kwargs.get("proxy_groupid", "")
+        local_address: str = kwargs.get("local_address", "")
+        local_port: str = kwargs.get("local_port", "10051")
+        address: str = kwargs.get("address", "127.0.0.1")
+        port: str = kwargs.get("port", "10051")
+        allowed_addresses: str = kwargs.get("allowed_addresses", "")
+        tls_connect: int = kwargs.get("tls_connect", 1)
+        tls_accept: int = kwargs.get("tls_accept", 1)
+        tls_issuer: str = kwargs.get("tls_issuer", "")
+        tls_subject: str = kwargs.get("tls_subject", "")
+        tls_psk_identity: str = kwargs.get("tls_psk_identity", "")
+        tls_psk: str = kwargs.get("tls_psk", "")
+        custom_timeouts: int = kwargs.get("custom_timeouts", 0)
+        timeouts: dict[str, str] | None = kwargs.get("timeouts")
+
         params: dict = {
             "name": name,
             "operating_mode": operating_mode,
@@ -70,24 +106,18 @@ class ProxiesMixin:
         if operating_mode == 1:  # Passive — Zabbix server connects to the proxy
             params["address"] = address or "127.0.0.1"
             params["port"] = port or "10051"
-            params["tls_connect"] = tls_connect
-            if tls_connect == self.TLS_PSK:
-                params["tls_psk_identity"] = tls_psk_identity
-                if tls_psk:
-                    params["tls_psk"] = tls_psk
-            elif tls_connect == self.TLS_CERT:
-                params["tls_issuer"] = tls_issuer
-                params["tls_subject"] = tls_subject
+            params.update(
+                self._passive_proxy_tls_params(
+                    tls_connect, tls_psk_identity, tls_psk, tls_issuer, tls_subject
+                )
+            )
         else:  # Active — the proxy connects to the Zabbix server
             params["allowed_addresses"] = allowed_addresses
-            params["tls_accept"] = tls_accept
-            if tls_accept & self.TLS_PSK:
-                params["tls_psk_identity"] = tls_psk_identity
-                if tls_psk:
-                    params["tls_psk"] = tls_psk
-            if tls_accept & self.TLS_CERT:
-                params["tls_issuer"] = tls_issuer
-                params["tls_subject"] = tls_subject
+            params.update(
+                self._active_proxy_tls_params(
+                    tls_accept, tls_psk_identity, tls_psk, tls_issuer, tls_subject
+                )
+            )
         params["custom_timeouts"] = custom_timeouts
         if custom_timeouts == 1 and timeouts:
             params.update({k: v for k, v in timeouts.items() if v})
@@ -95,7 +125,7 @@ class ProxiesMixin:
 
     def create_proxy(self, **kwargs) -> str:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(self._ZABBIX_NOT_CONNECTED)
         try:
             params = self._build_proxy_params(**kwargs)
             result = self.zapi.proxy.create(**params)
@@ -106,7 +136,7 @@ class ProxiesMixin:
 
     def update_proxy(self, proxyid: str, **kwargs) -> bool:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(self._ZABBIX_NOT_CONNECTED)
         try:
             params = self._build_proxy_params(**kwargs)
             params["proxyid"] = proxyid
@@ -118,7 +148,7 @@ class ProxiesMixin:
 
     def delete_proxy(self, proxyid: str) -> bool:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(self._ZABBIX_NOT_CONNECTED)
         try:
             self.zapi.proxy.delete([proxyid])
             self._invalidate("proxies")
@@ -159,7 +189,7 @@ class ProxiesMixin:
         description: str = "",
     ) -> str:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(self._ZABBIX_NOT_CONNECTED)
         try:
             result = self.zapi.proxygroup.create(
                 name=name,
@@ -173,7 +203,7 @@ class ProxiesMixin:
 
     def delete_proxy_group(self, proxygroupid: str) -> bool:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(self._ZABBIX_NOT_CONNECTED)
         try:
             self.zapi.proxygroup.delete([proxygroupid])
             return True

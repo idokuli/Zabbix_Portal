@@ -7,6 +7,8 @@ from api.schemas import PasswordChangeRequest, UserRequest, UserUpdateRequest
 
 router = APIRouter(tags=["Users"])
 
+_USER_NOT_FOUND = "User not found."
+
 
 @router.get("/users", tags=["Users"], summary="List users")
 def list_users(current_user: dict = Depends(require_admin)):
@@ -23,7 +25,7 @@ def list_users(current_user: dict = Depends(require_admin)):
 def update_user(user_id: int, data: UserUpdateRequest, current_user: dict = Depends(require_admin)):
     target = um.get_user_by_id(user_id)
     if not target:
-        raise HTTPException(status_code=404, detail="User not found.")
+        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
     if "root" not in current_user.get("roles", []) and target.get("team_id") != live_team_id(
         current_user
     ):
@@ -46,8 +48,13 @@ def create_user(data: UserRequest, current_user: dict = Depends(require_admin)):
     if not can_grant_roles(current_user.get("roles", []), data.roles or ["member"]):
         raise HTTPException(status_code=403, detail="You cannot assign roles higher than your own.")
     roles = data.roles or ["member"]
+    # Accounts the portal creates are stored lowercase, so every new row has one canonical
+    # form and lookups can never match two rows. Legacy rows written with other casing
+    # (seeded `Admin`, Zabbix-synced logins) are left alone — the case-insensitive lookup
+    # in um.get_user_by_username still resolves those.
+    username = data.username.strip().lower()
     result = um.create_user(
-        data.username,
+        username,
         hash_password(data.password),
         data.email or "",
         roles,
@@ -58,7 +65,7 @@ def create_user(data: UserRequest, current_user: dict = Depends(require_admin)):
             status_code=400, detail="Failed to create user. Username may already exist."
         )
     team_name = um.get_team_name(data.team_id) if data.team_id else None
-    sync_bot.push_user(data.username, data.password, roles, team_name)
+    sync_bot.push_user(username, data.password, roles, team_name)
     return result
 
 
@@ -72,7 +79,7 @@ def change_password(
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters long.")
     target = um.get_user_by_id(user_id)
     if not target:
-        raise HTTPException(status_code=404, detail="User not found.")
+        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
     if "root" not in current_user.get("roles", []) and target.get("team_id") != live_team_id(
         current_user
     ):
@@ -90,12 +97,12 @@ def change_password(
 def delete_user(user_id: int, current_user: dict = Depends(require_admin)):
     target = um.get_user_by_id(user_id)
     if not target:
-        raise HTTPException(status_code=404, detail="User not found.")
+        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
     if "root" not in current_user.get("roles", []) and target.get("team_id") != live_team_id(
         current_user
     ):
         raise HTTPException(status_code=403, detail="You can only delete users in your own team.")
     if not um.delete_user(user_id):
-        raise HTTPException(status_code=404, detail="User not found.")
+        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
     sync_bot.delete_user(target["username"])
     return {"message": "User deleted."}

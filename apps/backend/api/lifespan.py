@@ -121,14 +121,25 @@ async def lifespan(app: FastAPI):
     init_db()
     install_notify_triggers()
     um.seed_root()
-    # Zabbix user/team bootstrap
-    sync_bot.pull_users()
-    sync_bot.bootstrap_teams()
     # SSE event-loop reference
     _event_loop = asyncio.get_running_loop()
-    # Background threads run in exactly one worker (whichever acquires the lock first).
-    # Other workers handle HTTP requests only.
+    # Zabbix user/team bootstrap + background threads run in exactly one worker
+    # (whichever acquires the lock first). Other workers handle HTTP requests only.
+    #
+    # pull_users()/bootstrap_teams() used to run unconditionally on every worker.
+    # bootstrap_teams() iterates every team's host assignments and calls
+    # push_host_to_team() for each — which does a read-then-write (check Zabbix's
+    # current group membership, then INSERT into hosts_groups if missing). With
+    # --workers 4, all four workers ran this at once: two workers could both read
+    # "not yet a member" before either's INSERT committed, so the first INSERT
+    # succeeded and the second hit Zabbix's own hosts_groups uniqueness check and
+    # failed with a duplicate-key-style APIRequestError — logged right after the
+    # very same host+team pair had just been logged as successfully added. Gating
+    # this the same way as the threads below eliminates the redundant concurrent
+    # calls entirely, rather than trying to make every push_* method race-safe.
     if _acquire_bg_lock():
+        sync_bot.pull_users()
+        sync_bot.bootstrap_teams()
         alert_t = _start_alert_thread()
         logger.info("Alert checker started (%s s interval) [bg worker].", _ALERT_CHECK_INTERVAL)
         sync_bot._on_sync = notify_sync_clients
@@ -145,7 +156,9 @@ async def lifespan(app: FastAPI):
         threading.Thread(target=_watchdog_loop, daemon=True, name="thread-watchdog").start()
         logger.info("Thread watchdog started.")
     else:
-        logger.info("Background threads already running in another worker — skipping.")
+        logger.info(
+            "Zabbix bootstrap and background threads already running in another worker — skipping."
+        )
     # Backfill host tags for assignments made before tagging was introduced
     _sync_tags()
 

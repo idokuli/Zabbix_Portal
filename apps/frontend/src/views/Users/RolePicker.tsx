@@ -63,7 +63,6 @@ export const RolePicker = ({
               gap: 1.5,
               px: 1.5,
               py: 1,
-              borderRadius: 2,
               cursor: "pointer",
               border: `1px solid ${checked ? `${r.color}55` : "rgba(148,163,184,0.2)"}`,
               backgroundColor: checked ? `${r.color}12` : "transparent",

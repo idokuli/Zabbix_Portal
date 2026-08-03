@@ -223,7 +223,7 @@ push-image-tags:
         ok "This environment auto-syncs — no further action needed."
       else
         echo ""
-        echo "⚠️  REMINDER: this environment does NOT auto-sync."
+        echo "   REMINDER: this environment does NOT auto-sync."
         echo "   The upsert above only applied the Application definition — it did not deploy anything."
         echo "   Review the diff in ArgoCD, then sync it yourself:"
         echo "     argocd app sync ${APP_NAME}"

@@ -87,7 +87,7 @@ export const EditTriggerDialog = ({
                   fontSize: "0.72rem",
                   textTransform: "none",
                   borderColor: s.color,
-                  color: editSeverity === s.severity ? "#fff" : s.color,
+                  color: editSeverity === s.severity ? "#1C2128" : s.color,
                   bgcolor: editSeverity === s.severity ? s.color : "transparent",
                   "&:hover": {
                     bgcolor: editSeverity === s.severity ? s.color : `${s.color}18`,
@@ -109,6 +109,7 @@ export const EditTriggerDialog = ({
         />
 
         <TextField
+          slotProps={{ input: { sx: { fontFamily: "monospace", fontSize: "0.8rem" } } }}
           size="small"
           fullWidth
           label="Expression"
@@ -116,7 +117,6 @@ export const EditTriggerDialog = ({
           onChange={(e) => setEditExpression(e.target.value)}
           multiline
           minRows={2}
-          InputProps={{ sx: { fontFamily: "monospace", fontSize: "0.8rem" } }}
           helperText="Edit with care — must be a valid Zabbix trigger expression."
         />
 

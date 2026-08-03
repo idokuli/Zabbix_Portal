@@ -13,15 +13,18 @@ export const AVAIL_CONFIG: Record<
   string,
   { bg: string; border: string; text: string; label: string }
 > = {
-  "1": { bg: "#2EA043", border: "#2EA043", text: "#fff", label: "Available" },
-  "2": { bg: "#D1383D", border: "#D1383D", text: "#fff", label: "Unavailable" },
-  "0": { bg: "transparent", border: "#6E7681", text: "#7D8590", label: "Unknown" },
+  "1": { bg: "#1A7F37", border: "#2EA043", text: "#fff", label: "Available" },
+  "2": { bg: "#A40E26", border: "#D1383D", text: "#fff", label: "Unavailable" },
+  "0": { bg: "#3A414D", border: "#6E7681", text: "#E2E4E8", label: "Unknown" },
 };
 
+// State badge — solid fill, high-contrast. Reserved for health/status
+// signals (Availability, Enabled/Disabled). Metadata (proxy, tags) uses the
+// separate outlined chip language instead — two clear tiers, not four.
 export const AvailabilityCell = ({ interfaces }: { interfaces?: HostInterface[] }) => {
   if (!interfaces || interfaces.length === 0) {
     return (
-      <Typography variant="caption" color="text.disabled">
+      <Typography variant="caption" color="text.secondary">
         —
       </Typography>
     );
@@ -38,15 +41,14 @@ export const AvailabilityCell = ({ interfaces }: { interfaces?: HostInterface[] 
           justifyContent: "center",
           px: 1,
           py: 0.3,
-          borderRadius: "4px",
-          border: `1.5px solid ${avail.border}`,
+          border: `1px solid ${avail.border}`,
           bgcolor: avail.bg,
           cursor: "default",
           userSelect: "none",
         }}
       >
         <Typography
-          sx={{ fontSize: "0.65rem", fontWeight: 600, color: avail.text, letterSpacing: "0.06em" }}
+          sx={{ fontSize: "0.65rem", fontWeight: 700, color: avail.text, letterSpacing: "0.06em" }}
         >
           {badge}
         </Typography>
@@ -58,7 +60,7 @@ export const AvailabilityCell = ({ interfaces }: { interfaces?: HostInterface[] 
 export const ProblemsCell = ({ count }: { count?: number }) => {
   if (!count) {
     return (
-      <Typography variant="caption" color="text.disabled" sx={{ fontSize: "0.75rem" }}>
+      <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.75rem" }}>
         —
       </Typography>
     );

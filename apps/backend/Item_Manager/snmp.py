@@ -3,6 +3,7 @@
 import logging
 from Zabbix_Base import zabbix_err
 from typing import TYPE_CHECKING
+from api.schemas.items import SnmpItemRequest
 
 if TYPE_CHECKING:
     from zabbix_utils import ZabbixAPI
@@ -43,31 +44,81 @@ class SnmpItemsMixin:
             kwargs["snmpv3_contextname"] = contextname
         return kwargs
 
-    def add_snmp_item(
+    @staticmethod
+    def _snmp_item_key(snmp_oid: str) -> str:
+        safe = snmp_oid.replace(".", "_").replace(" ", "_")[:40]
+        return f"snmp.{safe}"
+
+    def _snmp_version_kwargs(
         self,
-        hostname: str,
-        item_name: str,
-        item_key: str,
-        snmp_oid: str,
-        value_type: int = 3,
-        snmp_version: int = 2,  # 1=v1, 2=v2c, 3=v3
-        snmp_community: str = "public",
-        snmpv3_securityname: str = "",
-        snmpv3_securitylevel: int = 0,  # 0=noAuthNoPriv, 1=authNoPriv, 2=authPriv
-        snmpv3_authprotocol: int = 0,  # 0=MD5,1=SHA,2=SHA224,3=SHA256,4=SHA384,5=SHA512
-        snmpv3_authpassphrase: str = "",
-        snmpv3_privprotocol: int = 0,  # 0=DES,1=AES128,2=AES192,3=AES256
-        snmpv3_privpassphrase: str = "",
-        snmpv3_contextname: str = "",
-        team_name: str = "",
-        delay: str = "1m",
-        units: str = "",
-        history: str = "31d",
-        trends: str = "365d",
-        description: str = "",
-        status: int = 0,
+        snmp_version: int,
+        snmp_community: str,
+        snmpv3_securityname: str,
+        snmpv3_securitylevel: int,
+        snmpv3_authprotocol: int,
+        snmpv3_authpassphrase: str,
+        snmpv3_privprotocol: int,
+        snmpv3_privpassphrase: str,
+        snmpv3_contextname: str,
+    ) -> dict:
+        """Build the version-specific SNMP fields (community for v1/v2c, snmpv3_* for v3)."""
+        if snmp_version in (1, 2):
+            return {"snmp_community": snmp_community or "public"}
+        if snmp_version == 3:
+            return self._snmpv3_kwargs(
+                snmpv3_securityname,
+                snmpv3_securitylevel,
+                snmpv3_authprotocol,
+                snmpv3_authpassphrase,
+                snmpv3_privprotocol,
+                snmpv3_privpassphrase,
+                snmpv3_contextname,
+            )
+        return {}
+
+    @staticmethod
+    def _optional_item_kwargs(units: str, description: str, team_name: str) -> dict:
+        kwargs: dict = {}
+        if units:
+            kwargs["units"] = units
+        if description:
+            kwargs["description"] = description
+        if team_name:
+            kwargs["tags"] = [{"tag": "team", "value": team_name}]
+        return kwargs
+
+    @staticmethod
+    def _pick_snmp_interface(interfaces: list[dict]) -> dict | None:
+        """Prefer a host's SNMP interface (Zabbix type 2); fall back to the first
+        interface if the host has none of that type, or None if it has no interfaces."""
+        snmp_iface = next((i for i in interfaces if str(i.get("type")) == "2"), None)
+        return snmp_iface or (interfaces[0] if interfaces else None)
+
+    def add_snmp_item(
+        self, request: SnmpItemRequest, team_name: str = ""
     ) -> tuple[str | None, str | None]:
         """Add a Zabbix SNMP agent item (type 20). Requires an SNMP interface on the host."""
+        hostname = request.hostname
+        item_name = request.item_name
+        item_key = request.item_key
+        snmp_oid = request.snmp_oid
+        value_type = request.value_type
+        snmp_version = request.snmp_version
+        snmp_community = request.snmp_community
+        snmpv3_securityname = request.snmpv3_securityname
+        snmpv3_securitylevel = request.snmpv3_securitylevel
+        snmpv3_authprotocol = request.snmpv3_authprotocol
+        snmpv3_authpassphrase = request.snmpv3_authpassphrase
+        snmpv3_privprotocol = request.snmpv3_privprotocol
+        snmpv3_privpassphrase = request.snmpv3_privpassphrase
+        snmpv3_contextname = request.snmpv3_contextname
+        delay = request.delay
+        units = request.units
+        history = request.history
+        trends = request.trends
+        description = request.description
+        status = request.status
+
         if not self.zapi:
             return None, "Zabbix API not connected."
         if not snmp_oid:
@@ -77,18 +128,12 @@ class SnmpItemsMixin:
             if not host_data:
                 return None, f"Host '{hostname}' not found."
             host_id = host_data[0]["hostid"]
-            # Look for SNMP interface (type 2)
             interfaces = self.zapi.hostinterface.get(hostids=host_id)
-            snmp_iface = next((i for i in interfaces if str(i.get("type")) == "2"), None)
-            if not snmp_iface:
-                snmp_iface = interfaces[0] if interfaces else None
+            snmp_iface = self._pick_snmp_interface(interfaces)
             if not snmp_iface:
                 return None, f"No interface found for host '{hostname}'."
-            if not item_name:
-                item_name = f"SNMP: {snmp_oid} on {hostname}"
-            if not item_key:
-                safe = snmp_oid.replace(".", "_").replace(" ", "_")[:40]
-                item_key = f"snmp.{safe}"
+            item_name = item_name or f"SNMP: {snmp_oid} on {hostname}"
+            item_key = item_key or self._snmp_item_key(snmp_oid)
             kwargs: dict = dict(
                 name=item_name,
                 key_=item_key,
@@ -103,26 +148,20 @@ class SnmpItemsMixin:
                 status=status,
                 snmp_version=snmp_version,  # required by Zabbix 5.4+ unified SNMP type
             )
-            if snmp_version in (1, 2):
-                kwargs["snmp_community"] = snmp_community or "public"
-            if snmp_version == 3:
-                kwargs.update(
-                    self._snmpv3_kwargs(
-                        snmpv3_securityname,
-                        snmpv3_securitylevel,
-                        snmpv3_authprotocol,
-                        snmpv3_authpassphrase,
-                        snmpv3_privprotocol,
-                        snmpv3_privpassphrase,
-                        snmpv3_contextname,
-                    )
+            kwargs.update(
+                self._snmp_version_kwargs(
+                    snmp_version,
+                    snmp_community,
+                    snmpv3_securityname,
+                    snmpv3_securitylevel,
+                    snmpv3_authprotocol,
+                    snmpv3_authpassphrase,
+                    snmpv3_privprotocol,
+                    snmpv3_privpassphrase,
+                    snmpv3_contextname,
                 )
-            if units:
-                kwargs["units"] = units
-            if description:
-                kwargs["description"] = description
-            if team_name:
-                kwargs["tags"] = [{"tag": "team", "value": team_name}]
+            )
+            kwargs.update(self._optional_item_kwargs(units, description, team_name))
             result = self.zapi.item.create(**kwargs)
             item_id = result["itemids"][0]
             logger.info(

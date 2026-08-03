@@ -4,6 +4,8 @@ from api.managers import dc_bot
 
 router = APIRouter(tags=["DataCollection"])
 
+_NAME_REQUIRED = "Name is required."
+
 
 @router.get("/dc/template-groups", tags=["DataCollection"], summary="List template groups")
 def list_template_groups(current_user: dict = Depends(get_current_user)):
@@ -19,7 +21,7 @@ def list_template_groups(current_user: dict = Depends(get_current_user)):
 def create_template_group(body: dict = Body(...), current_user: dict = Depends(require_admin)):
     name = (body.get("name") or "").strip()
     if not name:
-        raise HTTPException(status_code=400, detail="Name is required.")
+        raise HTTPException(status_code=400, detail=_NAME_REQUIRED)
     gid, err = dc_bot.create_template_group(name)
     if err:
         raise HTTPException(status_code=400, detail=err)
@@ -36,7 +38,7 @@ def update_template_group(
 ):
     name = (body.get("name") or "").strip()
     if not name:
-        raise HTTPException(status_code=400, detail="Name is required.")
+        raise HTTPException(status_code=400, detail=_NAME_REQUIRED)
     if not dc_bot.update_template_group(groupid, name):
         raise HTTPException(status_code=400, detail="Failed to update template group.")
     return {"message": "Template group updated."}
@@ -95,7 +97,7 @@ def list_host_groups(current_user: dict = Depends(get_current_user)):
 def create_host_group(body: dict = Body(...), current_user: dict = Depends(require_admin)):
     name = (body.get("name") or "").strip()
     if not name:
-        raise HTTPException(status_code=400, detail="Name is required.")
+        raise HTTPException(status_code=400, detail=_NAME_REQUIRED)
     gid, err = dc_bot.create_host_group(name)
     if err:
         raise HTTPException(status_code=400, detail=err)
@@ -108,7 +110,7 @@ def update_host_group(
 ):
     name = (body.get("name") or "").strip()
     if not name:
-        raise HTTPException(status_code=400, detail="Name is required.")
+        raise HTTPException(status_code=400, detail=_NAME_REQUIRED)
     if not dc_bot.update_host_group(groupid, name):
         raise HTTPException(status_code=400, detail="Failed to update host group.")
     return {"message": "Host group updated."}
@@ -139,8 +141,9 @@ def set_host_group_members(
     groupid: str, body: dict = Body(...), current_user: dict = Depends(require_admin)
 ):
     hostids = body.get("hostids", [])
-    if not dc_bot.set_host_group_members(groupid, hostids):
-        raise HTTPException(status_code=400, detail="Failed to update host group members.")
+    ok, err = dc_bot.set_host_group_members(groupid, hostids)
+    if not ok:
+        raise HTTPException(status_code=400, detail=err or "Failed to update host group members.")
     return {"ok": True}
 
 
@@ -160,7 +163,7 @@ def create_dc_template(body: dict = Body(...), current_user: dict = Depends(requ
     name = (body.get("name") or "").strip()
     group_ids = body.get("group_ids") or []
     if not name:
-        raise HTTPException(status_code=400, detail="Name is required.")
+        raise HTTPException(status_code=400, detail=_NAME_REQUIRED)
     tid, err = dc_bot.create_template(
         name,
         group_ids,
@@ -226,7 +229,7 @@ def list_maintenances(current_user: dict = Depends(get_current_user)):
 def create_maintenance(body: dict = Body(...), current_user: dict = Depends(require_admin)):
     name = (body.get("name") or "").strip()
     if not name:
-        raise HTTPException(status_code=400, detail="Name is required.")
+        raise HTTPException(status_code=400, detail=_NAME_REQUIRED)
     mid, err = dc_bot.create_maintenance(
         name=name,
         maintenance_type=int(body.get("maintenance_type", 0)),
@@ -271,7 +274,7 @@ def list_correlations(current_user: dict = Depends(get_current_user)):
 def create_correlation(body: dict = Body(...), current_user: dict = Depends(require_admin)):
     name = (body.get("name") or "").strip()
     if not name:
-        raise HTTPException(status_code=400, detail="Name is required.")
+        raise HTTPException(status_code=400, detail=_NAME_REQUIRED)
     cid, err = dc_bot.create_correlation(
         name=name,
         description=body.get("description", ""),
@@ -315,7 +318,7 @@ def list_discovery_rules(current_user: dict = Depends(get_current_user)):
 def create_discovery_rule(body: dict = Body(...), current_user: dict = Depends(require_admin)):
     name = (body.get("name") or "").strip()
     if not name:
-        raise HTTPException(status_code=400, detail="Name is required.")
+        raise HTTPException(status_code=400, detail=_NAME_REQUIRED)
     rid, err = dc_bot.create_discovery_rule(
         name=name,
         iprange=body.get("iprange", ""),

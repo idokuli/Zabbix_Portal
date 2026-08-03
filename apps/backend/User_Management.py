@@ -75,6 +75,22 @@ def create_user(
     conn = get_conn()
     try:
         with conn.cursor() as cur:
+            # Case-insensitive duplicate guard. The table's UNIQUE(username) constraint is
+            # case-SENSITIVE, so it would happily accept `shift_user` alongside an existing
+            # `Shift_User` — and get_user_by_username() matches on LOWER(), so both rows
+            # would then match one login and Postgres would hand back an arbitrary one.
+            # (Small TOCTOU window remains; the UNIQUE constraint still catches exact races.)
+            cur.execute(
+                "SELECT 1 FROM team_users WHERE LOWER(username) = LOWER(%s)",
+                (username,),
+            )
+            if cur.fetchone():
+                logger.warning(
+                    "create_user(%r) rejected: a user with that name already exists "
+                    "(case-insensitive match).",
+                    username,
+                )
+                return None
             cur.execute(
                 """INSERT INTO team_users (username, email, roles, team_id, password_hash, source, display_name)
                    VALUES (%s, %s, %s, %s, %s, %s, %s)
@@ -99,14 +115,49 @@ def create_user(
 
 
 def get_user_by_username(username: str) -> dict | None:
+    """Look a user up by name, case-insensitively.
+
+    LDAP/AD treats usernames case-insensitively, and rows already in this table
+    were written with whatever casing their source used (`seed_root()` stores
+    `Admin`, Zabbix sync stores the Zabbix login verbatim). Matching on
+    LOWER(username) means every one of those still resolves, so a user typing
+    `ADMIN`, `Admin`, or `admin` reaches the same account either way.
+    Seq-scans the table rather than using the username index — fine here, this
+    table holds portal users (hundreds at most), not events.
+
+    A database written before the case-insensitive guard existed may still hold
+    genuine duplicate pairs (e.g. `IdOkUlI` and `idokuli` as separate rows), where
+    LOWER() matches more than one. The ORDER BY makes that case deterministic
+    instead of leaving it to the query plan: an exact-case match always wins, and
+    ties break on the lowest (oldest) id, so a given login always lands on the same
+    account. Run scripts/find_duplicate_usernames.py to find and clean up such pairs.
+    """
     conn = get_conn()
     try:
         with conn.cursor() as cur:
+            # LIMIT 2, not 1: fetching one extra row costs nothing and is the only way
+            # to notice that this login is ambiguous. Silently resolving a name that
+            # maps to several accounts is how someone ends up with the wrong roles
+            # without anyone finding out, so surface it loudly instead.
             cur.execute(
-                "SELECT id, username, email, roles, team_id, password_hash, source, display_name FROM team_users WHERE username = %s",
-                (username,),
+                """SELECT id, username, email, roles, team_id, password_hash, source, display_name
+                   FROM team_users
+                   WHERE LOWER(username) = LOWER(%s)
+                   ORDER BY (username = %s) DESC, id ASC
+                   LIMIT 2""",
+                (username, username),
             )
-            row = cur.fetchone()
+            rows = cur.fetchall()
+            if len(rows) > 1:
+                logger.warning(
+                    "Username %r matches multiple accounts (ids %s) — resolving to id=%s. "
+                    "Run scripts/find_duplicate_usernames.py and merge these accounts; "
+                    "until then the roles a person gets depend on which row wins.",
+                    username,
+                    [r["id"] for r in rows],
+                    rows[0]["id"],
+                )
+            row = rows[0] if rows else None
             return dict(row) if row else None
     except Exception:
         logger.exception("get_user_by_username failed")
@@ -603,7 +654,7 @@ def save_dashboard_layout(
 
 
 def list_dashboard_pages(owner_type: str, owner_id: int, kind: str) -> list[dict]:
-    pages = [{"page": kind, "name": "Default", "is_default": True}]
+    default_pages = [{"page": kind, "name": "Default", "is_default": True}]
     conn = get_conn()
     try:
         with conn.cursor() as cur:
@@ -614,11 +665,12 @@ def list_dashboard_pages(owner_type: str, owner_id: int, kind: str) -> list[dict
                 (owner_type, owner_id, kind),
             )
             rows = cur.fetchall()
-        pages.extend({"page": r["page_key"], "name": r["name"], "is_default": False} for r in rows)
-        return pages
+        return default_pages + [
+            {"page": r["page_key"], "name": r["name"], "is_default": False} for r in rows
+        ]
     except Exception:
         logger.exception("list_dashboard_pages failed")
-        return pages
+        return default_pages
     finally:
         conn.close()
 

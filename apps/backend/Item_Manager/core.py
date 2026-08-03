@@ -9,6 +9,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_ZABBIX_NOT_CONNECTED = "Zabbix API not connected."
+
 
 class CoreItemsMixin:
     """Mixed into Item_Manager. Assumes `self.zapi`/`self._invalidate`/`self._cached` from Zabbix_Base."""
@@ -44,7 +46,7 @@ class CoreItemsMixin:
         Returns (item_id, error_message). item_id is None on failure.
         """
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
 
         try:
             host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
@@ -190,7 +192,7 @@ class CoreItemsMixin:
         limit: int = 2000,
     ) -> list[dict]:
         if not self.zapi:
-            raise RuntimeError("Zabbix API not connected.")
+            raise RuntimeError(_ZABBIX_NOT_CONNECTED)
         # Fetch more than the requested limit so we can sort custom items first
         # then truncate — avoids template items crowding out user-created ones.
         fetch_limit = min(limit * 3, 5000)
@@ -359,7 +361,7 @@ class CoreItemsMixin:
     ) -> tuple[str | None, str | None]:
         """Add a generic item directly to a template. Templates have no interfaces."""
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         try:
             kwargs: dict = dict(
                 name=name,

@@ -33,7 +33,6 @@ export const WidgetCard = ({
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        borderRadius: 2,
         overflow: "hidden",
         border: "1px solid",
         borderColor: "divider",

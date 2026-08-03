@@ -18,7 +18,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useEffect, useState } from "react";
-import { type DashboardGraph, type Host, type WidgetConfig, api } from "../../app/api";
+import { api, type DashboardGraph, type Host, type WidgetConfig } from "../../app/api";
 import { SearchableSelect } from "../../components/SearchableSelect";
 
 const PRESET_COLORS = [
@@ -114,7 +114,7 @@ export const GraphConfigDialog = ({
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <Typography fontWeight={700}>Configure Graph</Typography>
+        <Typography sx={{ fontWeight: 700 }}>Configure Graph</Typography>
         <IconButton size="small" onClick={onClose}>
           <CloseIcon fontSize="small" />
         </IconButton>

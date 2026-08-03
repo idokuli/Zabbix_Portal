@@ -3,11 +3,14 @@
 import logging
 import re
 from typing import TYPE_CHECKING
+from api.schemas.items import HttpItemRequest
 
 if TYPE_CHECKING:
     from zabbix_utils import ZabbixAPI
 
 logger = logging.getLogger(__name__)
+
+_ZABBIX_NOT_CONNECTED = "Zabbix API not connected."
 
 
 class HttpServiceItemsMixin:
@@ -55,104 +58,81 @@ class HttpServiceItemsMixin:
     }
 
     @staticmethod
-    def _http_extra_kwargs(
-        *,
-        units: str,
-        description: str,
-        posts: str,
-        post_type: int,
-        headers: str,
-        http_proxy: str,
-        ssl_cert_file: str,
-        ssl_key_file: str,
-        ssl_key_password: str,
-        authtype: int,
-        username: str,
-        password: str,
-        team_name: str,
-        regex_preprocessing: bool,
-        regex_pattern: str,
-        regex_output: str,
-        regex_no_match_value: str,
-    ) -> dict:
+    def _http_extra_kwargs(request: HttpItemRequest, team_name: str) -> dict:
         """Build the optional HTTP-agent-item fields that are only sent when set."""
         kwargs: dict = {}
-        if units:
-            kwargs["units"] = units
-        if description:
-            kwargs["description"] = description
-        if posts:
-            kwargs["posts"] = posts
-            kwargs["post_type"] = post_type
-        if headers:
-            kwargs["headers"] = headers
-        if http_proxy:
-            kwargs["http_proxy"] = http_proxy
-        if ssl_cert_file:
-            kwargs["ssl_cert_file"] = ssl_cert_file
-        if ssl_key_file:
-            kwargs["ssl_key_file"] = ssl_key_file
-            if ssl_key_password:
-                kwargs["ssl_key_password"] = ssl_key_password
-        if authtype:
-            kwargs["authtype"] = authtype
-            kwargs["username"] = username
-            kwargs["password"] = password
+        if request.units:
+            kwargs["units"] = request.units
+        if request.description:
+            kwargs["description"] = request.description
+        if request.posts:
+            kwargs["posts"] = request.posts
+            kwargs["post_type"] = request.post_type
+        if request.headers:
+            kwargs["headers"] = request.headers
+        if request.http_proxy:
+            kwargs["http_proxy"] = request.http_proxy
+        if request.ssl_cert_file:
+            kwargs["ssl_cert_file"] = request.ssl_cert_file
+        if request.ssl_key_file:
+            kwargs["ssl_key_file"] = request.ssl_key_file
+            if request.ssl_key_password:
+                kwargs["ssl_key_password"] = request.ssl_key_password
+        if request.authtype:
+            kwargs["authtype"] = request.authtype
+            kwargs["username"] = request.username
+            kwargs["password"] = request.password
         if team_name:
             kwargs["tags"] = [{"tag": "team", "value": team_name}]
-        if regex_preprocessing and regex_pattern:
+        if request.regex_preprocessing and request.regex_pattern:
             kwargs["preprocessing"] = [
                 {
                     "type": 5,  # Regular expression
-                    "params": f"{regex_pattern}\n{regex_output}",
+                    "params": f"{request.regex_pattern}\n{request.regex_output}",
                     "error_handler": 2,  # Custom value on error (no match)
-                    "error_handler_params": regex_no_match_value,
+                    "error_handler_params": request.regex_no_match_value,
                 }
             ]
         return kwargs
 
+    @staticmethod
+    def _http_item_url(url: str, query_fields: list) -> str:
+        """Append query_fields (HttpQueryField list) to url as URL query params, if any."""
+        if not query_fields:
+            return url
+        from urllib.parse import urlencode
+
+        pairs = [(qf.name, qf.value) for qf in query_fields if qf.name]
+        if not pairs:
+            return url
+        sep = "&" if "?" in url else "?"
+        return url + sep + urlencode(pairs)
+
     def add_http_item(
-        self,
-        hostname: str,
-        item_name: str,
-        url: str,
-        item_key: str = "",
-        request_method: int = 0,  # 0=GET 1=POST 2=PUT 3=HEAD
-        status_codes: str = "200",
-        timeout: str = "15s",
-        verify_peer: bool = True,
-        verify_host: bool = True,
-        follow_redirects: bool = True,
-        posts: str = "",
-        post_type: int = 0,  # 0=Raw 2=JSON 3=XML
-        value_type: int = 4,  # 0=float (response time), 4=text (response body)
-        retrieve_mode: int = 0,  # 0=body 1=headers 2=body+headers
-        team_name: str = "",
-        authtype: int = 0,  # 0=None, 1=Basic, 2=NTLM
-        username: str = "",
-        password: str = "",
-        headers: str = "",  # newline-separated "Name: Value" pairs
-        query_fields: list[dict] | None = None,  # [{name, value}] appended as URL params
-        http_proxy: str = "",
-        ssl_cert_file: str = "",
-        ssl_key_file: str = "",
-        ssl_key_password: str = "",
-        convert_to_json: bool = False,  # output_format=1 in Zabbix
-        allow_traps: bool = False,
-        status: int = 0,  # 0=enabled 1=disabled
-        regex_preprocessing: bool = False,
-        regex_pattern: str = "",
-        regex_output: str = "\\1",
-        regex_no_match_value: str = "0",
-        delay: str = "1m",
-        units: str = "",
-        history: str = "31d",
-        trends: str = "365d",
-        description: str = "",
+        self, request: HttpItemRequest, team_name: str = ""
     ) -> tuple[str | None, str | None]:
         """Add an HTTP agent item (Zabbix type 19). The Zabbix server fetches the URL."""
+        hostname = request.hostname
+        item_name = request.item_name
+        url = request.url
+        item_key = request.item_key
+        request_method = request.request_method
+        status_codes = request.status_codes
+        timeout = request.timeout
+        verify_peer = request.verify_peer
+        verify_host = request.verify_host
+        follow_redirects = request.follow_redirects
+        value_type = request.value_type
+        retrieve_mode = request.retrieve_mode
+        convert_to_json = request.convert_to_json
+        allow_traps = request.allow_traps
+        status = request.status
+        delay = request.delay
+        history = request.history
+        trends = request.trends
+
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         try:
             host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
@@ -163,15 +143,7 @@ class HttpServiceItemsMixin:
                 safe = re.sub(r"[^a-zA-Z0-9._-]", "_", url)[:60]
                 item_key = f"http.check[{safe}]"
 
-            # Append query fields to URL if provided
-            effective_url = url
-            if query_fields:
-                from urllib.parse import urlencode
-
-                pairs = [(qf["name"], qf["value"]) for qf in query_fields if qf.get("name")]
-                if pairs:
-                    sep = "&" if "?" in effective_url else "?"
-                    effective_url = effective_url + sep + urlencode(pairs)
+            effective_url = self._http_item_url(url, request.query_fields)
 
             kwargs: dict = dict(
                 name=item_name,
@@ -186,36 +158,16 @@ class HttpServiceItemsMixin:
                 request_method=request_method,
                 status_codes=status_codes,
                 timeout=timeout,
-                verify_peer=1 if verify_peer else 0,
-                verify_host=1 if verify_host else 0,
-                follow_redirects=1 if follow_redirects else 0,
+                verify_peer=int(verify_peer),
+                verify_host=int(verify_host),
+                follow_redirects=int(follow_redirects),
                 retrieve_mode=retrieve_mode,
-                output_format=1 if convert_to_json else 0,
-                allow_traps=1 if allow_traps else 0,
+                output_format=int(convert_to_json),
+                allow_traps=int(allow_traps),
                 status=status,
                 interfaceid=0,  # HTTP agent does not require a host interface
             )
-            kwargs.update(
-                self._http_extra_kwargs(
-                    units=units,
-                    description=description,
-                    posts=posts,
-                    post_type=post_type,
-                    headers=headers,
-                    http_proxy=http_proxy,
-                    ssl_cert_file=ssl_cert_file,
-                    ssl_key_file=ssl_key_file,
-                    ssl_key_password=ssl_key_password,
-                    authtype=authtype,
-                    username=username,
-                    password=password,
-                    team_name=team_name,
-                    regex_preprocessing=regex_preprocessing,
-                    regex_pattern=regex_pattern,
-                    regex_output=regex_output,
-                    regex_no_match_value=regex_no_match_value,
-                )
-            )
+            kwargs.update(self._http_extra_kwargs(request, team_name))
 
             result = self.zapi.item.create(**kwargs)
             item_id = result["itemids"][0]
@@ -250,7 +202,7 @@ class HttpServiceItemsMixin:
         if service_type not in self._SERVICE_MAP:
             return None, f"Unknown service type '{service_type}'."
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         try:
             host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
@@ -323,7 +275,7 @@ class HttpServiceItemsMixin:
         A trigger fires when the count drops to 0.
         """
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         try:
             host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
@@ -335,12 +287,7 @@ class HttpServiceItemsMixin:
                 return None, f"No interfaces found for host '{hostname}'."
             interface_id = self._pick_interface(interfaces, "1")["interfaceid"]
 
-            # Build proc.num key — trailing empty params are omitted
-            parts = [process_name, run_as_user, state, cmdline_regex]
-            # Strip trailing empty parts
-            while parts and not parts[-1]:
-                parts.pop()
-            item_key = f"proc.num[{','.join(parts)}]"
+            item_key = self._proc_num_key(process_name, run_as_user, state, cmdline_regex)
 
             if not item_name:
                 user_str = f" (user: {run_as_user})" if run_as_user else ""
@@ -367,26 +314,40 @@ class HttpServiceItemsMixin:
             logger.info("Process item %r added to %r (ID: %s).", item_name, hostname, item_id)
 
             if create_trigger:
-                trigger_name = f"{process_name} is not running on {hostname}"
-                if run_as_user:
-                    trigger_name = (
-                        f"{process_name} (user: {run_as_user}) is not running on {hostname}"
-                    )
-                _, te = self.add_trigger(
-                    hostname,
-                    item_key,
-                    trigger_name,
-                    threshold=0,
-                    operator="=",
-                    priority=trigger_priority,
+                self._create_process_down_trigger(
+                    hostname, item_key, process_name, run_as_user, trigger_priority
                 )
-                if te:
-                    logger.warning("add_process_item: trigger creation failed: %s", te)
 
             return item_id, None
         except Exception as e:
             logger.exception("add_process_item(%r, %r) failed", hostname, process_name)
             return None, str(e)
+
+    @staticmethod
+    def _proc_num_key(process_name: str, run_as_user: str, state: str, cmdline_regex: str) -> str:
+        """Build a proc.num[] item key, omitting trailing empty parameters."""
+        parts = [process_name, run_as_user, state, cmdline_regex]
+        while parts and not parts[-1]:
+            parts.pop()
+        return f"proc.num[{','.join(parts)}]"
+
+    def _create_process_down_trigger(
+        self,
+        hostname: str,
+        item_key: str,
+        process_name: str,
+        run_as_user: str,
+        priority: int,
+    ) -> None:
+        """Create the "process is not running" trigger for add_process_item."""
+        trigger_name = f"{process_name} is not running on {hostname}"
+        if run_as_user:
+            trigger_name = f"{process_name} (user: {run_as_user}) is not running on {hostname}"
+        _, te = self.add_trigger(
+            hostname, item_key, trigger_name, threshold=0, operator="=", priority=priority
+        )
+        if te:
+            logger.warning("add_process_item: trigger creation failed: %s", te)
 
     def add_windows_service_item(
         self,
@@ -407,7 +368,7 @@ class HttpServiceItemsMixin:
         Requires Zabbix agent on the Windows host.
         """
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         try:
             host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:

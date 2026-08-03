@@ -26,16 +26,17 @@ import {
   Tooltip as ChartTooltip,
   Filler,
   Legend,
-  LineElement,
   LinearScale,
+  LineElement,
   PointElement,
   Title,
 } from "chart.js";
 import ZoomPlugin from "chartjs-plugin-zoom";
 import { useCallback, useEffect, useState } from "react";
-import { type HostMetrics, api } from "../../app/api";
+import { api, type HostMetrics } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
+import { formatTime } from "../../app/datetime";
 
 ChartJS.register(
   CategoryScale,
@@ -80,10 +81,9 @@ const MetricBar = ({ value, label }: { value?: number; label: string }) => {
           value={Math.min(value, 100)}
           sx={{
             height: 4,
-            borderRadius: 2,
             mt: 0.25,
-            backgroundColor: "rgba(255,255,255,0.08)",
-            "& .MuiLinearProgress-bar": { backgroundColor: utilColor(value), borderRadius: 2 },
+            backgroundColor: "action.hover",
+            "& .MuiLinearProgress-bar": { backgroundColor: utilColor(value) },
           }}
         />
       </Box>
@@ -146,13 +146,7 @@ export const HostMetricsTab = () => {
         </Tooltip>
         {lastUpdated && (
           <Typography variant="caption" color="text.disabled" sx={{ fontSize: "0.7rem" }}>
-            Updated{" "}
-            {lastUpdated.toLocaleTimeString("en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-              second: "2-digit",
-              hour12: false,
-            })}
+            Updated {formatTime(lastUpdated)}
           </Typography>
         )}
         {!loading && (

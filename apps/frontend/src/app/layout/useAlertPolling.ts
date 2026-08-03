@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { isCustomId, playSoundById } from "../../lib/soundLibrary";
-import { type AlertEvent, type Problem, type StoredNotif, api } from "../api";
+import { type AlertEvent, api, type Problem, type StoredNotif } from "../api";
 import { playAlertSound } from "./alertSounds";
 
 const updateSeenProblemIds = (
@@ -219,14 +219,11 @@ export const useAlertPolling = ({
       }
     };
 
-    const delay = window.setTimeout(() => {
-      void poll();
-    }, 5_000);
+    void poll();
     const t = window.setInterval(poll, 10_000);
     window.addEventListener("problemAcknowledged", poll);
     return () => {
       cancelled = true;
-      window.clearTimeout(delay);
       window.clearInterval(t);
       window.removeEventListener("problemAcknowledged", poll);
     };

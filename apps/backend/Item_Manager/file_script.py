@@ -3,6 +3,7 @@
 import logging
 from typing import TYPE_CHECKING
 from collections.abc import Callable
+from api.schemas.items import ScriptItemRequest
 
 if TYPE_CHECKING:
     from zabbix_utils import ZabbixAPI
@@ -91,26 +92,26 @@ class FileScriptItemsMixin:
         )
 
     def add_script_item(
-        self,
-        hostname: str,
-        script_type: str,  # bash | powershell
-        script_mode: str,  # command | file
-        script: str,  # inline command or absolute script path on the host
-        file_arg: str = "",  # optional file path passed as first arg to the script
-        item_name: str = "",
-        value_type: int = 1,
-        team_name: str = "",
-        delay: str = "1m",
-        units: str = "",
-        history: str = "31d",
-        trends: str = "365d",
-        description: str = "",
-        status: int = 0,
-        timeout: str = "",
+        self, request: ScriptItemRequest, team_name: str = ""
     ) -> tuple[str | None, str | None]:
         """Add an agent item that runs a bash or PowerShell script via system.run[].
         Requires EnableRemoteCommands=1 in the Zabbix agent config on the target host.
         """
+        hostname = request.hostname
+        script_type = request.script_type
+        script_mode = request.script_mode
+        script = request.script
+        file_arg = request.file_arg
+        item_name = request.item_name
+        value_type = request.value_type
+        delay = request.delay
+        units = request.units
+        history = request.history
+        trends = request.trends
+        description = request.description
+        status = request.status
+        timeout = request.timeout
+
         if not self.zapi:
             return None, "Zabbix API not connected."
         if script_mode not in ("command", "file"):

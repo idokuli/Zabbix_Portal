@@ -1,5 +1,5 @@
 "use client";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import {
   Box,
   Button,
@@ -29,7 +29,6 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../app/api";
-import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { generateId } from "../../app/utils";
 import { ConfirmDelete, type Correlation, SectionHeader, StatusChip } from "./shared";
@@ -52,7 +51,9 @@ const newCondition = (): CorrCondition => ({ _key: generateId(), ...EMPTY_CONDIT
 
 export const CorrelationTab = ({
   showToast,
-}: { showToast: (m: string, s: "success" | "error") => void }) => {
+}: {
+  showToast: (m: string, s: "success" | "error") => void;
+}) => {
   const [items, setItems] = useState<Correlation[]>([]);
   const [loading, setLoading] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -143,12 +144,9 @@ export const CorrelationTab = ({
 
   return (
     <>
-      <TabHeader
-        title="Event Correlation"
-        description="Define conditions under which Zabbix correlates and closes related events."
-      />
       <SectionHeader
         title="Event Correlation"
+        description="Define conditions under which Zabbix correlates and closes related events."
         count={items.length}
         loading={loading}
         onRefresh={load}
@@ -157,7 +155,7 @@ export const CorrelationTab = ({
           setAddOpen(true);
         }}
       />
-      <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5 }}>
+      <TableContainer sx={{ border: "1px solid", borderColor: "divider" }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -263,7 +261,7 @@ export const CorrelationTab = ({
               <Typography variant="caption" sx={{ fontWeight: 600 }}>
                 Conditions
               </Typography>
-              <Stack direction="row" spacing={1} alignItems="center">
+              <Stack sx={{ alignItems: "center" }} direction="row" spacing={1}>
                 {conditions.length > 1 && (
                   <FormControl size="small" sx={{ minWidth: 80 }}>
                     <InputLabel sx={{ fontSize: "0.75rem" }}>Match</InputLabel>
@@ -289,12 +287,9 @@ export const CorrelationTab = ({
               </Stack>
             </Box>
             {conditions.map((cond, i) => (
-              <Box
-                key={cond._key}
-                sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, p: 1.5 }}
-              >
+              <Box key={cond._key} sx={{ border: "1px solid", borderColor: "divider", p: 1.5 }}>
                 <Stack spacing={1.5}>
-                  <Stack direction="row" spacing={1} alignItems="center">
+                  <Stack sx={{ alignItems: "center" }} direction="row" spacing={1}>
                     <FormControl size="small" sx={{ minWidth: 170 }}>
                       <InputLabel>Type</InputLabel>
                       <Select

@@ -1,6 +1,6 @@
 "use client";
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
-import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutlineOutlined";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutlineOutlined";
 import { Box, Divider, Stack, Typography } from "@mui/material";
 
 export const valueTypes = [
@@ -922,9 +922,7 @@ export const isItemStale = (item: AllItem): boolean => {
 export const BulkResults = ({ results, label }: { results: BulkResult[]; label: string }) => {
   const ok = results.filter((r) => !r.error).length;
   return (
-    <Box
-      sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5, overflow: "hidden" }}
-    >
+    <Box sx={{ border: "1px solid", borderColor: "divider", overflow: "hidden" }}>
       <Box
         sx={{
           px: 1.5,

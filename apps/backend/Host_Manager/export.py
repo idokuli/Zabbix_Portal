@@ -57,43 +57,40 @@ class HostExportMixin:
             hosts = [h for h in hosts if h["host"] in hostname_filter]
 
         proxy_map = self._build_proxy_map()
+        return [self._export_row_from_host(h, proxy_map) for h in hosts]
 
-        rows: list[list[str]] = []
-        for h in hosts:
-            interfaces = h.get("interfaces") or []
-            primary = next((i for i in interfaces if str(i.get("type")) == "1"), None) or (
-                interfaces[0] if interfaces else None
-            )
-            ip = primary["ip"] if primary else "N/A"
-            port = primary["port"] if primary else "N/A"
-            avail = (
-                self._AVAIL_LABEL.get(str(primary.get("available", "0")), "Unknown")
-                if primary
-                else "Unknown"
-            )
-            status = "Enabled" if h["status"] == "0" else "Disabled"
-            # proxyid is used in Zabbix 6.0+; proxy_hostid in older versions
-            pid = h.get("proxyid") or h.get("proxy_hostid") or "0"
-            proxy = proxy_map.get(pid, "") if pid and pid != "0" else "—"
-            groups = ", ".join(g["name"] for g in (h.get("groups") or []))
-            templates = ", ".join(t["name"] for t in (h.get("parentTemplates") or []))
-            description = (h.get("description") or "").strip()
-            rows.append(
-                [
-                    h["hostid"],
-                    h["host"],
-                    h["name"],
-                    status,
-                    avail,
-                    ip,
-                    port,
-                    proxy,
-                    groups,
-                    templates,
-                    description,
-                ]
-            )
-        return rows
+    def _export_row_from_host(self, h: dict, proxy_map: dict[str, str]) -> list[str]:
+        interfaces = h.get("interfaces") or []
+        primary = next((i for i in interfaces if str(i.get("type")) == "1"), None) or (
+            interfaces[0] if interfaces else None
+        )
+        ip = primary["ip"] if primary else "N/A"
+        port = primary["port"] if primary else "N/A"
+        avail = (
+            self._AVAIL_LABEL.get(str(primary.get("available", "0")), "Unknown")
+            if primary
+            else "Unknown"
+        )
+        status = "Enabled" if h["status"] == "0" else "Disabled"
+        # proxyid is used in Zabbix 6.0+; proxy_hostid in older versions
+        pid = h.get("proxyid") or h.get("proxy_hostid") or "0"
+        proxy = proxy_map.get(pid, "") if pid and pid != "0" else "—"
+        groups = ", ".join(g["name"] for g in (h.get("groups") or []))
+        templates = ", ".join(t["name"] for t in (h.get("parentTemplates") or []))
+        description = (h.get("description") or "").strip()
+        return [
+            h["hostid"],
+            h["host"],
+            h["name"],
+            status,
+            avail,
+            ip,
+            port,
+            proxy,
+            groups,
+            templates,
+            description,
+        ]
 
     def export_hosts_to_excel(self, file_path="zabbix_inventory.xlsx"):
         """Fetches all hosts and writes them to an Excel (.xlsx) file."""

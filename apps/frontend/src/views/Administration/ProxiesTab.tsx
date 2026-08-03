@@ -1,13 +1,11 @@
 "use client";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import {
-  Box,
   Button,
   Chip,
-  CircularProgress,
   IconButton,
   Stack,
   Table,
@@ -20,23 +18,25 @@ import {
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
-import { type ProxyConfig, api } from "../../app/api";
+import { api, type ProxyConfig } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import {
   ConfirmDelete,
   DEFAULT_PROXY_FORM,
+  fmtTs,
   // biome-ignore lint/suspicious/noShadowRestrictedNames: Zabbix domain type
   type Proxy,
   ProxyFormDialog,
   type ProxyGroup,
-  fmtTs,
   proxyFormFromExisting,
 } from "./shared";
 
 export const ProxiesTab = ({
   showToast,
-}: { showToast: (m: string, s: "success" | "error") => void }) => {
+}: {
+  showToast: (m: string, s: "success" | "error") => void;
+}) => {
   const [items, setItems] = useState<Proxy[]>([]);
   const [proxyGroups, setProxyGroups] = useState<ProxyGroup[]>([]);
   const [loading, setLoading] = useState(false);
@@ -125,39 +125,31 @@ export const ProxiesTab = ({
       <TabHeader
         title="Proxies"
         description="Manage Zabbix proxies, their connection mode, and assigned hosts."
+        count={items.length}
+        loading={loading}
+        actions={
+          <>
+            <Tooltip title="Refresh">
+              <IconButton size="small" onClick={() => void load()} disabled={loading}>
+                <RefreshIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+            <Button
+              size="small"
+              variant="contained"
+              color="secondary"
+              startIcon={<AddOutlinedIcon />}
+              onClick={() => {
+                setForm(DEFAULT_PROXY_FORM);
+                setAddOpen(true);
+              }}
+            >
+              Add
+            </Button>
+          </>
+        }
       />
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-            Proxies
-          </Typography>
-          {loading ? (
-            <CircularProgress size={14} />
-          ) : (
-            <Chip label={items.length} size="small" sx={{ height: 18, fontSize: "0.62rem" }} />
-          )}
-        </Box>
-        <Stack direction="row" spacing={1}>
-          <Tooltip title="Refresh">
-            <IconButton size="small" onClick={() => void load()} disabled={loading}>
-              <RefreshIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
-          <Button
-            size="small"
-            variant="contained"
-            color="secondary"
-            startIcon={<AddOutlinedIcon />}
-            onClick={() => {
-              setForm(DEFAULT_PROXY_FORM);
-              setAddOpen(true);
-            }}
-          >
-            Add
-          </Button>
-        </Stack>
-      </Box>
-      <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5 }}>
+      <TableContainer sx={{ border: "1px solid", borderColor: "divider" }}>
         <Table size="small">
           <TableHead>
             <TableRow>

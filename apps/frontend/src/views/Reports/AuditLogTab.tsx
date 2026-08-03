@@ -21,7 +21,7 @@ import {
 import { useCallback, useState } from "react";
 import { api } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
-import { TimeBar, fmtTs } from "./shared";
+import { fmtTs, TimeBar } from "./shared";
 import { useReportLoader } from "./useReportLoader";
 
 export const AuditLogTab = () => {
@@ -86,7 +86,6 @@ export const AuditLogTab = () => {
         sx={{
           border: "1px solid",
           borderColor: "divider",
-          borderRadius: 1.5,
           maxHeight: 560,
           overflow: "auto",
         }}

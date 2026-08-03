@@ -1,13 +1,13 @@
 import { type ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
-  type CustomSound,
   addSound,
+  type CustomSound,
   deleteSound,
   isCustomId,
   listSounds,
   playSoundById,
 } from "../../lib/soundLibrary";
-import { DEFAULT_SOUND_PRESET, SOUND_PRESETS, playAlertSound } from "./alertSounds";
+import { DEFAULT_SOUND_PRESET, playAlertSound, SOUND_PRESETS } from "./alertSounds";
 
 const FILE_EXTENSION_RE = /\.[^.]+$/;
 
@@ -23,6 +23,17 @@ export const useSoundSettings = () => {
       return false;
     }
     return localStorage.getItem("desktopNotif") === "true" && Notification.permission === "granted";
+  });
+  // Users reported alerts vanishing before they could read/act on them (Chrome/Windows
+  // auto-dismiss desktop notifications after a few seconds by default). requireInteraction
+  // keeps the OS toast pinned until someone manually dismisses it. Defaults on since that's
+  // the actual fix being requested; still toggleable off for anyone who prefers the old
+  // auto-dismiss behavior.
+  const [desktopNotifPersistentEnabled, setDesktopNotifPersistentEnabled] = useState(() => {
+    if (typeof window === "undefined") {
+      return true;
+    }
+    return localStorage.getItem("desktopNotifPersistent") !== "false";
   });
   const [soundPreset, setSoundPreset] = useState(() => {
     if (typeof window === "undefined") {
@@ -44,6 +55,8 @@ export const useSoundSettings = () => {
   soundPresetRef.current = soundPreset;
   const desktopNotifRef = useRef(desktopNotifEnabled);
   desktopNotifRef.current = desktopNotifEnabled;
+  const desktopNotifPersistentRef = useRef(desktopNotifPersistentEnabled);
+  desktopNotifPersistentRef.current = desktopNotifPersistentEnabled;
 
   const showDesktopNotification = useCallback((title: string, body: string) => {
     if (!desktopNotifRef.current) {
@@ -56,7 +69,12 @@ export const useSoundSettings = () => {
       return;
     }
     try {
-      const n = new Notification(title, { body, icon: "/favicon.svg", tag: title });
+      const n = new Notification(title, {
+        body,
+        icon: "/favicon.svg",
+        tag: title,
+        requireInteraction: desktopNotifPersistentRef.current,
+      });
       n.onclick = () => {
         window.focus();
         n.close();
@@ -90,6 +108,13 @@ export const useSoundSettings = () => {
       }
     });
   }, [desktopNotifEnabled]);
+
+  const toggleDesktopNotifPersistent = useCallback(() => {
+    setDesktopNotifPersistentEnabled((v) => {
+      localStorage.setItem("desktopNotifPersistent", String(!v));
+      return !v;
+    });
+  }, []);
 
   const reloadCustomSounds = useCallback(() => {
     listSounds()
@@ -224,6 +249,7 @@ export const useSoundSettings = () => {
     soundEnabled,
     soundPreset,
     desktopNotifEnabled,
+    desktopNotifPersistentEnabled,
     customSounds,
     soundMenuAnchor,
     setSoundMenuAnchor,
@@ -231,6 +257,7 @@ export const useSoundSettings = () => {
     previewingKey,
     showDesktopNotification,
     toggleDesktopNotif,
+    toggleDesktopNotifPersistent,
     toggleSound,
     selectSoundPreset,
     handlePreview,

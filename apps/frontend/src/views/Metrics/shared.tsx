@@ -1,5 +1,6 @@
 "use client";
 import { Box, Typography } from "@mui/material";
+import { formatAxisTick } from "../../app/datetime";
 import { SEVERITIES } from "../../app/severity";
 
 // ── Constants ────────────────────────────────────────────────────────
@@ -69,27 +70,9 @@ export const formatAge = (seconds: number): string => {
   return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`;
 };
 
-export const formatTimestamp = (clock: number, minutes?: number): string => {
-  const d = new Date(clock * 1000);
-  if (minutes !== undefined && minutes <= 5) {
-    return d.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    });
-  }
-  if (minutes !== undefined && minutes >= 1440) {
-    return d.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-  }
-  return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
-};
+/** Chart-axis label. Delegates to the canonical formatter — see app/datetime.ts. */
+export const formatTimestamp = (clock: number, minutes?: number): string =>
+  formatAxisTick(clock, minutes);
 
 // ── Severity chip ─────────────────────────────────────────────────────
 
@@ -110,7 +93,7 @@ export const SeverityChip = ({ severity }: { severity: number }) => {
 
 // ── Re-exports ────────────────────────────────────────────────────────
 
-export { ItemChart } from "./ItemChart";
 export { AddMetricDialog } from "./AddMetricDialog";
+export { ItemChart } from "./ItemChart";
 export { MetricConfigDialog } from "./MetricConfigDialog";
 export { MetricWidgetCard } from "./MetricWidgetCard";

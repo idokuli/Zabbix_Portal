@@ -165,6 +165,12 @@ export type AlertEvent = {
   fired_at: number;
 };
 
+export type ProblemNote = {
+  username: string;
+  note: string;
+  created_at: string;
+};
+
 export type Problem = {
   eventid: string;
   hostname: string;
@@ -178,6 +184,7 @@ export type Problem = {
   ack_user?: string;
   ack_time?: string;
   ack_note?: string;
+  notes?: ProblemNote[];
 };
 
 export type StoredNotif = {

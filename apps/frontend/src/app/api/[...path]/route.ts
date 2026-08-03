@@ -1,6 +1,6 @@
+import { type NextRequest, NextResponse } from "next/server";
 import { TOKEN_COOKIE } from "@/lib/auth";
 import { logger } from "@/lib/logger";
-import { type NextRequest, NextResponse } from "next/server";
 
 const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:6769";
 

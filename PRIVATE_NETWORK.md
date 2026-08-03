@@ -13,8 +13,8 @@ Replace public Docker Hub images with your internal mirror in these FROM lines.
 | File | Line | Current value | Replace with |
 |------|------|---------------|---------------|
 | `apps/backend/Dockerfile` | 15 | `FROM python:3.12-slim` | `FROM <your-registry>/docker-virtual/python:3.12-slim` |
-| `apps/frontend/Dockerfile` | 17 | `FROM node:22.2-alpine AS builder` | `FROM <your-registry>/docker-virtual/node:22.2-alpine AS builder` |
-| `apps/frontend/Dockerfile` | 39 | `FROM node:22.2-alpine AS runner` | `FROM <your-registry>/docker-virtual/node:22.2-alpine AS runner` |
+| `apps/frontend/Dockerfile` | 17 | `FROM node:24-alpine AS builder` | `FROM <your-registry>/docker-virtual/node:24-alpine AS builder` |
+| `apps/frontend/Dockerfile` | 42 | `FROM node:24-alpine AS runner` | `FROM <your-registry>/docker-virtual/node:24-alpine AS runner` |
 
 > The backend image is a **single-stage** build (no separate `builder` stage). The frontend image is multi-stage (`builder` → `runner`), so it has two `FROM` lines to replace.
 
@@ -52,12 +52,12 @@ Every CI image, runner tag, and registry path is a **GitLab CI/CD variable** dec
 
 | File | Line | Variable | Current value | Replace with |
 |------|------|----------|----------------|---------------|
-| `.gitlab-ci.yml` | 17 | `RUNNER_TAG` | `<your-runner-tag>` | The tag of your registered GitLab runner, e.g. `docker`, `staging-runner` |
+| `.gitlab-ci.yml` | 17 | `SHARED_RUNNERS_TAG` | `<your-build-runner-tag>` | The tag of your registered GitLab runner (privileged, for Kaniko builds), e.g. `docker`, `staging-runner` |
 | `.gitlab-ci.yml` | 20 | `KANIKO_IMAGE` | `<your-kaniko-image>` | Internal Kaniko image, e.g. `<your-registry>/kaniko:latest` |
 | `.gitlab-ci.yml` | 21 | `PYTHON_IMAGE` | `<your-python-image>` | Internal Python image, e.g. `<your-registry>/python:3.12-slim` |
 | `.gitlab-ci.yml` | 22 | `NODE_IMAGE` | `<your-node-image>` | Internal Node image, e.g. `<your-registry>/node:22-alpine` |
 | `.gitlab-ci.yml` | 23 | `HELM_IMAGE` | `<your-helm-image>` | Internal Helm image, e.g. `<your-registry>/helm:latest` |
-| `.gitlab-ci.yml` | 24 | `GIT_IMAGE` | `<your-git-image>` | Internal Alpine/git image used by `detect` + `validate:variables`, e.g. `<your-registry>/alpine:3.20` |
+| `.gitlab-ci.yml` | 24 | `GIT_IMAGE` | `<your-git-image>` | Internal Alpine/git image used by `detect`, `validate:variables`, `push-image-tags`, and the ArgoCD bootstrap jobs. **Must contain git + yq + curl**, e.g. `<your-registry>/alpine-git:latest` |
 
 You can either edit these values directly in `.gitlab-ci.yml` (they're committed, non-sensitive defaults), or override them per-environment as GitLab CI/CD Variables (Settings → CI/CD → Variables) — a project-level variable of the same name takes precedence over the file default.
 
@@ -94,15 +94,19 @@ Per-environment overrides (image tags, replica counts, resource limits) are in `
 
 ## 6. GitLab CI/CD variables & secrets
 
-Everything in section 3 and 4 above lives in `.gitlab-ci.yml` and can be edited in-repo. The variable below is a **secret** and must be set as a real GitLab CI/CD Variable (Settings → CI/CD → Variables) — never commit it to the repo.
+Everything in section 3 and 4 above lives in `.gitlab-ci.yml` and can be edited in-repo. The variables below are **secrets** and must be set as real GitLab CI/CD Variables (Settings → CI/CD → Variables) — never commit them to the repo.
 
 | Variable | Description | Sensitive |
 |----------|-------------|-----------|
-| `GITOPS_DEPLOY_KEY` | Private SSH key matching a Deploy Key with **write** access on the `zabbix-portal-gitops` repo. Used by `push-image-tags` to clone and push back. | **Yes — mask + protect** |
+| `GITOPS_TOKEN` | GitLab access token with `write_repository` scope on the GitOps repo (project or personal access token). Used by `push-image-tags` to clone over HTTPS and push back. | **Yes — mask + protect** |
+| `SONAR_TOKEN` | SonarQube analysis token (SonarQube → My Account → Security → Generate Token). | **Yes — mask + protect** |
+| `STAGING_ARGOCD_TOKEN` | ArgoCD API token for the staging ArgoCD server. | **Yes — mask + protect** |
+| `PROD_ARGOCD_TOKEN` | ArgoCD API token for the production ArgoCD server. | **Yes — mask + protect** |
+| `DR_ARGOCD_TOKEN` | ArgoCD API token for the DR ArgoCD server (separate cluster — not production's). | **Yes — mask + protect** |
 
-`GITOPS_REPO_URL` (the SSH URL of the GitOps repo) is non-sensitive and is declared as an editable placeholder in `.gitlab-ci.yml`'s top-level `variables:` block — change it there.
+`GITOPS_REPO_URL` (the **HTTPS** URL of the GitOps repo, with no credentials embedded) and the three `*_ARGOCD_SERVER` URLs are non-sensitive and are declared as editable placeholders in `.gitlab-ci.yml`'s top-level `variables:` block — change them there.
 
-`validate:variables` (in `.gitlab/ci/detect.yml`) hard-fails the pipeline at the very first stage if any of `RUNNER_TAG`, `KANIKO_IMAGE`, `PYTHON_IMAGE`, `NODE_IMAGE`, `GIT_IMAGE`, `ARTIFACTORY_REGISTRY`, `PROJECT_NAME`, `GITOPS_REPO_URL`, or `GITOPS_DEPLOY_KEY` is unset — so a misconfiguration is caught before any build runs.
+`validate:variables` (in `.gitlab/ci/detect.yml`) hard-fails the pipeline at the very first stage if any of `SHARED_RUNNERS_TAG`, `KANIKO_IMAGE`, `PYTHON_IMAGE`, `NODE_IMAGE`, `GIT_IMAGE`, `ARTIFACTORY_REGISTRY`, `PROJECT_NAME`, `GITOPS_REPO_URL`, `GITOPS_TOKEN`, `SONAR_HOST_URL`, `SONAR_SCANNER_IMAGE`, `SONAR_TOKEN`, `STAGING_ARGOCD_SERVER`, `PROD_ARGOCD_SERVER`, or `DR_ARGOCD_SERVER` is unset — so a misconfiguration is caught before any build runs. The three `*_ARGOCD_TOKEN`s are deliberately **not** checked there, because masked variables aren't readable by the check.
 
 ---
 

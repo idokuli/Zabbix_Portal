@@ -1,19 +1,29 @@
-import { createTheme } from "@mui/material/styles";
 import type { Shadows } from "@mui/material/styles";
+import { createTheme } from "@mui/material/styles";
 
 // Design tokens — single source of truth for the portal's look.
-// Neutral cool grays, one restrained blue accent, functional status colors.
+//
+// Identity: "signal amber" — the accent is the burnt orange of the Overwatch
+// logo, used for actions, selection, and focus. Blue is demoted to purely
+// informational (info alerts). Neutrals are blue-tinted graphite in dark mode.
+// The sidebar is a constant dark surface in BOTH themes (bicolor shell).
 // Elevation is border-based; shadows are reserved for overlays (menus, dialogs).
 
 const accent = {
+  light: { main: "#BC4C00", light: "#D9622B", dark: "#953C00" },
+  dark: { main: "#F0883E", light: "#F5A164", dark: "#D9702C" },
+};
+
+// Informational blue — Alert severity="info", info chips. Not an action color.
+const infoBlue = {
   light: { main: "#3369D6", light: "#5B8AE5", dark: "#2554B0" },
   dark: { main: "#6494ED", light: "#8AB0F2", dark: "#4A77D4" },
 };
 
 const neutrals = {
   dark: {
-    bg: "#0F1114",
-    paper: "#16181C",
+    bg: "#0A0C10",
+    paper: "#101318",
     divider: "rgba(255,255,255,0.08)",
     textPrimary: "#E2E4E8",
     textSecondary: "#8C939E",
@@ -29,6 +39,20 @@ const neutrals = {
   },
 };
 
+// The sidebar is the same deep graphite surface in both themes — the shell's
+// silhouette is part of the product identity. Amber marks the active item.
+export const sidebarTokens = {
+  bg: "#0E1116",
+  border: "rgba(255,255,255,0.08)",
+  text: "#AEB6C2",
+  textActive: "#F3F4F6",
+  muted: "#606774",
+  icon: "#8C939E",
+  accent: accent.dark.main,
+  hoverBg: "rgba(255,255,255,0.05)",
+  activeBg: "rgba(240,136,62,0.14)",
+};
+
 export const monoFontFamily =
   'ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace';
 
@@ -37,14 +61,15 @@ export const createAppTheme = (mode: "dark" | "light", direction: "ltr" | "rtl" 
   const pick = <T>(dark: T, light: T): T => (isDark ? dark : light);
   const n = isDark ? neutrals.dark : neutrals.light;
   const a = isDark ? accent.dark : accent.light;
+  const info = isDark ? infoBlue.dark : infoBlue.light;
 
   return createTheme({
     direction,
-    shape: { borderRadius: 6 },
+    shape: { borderRadius: 0 },
     typography: {
       fontFamily: "Inter, system-ui, -apple-system, sans-serif",
-      h4: { fontWeight: 600, fontSize: "1.5rem", letterSpacing: "-0.01em" },
-      h5: { fontWeight: 600, fontSize: "1.25rem", letterSpacing: "-0.01em" },
+      h4: { fontWeight: 700, fontSize: "1.5rem", letterSpacing: "-0.01em" },
+      h5: { fontWeight: 700, fontSize: "1.25rem", letterSpacing: "-0.01em" },
       h6: { fontWeight: 600, fontSize: "1rem" },
       subtitle1: { fontWeight: 600, fontSize: "0.9375rem" },
       subtitle2: { fontWeight: 600, fontSize: "0.8125rem" },
@@ -55,12 +80,12 @@ export const createAppTheme = (mode: "dark" | "light", direction: "ltr" | "rtl" 
     },
     palette: {
       mode,
-      primary: { ...a, contrastText: "#fff" },
+      primary: { ...a, contrastText: pick("#14181F", "#fff") },
       secondary: {
         main: n.textSecondary,
         light: n.textDisabled,
         dark: n.textPrimary,
-        contrastText: pick("#0F1114", "#fff"),
+        contrastText: pick("#0C0F14", "#fff"),
       },
       error: pick(
         { main: "#F0564F", light: "#F58B86", dark: "#C93C37" },
@@ -74,13 +99,13 @@ export const createAppTheme = (mode: "dark" | "light", direction: "ltr" | "rtl" 
         { main: "#3FB950", light: "#6BCB77", dark: "#2E9E42" },
         { main: "#1A7F37", light: "#3FA85A", dark: "#116329" },
       ),
-      info: { ...a, contrastText: "#fff" },
+      info: { ...info, contrastText: "#fff" },
       background: { default: n.bg, paper: n.paper },
       text: { primary: n.textPrimary, secondary: n.textSecondary, disabled: n.textDisabled },
       divider: n.divider,
       action: {
         hover: pick("rgba(255,255,255,0.05)", "rgba(20,24,31,0.04)"),
-        selected: pick("rgba(100,148,237,0.14)", "rgba(51,105,214,0.08)"),
+        selected: pick("rgba(240,136,62,0.14)", "rgba(188,76,0,0.08)"),
       },
     },
     shadows: [
@@ -131,13 +156,21 @@ export const createAppTheme = (mode: "dark" | "light", direction: "ltr" | "rtl" 
       },
       MuiCard: {
         styleOverrides: {
-          root: { borderRadius: 8, boxShadow: "none" },
+          root: { borderRadius: 0, boxShadow: "none" },
         },
       },
       MuiButton: {
         defaultProps: { disableElevation: true },
         styleOverrides: {
-          root: { borderRadius: 6, paddingLeft: 12, paddingRight: 12 },
+          root: {
+            borderRadius: 0,
+            paddingLeft: 14,
+            paddingRight: 14,
+            textTransform: "uppercase",
+            fontSize: "0.7rem",
+            fontWeight: 600,
+            letterSpacing: "0.06em",
+          },
           outlined: {
             borderColor: pick("rgba(255,255,255,0.15)", "rgba(20,24,31,0.18)"),
             color: n.textPrimary,
@@ -152,7 +185,7 @@ export const createAppTheme = (mode: "dark" | "light", direction: "ltr" | "rtl" 
       MuiOutlinedInput: {
         styleOverrides: {
           root: {
-            borderRadius: 6,
+            borderRadius: 0,
             "& .MuiOutlinedInput-notchedOutline": {
               borderColor: pick("rgba(255,255,255,0.15)", "rgba(20,24,31,0.18)"),
             },
@@ -168,7 +201,12 @@ export const createAppTheme = (mode: "dark" | "light", direction: "ltr" | "rtl" 
       },
       MuiChip: {
         styleOverrides: {
-          root: { borderRadius: 4, fontWeight: 500, fontSize: "0.72rem" },
+          root: {
+            borderRadius: 0,
+            fontWeight: 500,
+            fontSize: "0.7rem",
+            fontFamily: monoFontFamily,
+          },
           sizeSmall: { height: 20, fontSize: "0.6875rem" },
         },
       },
@@ -187,30 +225,52 @@ export const createAppTheme = (mode: "dark" | "light", direction: "ltr" | "rtl" 
         styleOverrides: { root: { borderColor: n.divider } },
       },
       MuiDialog: {
-        styleOverrides: { paper: { borderRadius: 10 } },
+        styleOverrides: { paper: { borderRadius: 0 } },
       },
       MuiMenu: {
         styleOverrides: {
           paper: {
+            borderRadius: 0,
             border: `1px solid ${n.divider}`,
             boxShadow: pick("0 8px 24px rgba(0,0,0,0.5)", "0 8px 24px rgba(20,24,31,0.12)"),
           },
         },
       },
       MuiAlert: {
-        styleOverrides: { root: { borderRadius: 6, fontSize: "0.8125rem" } },
+        styleOverrides: { root: { fontSize: "0.8125rem" } },
+      },
+      MuiTableContainer: {
+        styleOverrides: {
+          // Tables sit flush inside their parent Card/Paper — no nested
+          // "box within a box" framing.
+          root: { backgroundColor: "transparent" },
+        },
       },
       MuiTab: {
         styleOverrides: {
-          root: { textTransform: "none", fontSize: "0.8125rem", fontWeight: 500, minHeight: 42 },
+          root: {
+            textTransform: "uppercase",
+            fontSize: "0.7rem",
+            fontWeight: 600,
+            letterSpacing: "0.06em",
+            minHeight: 40,
+          },
         },
       },
       MuiTableCell: {
         styleOverrides: {
-          root: { borderColor: n.divider, fontSize: "0.8125rem" },
+          root: {
+            borderColor: n.divider,
+            fontSize: "0.75rem",
+            fontFamily: monoFontFamily,
+            fontVariantNumeric: "tabular-nums",
+            paddingTop: 7,
+            paddingBottom: 7,
+          },
           head: {
+            fontFamily: "Inter, system-ui, sans-serif",
             fontWeight: 600,
-            fontSize: "0.6875rem",
+            fontSize: "0.6563rem",
             textTransform: "uppercase",
             letterSpacing: "0.05em",
             color: n.textSecondary,
@@ -229,7 +289,7 @@ export const createAppTheme = (mode: "dark" | "light", direction: "ltr" | "rtl" 
         },
       },
       MuiListItemButton: {
-        styleOverrides: { root: { borderRadius: 6 } },
+        styleOverrides: { root: { borderRadius: 0 } },
       },
     },
   });

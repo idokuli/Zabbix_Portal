@@ -27,9 +27,11 @@ If you only want to understand what the pipeline does, read [`WORKFLOW.md`](./WO
 Before your first release ensure:
 
 - You have **Maintainer** access on the GitLab project.
-- `RUNNER_TAG`, `KANIKO_IMAGE`, `PYTHON_IMAGE`, `NODE_IMAGE`, `HELM_IMAGE`, `GIT_IMAGE`, `ARTIFACTORY_REGISTRY`, `PROJECT_NAME`, and `GITOPS_REPO_URL` are filled in at the top of `.gitlab-ci.yml` (or overridden as GitLab CI/CD Variables).
-- This secret is configured as a GitLab CI/CD Variable (Settings → CI/CD → Variables, masked + protected):
-  - `GITOPS_DEPLOY_KEY` — private SSH key matching a Deploy Key with **write** access on the `zabbix-portal-gitops` repo.
+- `SHARED_RUNNERS_TAG`, `KANIKO_IMAGE`, `PYTHON_IMAGE`, `NODE_IMAGE`, `GIT_IMAGE`, `ARTIFACTORY_REGISTRY`, `PROJECT_NAME`, `GITOPS_REPO_URL`, `SONAR_HOST_URL`, `SONAR_SCANNER_IMAGE`, and the three `*_ARGOCD_SERVER` URLs are filled in at the top of `.gitlab-ci.yml` (or overridden as GitLab CI/CD Variables). `HELM_IMAGE` is optional — it only gates the `helm:lint` sanity check.
+- These secrets are configured as GitLab CI/CD Variables (Settings → CI/CD → Variables, masked + protected):
+  - `GITOPS_TOKEN` — GitLab access token with `write_repository` scope on the GitOps repo.
+  - `SONAR_TOKEN` — SonarQube analysis token.
+  - `STAGING_ARGOCD_TOKEN`, `PROD_ARGOCD_TOKEN`, `DR_ARGOCD_TOKEN` — one ArgoCD API token per environment.
 - The container registry is reachable from the GitLab runners and from each cluster.
 - ArgoCD is installed in the cluster and its `ApplicationSet` is applied from the GitOps repo.
 - The Artifactory registry path is set via `ARTIFACTORY_REGISTRY` at the top of `.gitlab-ci.yml` — see [`PRIVATE_NETWORK.md`](./PRIVATE_NETWORK.md).
@@ -63,7 +65,7 @@ git checkout -b feature/<short-description>
 # Validate locally — same checks CI runs (when it eventually does)
 cd apps/frontend && npm run lint && npm run typecheck
 cd apps/backend  && ruff check . && mypy . --ignore-missing-imports
-helm lint helm/charts/{backend,frontend,zabbix-portal}    # if you touched Helm
+# Helm charts live in the GitOps repo — lint them there, not here
 
 git commit -am "feat: <subject>"
 git push -u origin feature/<short-description>

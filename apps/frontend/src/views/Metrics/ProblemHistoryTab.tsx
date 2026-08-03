@@ -29,6 +29,7 @@ import { useTheme } from "@mui/material/styles";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
+import { formatDateTimeCompact } from "../../app/datetime";
 import { SeverityChip } from "./shared";
 
 // ── Problem History tab ───────────────────────────────────────────────
@@ -66,14 +67,7 @@ const formatDuration = (seconds: number): string => {
   return h > 0 ? `${d}d ${h}h` : `${d}d`;
 };
 
-const formatAbsTime = (clock: number): string =>
-  new Date(clock * 1000).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+const formatAbsTime = (clock: number): string => formatDateTimeCompact(clock);
 
 const TIME_RANGES = [
   { label: "1h", hours: 1 },
@@ -228,20 +222,22 @@ const ProblemHistoryFilters = ({
       ))}
     </Box>
     <TextField
+      slotProps={{
+        input: {
+          endAdornment: search ? (
+            <InputAdornment position="end">
+              <IconButton size="small" onClick={() => setSearch("")} edge="end">
+                <CloseIcon sx={{ fontSize: 14 }} />
+              </IconButton>
+            </InputAdornment>
+          ) : undefined,
+        },
+      }}
       size="small"
       placeholder="Filter by problem or host…"
       value={search}
       onChange={(e) => setSearch(e.target.value)}
       sx={{ flex: 1, minWidth: 220 }}
-      InputProps={{
-        endAdornment: search ? (
-          <InputAdornment position="end">
-            <IconButton size="small" onClick={() => setSearch("")} edge="end">
-              <CloseIcon sx={{ fontSize: 14 }} />
-            </IconButton>
-          </InputAdornment>
-        ) : undefined,
-      }}
     />
     <FormControl size="small" sx={{ minWidth: 140 }}>
       <InputLabel>Min severity</InputLabel>

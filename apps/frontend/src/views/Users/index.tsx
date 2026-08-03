@@ -1,5 +1,5 @@
 "use client";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import LockResetOutlinedIcon from "@mui/icons-material/LockResetOutlined";
 import PeopleOutlinedIcon from "@mui/icons-material/PeopleOutlined";
@@ -36,15 +36,15 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import { useCallback, useEffect, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { type Team, type UserRow, api } from "../../app/api";
+import { useCallback, useEffect, useState } from "react";
+import { api, type Team, type UserRow } from "../../app/api";
 import { ConfirmDelete } from "../../app/components/ConfirmDelete";
 import { useAuth } from "../../app/context/AuthContext";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { useSync } from "../../app/context/SyncContext";
 import { RolePicker } from "./RolePicker";
-import { ROLE_OPTIONS, avatarColor, roleColor, roleLabel, userInitials } from "./shared";
+import { avatarColor, ROLE_OPTIONS, roleColor, roleLabel, userInitials } from "./shared";
 
 const userSourceLabel = (source: UserRow["source"]) =>
   source === "ldap" ? "LDAP" : source === "zabbix" ? "Zabbix" : "Local";
@@ -339,29 +339,31 @@ const ResetPasswordDialog = ({
     </DialogTitle>
     <DialogContent sx={{ pt: "16px !important" }}>
       <TextField
+        slotProps={{
+          input: {
+            endAdornment: (
+              <InputAdornment position="end">
+                <IconButton
+                  size="small"
+                  aria-label="Toggle password visibility"
+                  onClick={() => setShowNewPw((v) => !v)}
+                >
+                  {showNewPw ? (
+                    <VisibilityOffIcon sx={{ fontSize: 18 }} />
+                  ) : (
+                    <VisibilityIcon sx={{ fontSize: 18 }} />
+                  )}
+                </IconButton>
+              </InputAdornment>
+            ),
+          },
+        }}
         label="New password"
         type={showNewPw ? "text" : "password"}
         value={newPw}
         onChange={(e) => setNewPw(e.target.value)}
         fullWidth
         autoFocus
-        InputProps={{
-          endAdornment: (
-            <InputAdornment position="end">
-              <IconButton
-                size="small"
-                aria-label="Toggle password visibility"
-                onClick={() => setShowNewPw((v) => !v)}
-              >
-                {showNewPw ? (
-                  <VisibilityOffIcon sx={{ fontSize: 18 }} />
-                ) : (
-                  <VisibilityIcon sx={{ fontSize: 18 }} />
-                )}
-              </IconButton>
-            </InputAdornment>
-          ),
-        }}
       />
     </DialogContent>
     <DialogActions>
@@ -420,28 +422,30 @@ const CreateUserDialog = ({
           autoFocus
         />
         <TextField
+          slotProps={{
+            input: {
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    size="small"
+                    aria-label="Toggle password visibility"
+                    onClick={() => setShowCreatePw((v) => !v)}
+                  >
+                    {showCreatePw ? (
+                      <VisibilityOffIcon sx={{ fontSize: 18 }} />
+                    ) : (
+                      <VisibilityIcon sx={{ fontSize: 18 }} />
+                    )}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            },
+          }}
           label="Password"
           type={showCreatePw ? "text" : "password"}
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
           fullWidth
-          InputProps={{
-            endAdornment: (
-              <InputAdornment position="end">
-                <IconButton
-                  size="small"
-                  aria-label="Toggle password visibility"
-                  onClick={() => setShowCreatePw((v) => !v)}
-                >
-                  {showCreatePw ? (
-                    <VisibilityOffIcon sx={{ fontSize: 18 }} />
-                  ) : (
-                    <VisibilityIcon sx={{ fontSize: 18 }} />
-                  )}
-                </IconButton>
-              </InputAdornment>
-            ),
-          }}
         />
         <TextField
           label="Email (optional)"
@@ -663,20 +667,26 @@ export const Users = () => {
       {/* Filters */}
       <Card>
         <CardContent sx={{ py: "12px !important" }}>
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems="center">
+          <Stack
+            sx={{ alignItems: "center" }}
+            direction={{ xs: "column", sm: "row" }}
+            spacing={1.5}
+          >
             <TextField
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon sx={{ fontSize: 18, color: "text.disabled" }} />
+                    </InputAdornment>
+                  ),
+                },
+              }}
               placeholder="Search by name or email…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               size="small"
               sx={{ flex: 1 }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon sx={{ fontSize: 18, color: "text.disabled" }} />
-                  </InputAdornment>
-                ),
-              }}
             />
             {isRoot && (
               <FormControl size="small" sx={{ minWidth: 160 }}>

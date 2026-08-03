@@ -10,7 +10,6 @@ import {
   Alert,
   Box,
   Button,
-  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -23,15 +22,13 @@ import {
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
-import ReactGridLayout, { WidthProvider } from "react-grid-layout";
-import { type DashboardScope, type MetricWidgetConfig, api } from "../../app/api";
+import { api, type DashboardScope, type MetricWidgetConfig } from "../../app/api";
+import { AutoWidthGridLayout } from "../../app/components/AutoWidthGridLayout";
 import { LayoutScopeSelect } from "../../app/components/LayoutScopeSelect";
 import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { DashboardPageManager } from "../../components/DashboardPageManager";
 import { AddMetricDialog, type ItemDef, MetricWidgetCard } from "./shared";
-
-const GridLayout = WidthProvider(ReactGridLayout);
 
 // ── Item Graphs tab (widget grid) ────────────────────────────────────
 
@@ -99,7 +96,8 @@ export const ItemHistoryTab = () => {
   }, []);
 
   const handleLayoutChange = useCallback(
-    (layout: { i: string; x: number; y: number; w: number; h: number }[]) => {
+    // v2 hands back a readonly Layout; these handlers only read from it.
+    (layout: readonly { i: string; x: number; y: number; w: number; h: number }[]) => {
       setWidgets((prev) => {
         const next = prev.map((w) => {
           const l = layout.find((item) => item.i === w.i);
@@ -201,7 +199,7 @@ export const ItemHistoryTab = () => {
       <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
         {Array.from({ length: 4 }).map((_, i) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: skeleton
-          <Skeleton key={i} variant="rectangular" height={320} sx={{ borderRadius: 1 }} />
+          <Skeleton key={i} variant="rectangular" height={320} sx={{}} />
         ))}
       </Box>
     );
@@ -212,21 +210,12 @@ export const ItemHistoryTab = () => {
       <TabHeader
         title="Item Graphs"
         description="Build a custom dashboard of live metric charts pinned from any monitored host."
+        count={widgets.length}
       />
       {/* Toolbar */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: "0.85rem" }}>
-          Item Graphs
-        </Typography>
-        {widgets.length > 0 && (
-          <Chip
-            label={widgets.length}
-            size="small"
-            sx={{ height: 18, fontSize: "0.68rem", minWidth: 24 }}
-          />
-        )}
-        <Box sx={{ flex: 1 }} />
-
+      <Box
+        sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 1, mb: 2 }}
+      >
         {/* Add metric */}
         <Tooltip title={isAllScope ? "Read-only across teams" : ""}>
           <span>
@@ -318,7 +307,6 @@ export const ItemHistoryTab = () => {
             gap: 2,
             border: "1px dashed",
             borderColor: "divider",
-            borderRadius: 2,
           }}
         >
           <ShowChartOutlinedIcon sx={{ fontSize: 48, color: "text.disabled" }} />
@@ -335,13 +323,11 @@ export const ItemHistoryTab = () => {
           </Button>
         </Box>
       ) : (
-        <GridLayout
+        <AutoWidthGridLayout
           layout={layout}
-          cols={12}
-          rowHeight={80}
-          draggableHandle=".drag-handle"
-          isDraggable={!isAllScope}
-          isResizable={!isAllScope}
+          gridConfig={{ cols: 12, rowHeight: 80 }}
+          dragConfig={{ enabled: !isAllScope, handle: ".drag-handle" }}
+          resizeConfig={{ enabled: !isAllScope }}
           onLayoutChange={handleLayoutChange}
           style={{ minHeight: 200 }}
         >
@@ -355,7 +341,7 @@ export const ItemHistoryTab = () => {
               />
             </div>
           ))}
-        </GridLayout>
+        </AutoWidthGridLayout>
       )}
 
       <AddMetricDialog

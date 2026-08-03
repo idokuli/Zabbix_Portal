@@ -1,7 +1,7 @@
 "use client";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import {
   Box,
@@ -48,7 +48,9 @@ type Sla = {
 
 export const SlaTab = ({
   showToast,
-}: { showToast: (m: string, s: "success" | "error") => void }) => {
+}: {
+  showToast: (m: string, s: "success" | "error") => void;
+}) => {
   const tick = useRefreshTick();
   const [items, setItems] = useState<Sla[]>([]);
   const [loading, setLoading] = useState(false);
@@ -140,36 +142,28 @@ export const SlaTab = ({
       <TabHeader
         title="SLA Monitoring"
         description="Define service level agreements and track compliance against uptime targets."
+        count={items.length}
+        loading={loading}
+        actions={
+          <>
+            <Tooltip title="Refresh">
+              <IconButton size="small" onClick={() => void load()} disabled={loading}>
+                <RefreshIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+            <Button
+              size="small"
+              variant="contained"
+              color="secondary"
+              startIcon={<AddOutlinedIcon />}
+              onClick={() => setAddOpen(true)}
+            >
+              Add
+            </Button>
+          </>
+        }
       />
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-            SLA
-          </Typography>
-          {loading ? (
-            <CircularProgress size={14} />
-          ) : (
-            <Chip label={items.length} size="small" sx={{ height: 18, fontSize: "0.62rem" }} />
-          )}
-        </Box>
-        <Stack direction="row" spacing={1}>
-          <Tooltip title="Refresh">
-            <IconButton size="small" onClick={() => void load()} disabled={loading}>
-              <RefreshIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
-          <Button
-            size="small"
-            variant="contained"
-            color="secondary"
-            startIcon={<AddOutlinedIcon />}
-            onClick={() => setAddOpen(true)}
-          >
-            Add
-          </Button>
-        </Stack>
-      </Box>
-      <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5 }}>
+      <TableContainer sx={{ border: "1px solid", borderColor: "divider" }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -203,7 +197,12 @@ export const SlaTab = ({
                       variant="body2"
                       sx={{
                         fontWeight: 700,
-                        color: s.slo >= 99.9 ? "#2EA043" : s.slo >= 99 ? "#DBA243" : "#E45959",
+                        color:
+                          s.slo >= 99.9
+                            ? "success.main"
+                            : s.slo >= 99
+                              ? "warning.main"
+                              : "error.main",
                       }}
                     >
                       {s.slo}%
@@ -275,13 +274,13 @@ export const SlaTab = ({
             />
             <Stack direction="row" spacing={2}>
               <TextField
+                slotProps={{ htmlInput: { min: 0, max: 100, step: 0.01 } }}
                 size="small"
                 label="SLO % *"
                 type="number"
                 value={form.slo}
                 onChange={(e) => setForm((f) => ({ ...f, slo: Number(e.target.value) }))}
                 fullWidth
-                inputProps={{ min: 0, max: 100, step: 0.01 }}
                 helperText="e.g. 99.9 for 99.9%"
               />
               <FormControl size="small" fullWidth>

@@ -3,6 +3,7 @@
 import logging
 from typing import TYPE_CHECKING
 from collections.abc import Callable
+from api.schemas.items import HttpItemRequest, ScriptItemRequest
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ class BulkItemsMixin:
                 description=item_config.get("description", ""),
             )
             if item_type == "script":
-                item_id, err = self.add_script_item(
+                script_request = ScriptItemRequest(
                     hostname=hostname,
                     script_type=item_config.get("script_type", "bash"),
                     script_mode=item_config.get("script_mode", "command"),
@@ -41,11 +42,13 @@ class BulkItemsMixin:
                     file_arg=item_config.get("file_arg", ""),
                     item_name=item_config.get("item_name", ""),
                     value_type=item_config.get("value_type", 1),
-                    team_name=item_config.get("team_name", ""),
                     **common,
                 )
+                item_id, err = self.add_script_item(
+                    script_request, item_config.get("team_name", "")
+                )
             elif item_type == "http":
-                item_id, err = self.add_http_item(
+                http_request = HttpItemRequest(
                     hostname=hostname,
                     item_name=item_config.get("item_name", ""),
                     url=item_config.get("url", ""),
@@ -57,7 +60,6 @@ class BulkItemsMixin:
                     follow_redirects=item_config.get("follow_redirects", True),
                     posts=item_config.get("posts", ""),
                     value_type=item_config.get("value_type", 4),
-                    team_name=item_config.get("team_name", ""),
                     authtype=item_config.get("authtype", 0),
                     username=item_config.get("username", ""),
                     password=item_config.get("password", ""),
@@ -67,6 +69,7 @@ class BulkItemsMixin:
                     regex_no_match_value=item_config.get("regex_no_match_value", "0"),
                     **common,
                 )
+                item_id, err = self.add_http_item(http_request, item_config.get("team_name", ""))
             elif item_type == "service":
                 item_id, err = self.add_service_item(
                     hostname=hostname,

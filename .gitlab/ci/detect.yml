@@ -134,6 +134,12 @@ validate:variables:
       echo "  GIT_IMAGE            = $GIT_IMAGE"
 
       echo ""
+      echo "── SonarQube ─────────────────────────────────────────"
+      echo "  SONAR_HOST_URL       = $SONAR_HOST_URL"
+      echo "  SONAR_SCANNER_IMAGE  = $SONAR_SCANNER_IMAGE"
+      echo "  SONAR_TOKEN          = $([ -n "$SONAR_TOKEN" ] && echo '*** (set)' || echo '!!! NOT SET')"
+
+      echo ""
       echo "── GitOps repo ───────────────────────────────────────"
       echo "  GITOPS_REPO_URL      = $GITOPS_REPO_URL"
       echo "  GITOPS_TOKEN         = $([ -n "$GITOPS_TOKEN" ] && echo '*** (set)' || echo '!!! NOT SET')"
@@ -155,6 +161,7 @@ validate:variables:
       REQUIRED_VARS="SHARED_RUNNERS_TAG"
       REQUIRED_VARS="$REQUIRED_VARS KANIKO_IMAGE PYTHON_IMAGE NODE_IMAGE GIT_IMAGE"
       REQUIRED_VARS="$REQUIRED_VARS ARTIFACTORY_REGISTRY PROJECT_NAME GITOPS_REPO_URL GITOPS_TOKEN"
+      REQUIRED_VARS="$REQUIRED_VARS SONAR_HOST_URL SONAR_SCANNER_IMAGE SONAR_TOKEN"
       REQUIRED_VARS="$REQUIRED_VARS STAGING_ARGOCD_SERVER PROD_ARGOCD_SERVER DR_ARGOCD_SERVER"
       # tokens (STAGING/PROD/DR_ARGOCD_TOKEN) are masked — not checkable here
       for VAR in $REQUIRED_VARS; do

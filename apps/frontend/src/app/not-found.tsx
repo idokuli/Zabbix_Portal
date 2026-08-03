@@ -1,3 +1,7 @@
+// Client component: it passes `component={Link}` to MUI's Button, and React 19 refuses
+// to serialise a function prop across the server→client boundary. Matches the rest of
+// the app, where every page component is a client component.
+"use client";
 import { Box, Button, Typography } from "@mui/material";
 import Link from "next/link";
 

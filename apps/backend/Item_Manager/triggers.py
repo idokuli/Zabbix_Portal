@@ -9,6 +9,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_ZABBIX_NOT_CONNECTED = "Zabbix API not connected."
+
 
 class TriggersMixin:
     """Mixed into Item_Manager. Assumes `self.zapi`/`self._zabbix_version` from Zabbix_Base."""
@@ -36,7 +38,7 @@ class TriggersMixin:
         Returns (trigger_id, error_message). trigger_id is None on failure.
         """
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
 
         valid_operators = {">", "<", ">=", "<=", "=", "<>"}
         if operator not in valid_operators:
@@ -91,7 +93,7 @@ class TriggersMixin:
         <6.2:  str({host:key.last()},"pattern")=1
         """
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         try:
             host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
@@ -231,6 +233,48 @@ class TriggersMixin:
             logger.exception("delete_trigger(%s) failed", triggerid)
             return False
 
+    def _trigger_host_availability(self, triggers: list[dict]) -> dict[str, str]:
+        """Map hostid -> primary-interface availability ('0'/'1') for the given triggers' hosts."""
+        unique_hostids = list(
+            {t.get("hosts", [{}])[0].get("hostid", "") for t in triggers if t.get("hosts")} - {""}
+        )
+        if not unique_hostids or not self.zapi:
+            return {}
+        try:
+            hosts_info = self.zapi.host.get(
+                hostids=unique_hostids,
+                output=["hostid"],
+                selectInterfaces=["available", "type"],
+            )
+        except Exception as exc:
+            logger.warning("list_all_triggers: could not fetch host availability: %r", exc)
+            return {}
+        avail_map: dict[str, str] = {}
+        for h in hosts_info:
+            ifaces = h.get("interfaces", [])
+            primary = next((i for i in ifaces if str(i.get("type")) == "1"), None) or (
+                ifaces[0] if ifaces else None
+            )
+            avail_map[h["hostid"]] = str(primary.get("available", "0")) if primary else "0"
+        return avail_map
+
+    @staticmethod
+    def _trigger_row(t: dict, host_avail_map: dict[str, str]) -> dict:
+        hosts = t.get("hosts") or []
+        hostid = hosts[0].get("hostid", "") if hosts else ""
+        return {
+            "triggerid": t["triggerid"],
+            "description": t["description"],
+            "expression": t["expression"],
+            "priority": int(t["priority"]),
+            "status": int(t["status"]),
+            "value": int(t.get("value", 0)),
+            "lastchange": int(t.get("lastchange", 0)),
+            "hostname": hosts[0]["host"] if hosts else "",
+            "templateid": t.get("templateid", "0"),
+            "host_available": host_avail_map.get(hostid, "0"),
+        }
+
     def list_all_triggers(
         self, search: str = "", hostname: str = "", limit: int = 2000
     ) -> list[dict]:
@@ -265,46 +309,8 @@ class TriggersMixin:
         triggers = self.zapi.trigger.get(**kwargs)
         # Fetch interface availability for each unique host so the UI can flag
         # triggers on unreachable hosts.
-        unique_hostids = list(
-            {t.get("hosts", [{}])[0].get("hostid", "") for t in triggers if t.get("hosts")} - {""}
-        )
-        host_avail_map: dict[str, str] = {}
-        if unique_hostids:
-            try:
-                hosts_info = self.zapi.host.get(
-                    hostids=unique_hostids,
-                    output=["hostid"],
-                    selectInterfaces=["available", "type"],
-                )
-                for h in hosts_info:
-                    ifaces = h.get("interfaces", [])
-                    primary = next((i for i in ifaces if str(i.get("type")) == "1"), None) or (
-                        ifaces[0] if ifaces else None
-                    )
-                    host_avail_map[h["hostid"]] = (
-                        str(primary.get("available", "0")) if primary else "0"
-                    )
-            except Exception as exc:
-                logger.warning("list_all_triggers: could not fetch host availability: %r", exc)
-
-        result = []
-        for t in triggers:
-            hosts = t.get("hosts") or []
-            hostid = hosts[0].get("hostid", "") if hosts else ""
-            result.append(
-                {
-                    "triggerid": t["triggerid"],
-                    "description": t["description"],
-                    "expression": t["expression"],
-                    "priority": int(t["priority"]),
-                    "status": int(t["status"]),
-                    "value": int(t.get("value", 0)),
-                    "lastchange": int(t.get("lastchange", 0)),
-                    "hostname": hosts[0]["host"] if hosts else "",
-                    "templateid": t.get("templateid", "0"),
-                    "host_available": host_avail_map.get(hostid, "0"),
-                }
-            )
+        host_avail_map = self._trigger_host_availability(triggers)
+        result = [self._trigger_row(t, host_avail_map) for t in triggers]
         # Custom triggers (templateid=0) first, template-inherited triggers after
         result.sort(
             key=lambda x: (
@@ -329,7 +335,7 @@ class TriggersMixin:
     ) -> tuple[str | None, str | None]:
         """Add a trigger that fires whenever an item's value changes (uses change() function)."""
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         try:
             host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
@@ -366,7 +372,7 @@ class TriggersMixin:
         Requires Zabbix 5.4+ (new expression syntax with now() function).
         """
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         if self._zabbix_version < (5, 4):
             return (
                 None,

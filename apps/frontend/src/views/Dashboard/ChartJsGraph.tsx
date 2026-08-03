@@ -4,9 +4,10 @@ import { useTheme } from "@mui/material/styles";
 import type { Chart as ChartJS } from "chart.js";
 import { useEffect, useRef, useState } from "react";
 import { Line } from "react-chartjs-2";
-import { type AlertEvent, type GraphData, type Problem, api } from "../../app/api";
+import { type AlertEvent, api, type GraphData, type Problem } from "../../app/api";
+import { formatDateTime, formatTime } from "../../app/datetime";
 import { formatSizeValue, isByteUnit } from "../../app/utils";
-import { PERIOD_OPTIONS, formatRangeTime, formatTimestamp } from "./shared";
+import { formatRangeTime, formatTimestamp, PERIOD_OPTIONS } from "./shared";
 
 // Kibana/Elastic-inspired palette — vibrant on dark backgrounds
 const CHART_COLORS = [
@@ -148,23 +149,8 @@ const formatDashTooltipTitle = (items: { raw: unknown }[], minutes: number): str
   if (!raw) {
     return "";
   }
-  const d = new Date(raw.x * 1000);
-  if (minutes >= 1440) {
-    return d.toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    });
-  }
-  return d.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
+  // Tooltips show the precise moment a point was sampled, so always include seconds.
+  return minutes >= 1440 ? formatDateTime(raw.x) : formatTime(raw.x);
 };
 
 const computeSeriesStats = (series: GraphData["series"]) =>
@@ -196,7 +182,6 @@ const NoDashDataFallback = ({
       sx={{
         height: "100%",
         bgcolor: chartBg,
-        borderRadius: 1.5,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -544,7 +529,7 @@ export const ChartJsGraph = ({
   }, [minutes]);
 
   if (loading) {
-    return <Skeleton variant="rectangular" width="100%" height="100%" sx={{ borderRadius: 1 }} />;
+    return <Skeleton variant="rectangular" width="100%" height="100%" sx={{}} />;
   }
 
   if (error) {
@@ -557,7 +542,6 @@ export const ChartJsGraph = ({
           justifyContent: "center",
           border: "1px dashed",
           borderColor: "divider",
-          borderRadius: 1,
         }}
       >
         <Typography color="text.secondary" variant="body2">
@@ -699,7 +683,6 @@ export const ChartJsGraph = ({
         height: "100%",
         width: "100%",
         bgcolor: chartBg,
-        borderRadius: 1.5,
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",

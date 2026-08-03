@@ -1,7 +1,7 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { PropsWithChildren } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { type AuthUser, clearToken, setToken } from "../../lib/auth";
 import { api } from "../api";
 

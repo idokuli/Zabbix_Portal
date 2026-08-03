@@ -25,14 +25,17 @@ A full-stack DevOps UI for managing Zabbix hosts, items, triggers, teams, and us
 - Add and delete monitoring items (~20 item types — agent, HTTP, SNMP, SNMP trap, internal, trapper, external, IPMI, SSH, telnet, JMX, calculated, dependent, Zabbix script, browser, ODBC/Agent2 DB monitors, file watch, service check) and triggers on hosts
 - **Dashboard** — native Zabbix graphs, per-host last-value metrics, recent items; saveable per-user / per-team widget layouts with multiple named pages
 - **Metrics** — live active-problems table with acknowledgement audit, item-history charts (Item Graphs), historical problem windows, and custom alert rules (threshold conditions with severities and per-rule sounds)
+- Problems can be sorted by severity (default), newest, or oldest, and acknowledged problems can be auto-hidden after a chosen delay (1 min – 4 h, or never) with a live countdown on each row — a portal-side view filter only, nothing is closed in Zabbix
 - **Data collection** — template groups, host groups, templates, maintenance windows, event correlation, discovery rules
 - **Services** — business services, SLAs with SLA reports, simple URL/host "health monitor" checks
 - **Reports** — top-100 triggers, audit log, action log, availability report, alert history
 - **Actions & alerting** — trigger/service/discovery/autoregistration/internal actions, media types, scripts, plus per-user threshold alert rules
 - **Administration** — Zabbix user groups & roles, API tokens, proxies & proxy groups (Zabbix 7.x), global macros, the item processing queue, authentication and housekeeping settings
-- Desktop notifications + audible alerts in the sidebar when new problems fire
+- Desktop notifications + audible alerts, plus a notification center in the top bar, when new problems fire — with an optional "keep notifications on screen" mode (on by default) that pins the OS toast until it's dismissed instead of letting it auto-fade
+- Standalone notes on a problem, independent of acknowledging it — leave a comment without changing ack status, or after it's already been acknowledged
+- Consistent date/time display everywhere — dates as `DD/MM/YYYY`, times as `HH:MM:SS` on a 24-hour clock, identical for every user regardless of browser locale
 - Real-time updates via Server-Sent Events — the UI refreshes when the backend syncs with Zabbix
-- Health check for API / Zabbix connectivity with live status dots in the sidebar; LDAP users see their display name (full AD name) at the bottom-left of the sidebar
+- Health check for API / Zabbix connectivity with live status dots in the top bar; LDAP users see their display name (full AD name) in the user menu
 - Toast-style notifications for all user actions
 
 ---
@@ -197,6 +200,8 @@ Overwatch supports two authentication methods:
 
 Users imported from Zabbix via the background sync are tagged `source='zabbix'` and can be distinguished from local (`source='local'`) and LDAP JIT-provisioned (`source='ldap'`) accounts. The sync never deletes local or LDAP users.
 
+Portal usernames are **case-insensitive at login** — the lookup matches on `LOWER(username)`, so `IdOkUlI`, `idokuli`, and `IDOKULI` all resolve to the same account (including the seeded `Admin` root user), matching how LDAP/AD itself treats usernames. Accounts the portal creates are stored lowercase so one directory user can never accumulate duplicate portal accounts; accounts from other sources keep their original casing.
+
 ---
 
 ## Running with Docker Compose
@@ -302,6 +307,7 @@ All paths require a `Bearer` JWT unless noted. "Operator+" = root / team_lead / 
 | ------ | ----------------------------- | ---- | ----------- |
 | GET    | `/metrics/problems`           | Yes  | Active Zabbix problems |
 | POST   | `/metrics/problems/{eventid}/acknowledge` | Yes | Acknowledge a Zabbix problem |
+| POST   | `/metrics/problems/{eventid}/note` | Yes | Add a note to a problem without acknowledging it |
 | GET    | `/metrics/acknowledgements`   | Yes  | Acknowledgement audit log |
 | GET    | `/metrics/problems/history`   | Yes  | Historical problems in a time window |
 | GET    | `/metrics/history/{itemid}`   | Yes  | Item history time-series (`?minutes=`) |

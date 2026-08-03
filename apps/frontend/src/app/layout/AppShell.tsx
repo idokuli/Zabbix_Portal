@@ -1,32 +1,16 @@
 "use client";
-import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
-import AdminPanelSettingsOutlinedIcon from "@mui/icons-material/AdminPanelSettingsOutlined";
-import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import CloseIcon from "@mui/icons-material/Close";
-import CodeOutlinedIcon from "@mui/icons-material/CodeOutlined";
-import ComputerOutlinedIcon from "@mui/icons-material/ComputerOutlined";
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
-import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
 import InboxOutlinedIcon from "@mui/icons-material/InboxOutlined";
-import KeyOutlinedIcon from "@mui/icons-material/KeyOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
-import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import LogoutIcon from "@mui/icons-material/Logout";
 import MenuIcon from "@mui/icons-material/Menu";
-import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
-import NotificationsNoneOutlinedIcon from "@mui/icons-material/NotificationsNoneOutlined";
-import PeopleOutlinedIcon from "@mui/icons-material/PeopleOutlined";
 import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
-import RouterOutlinedIcon from "@mui/icons-material/RouterOutlined";
-import SecurityOutlinedIcon from "@mui/icons-material/Security";
-import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
-import ShowChartOutlinedIcon from "@mui/icons-material/ShowChartOutlined";
-import SpaceDashboardOutlinedIcon from "@mui/icons-material/SpaceDashboardOutlined";
+import SearchIcon from "@mui/icons-material/Search";
 import StopOutlinedIcon from "@mui/icons-material/StopOutlined";
-import StorageOutlinedIcon from "@mui/icons-material/StorageOutlined";
 import TaskAltOutlinedIcon from "@mui/icons-material/TaskAltOutlined";
 import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import UploadFileOutlinedIcon from "@mui/icons-material/UploadFileOutlined";
@@ -39,573 +23,30 @@ import {
   Divider,
   Drawer,
   IconButton,
-  List,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
   Menu,
   MenuItem,
+  Stack,
   Switch,
   Tooltip,
   Typography,
 } from "@mui/material";
-import { alpha } from "@mui/material/styles";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import type { PropsWithChildren, ReactNode } from "react";
+import type { PropsWithChildren } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { type Problem, type StoredNotif, api } from "../api";
+import { api, type Problem, type StoredNotif } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { useThemeMode } from "../context/ThemeContext";
-
-import { NotifCard, NotificationCenter } from "./NotificationCenter";
+import { monoFontFamily } from "../theme";
 import { SOUND_PRESETS } from "./alertSounds";
+import { CommandPalette } from "./CommandPalette";
+import { NotifCard, NotificationCenter } from "./NotificationCenter";
+import { type NavGroup, visibleNavGroups } from "./nav";
 import { useAlertPolling } from "./useAlertPolling";
 import { useSoundSettings } from "./useSoundSettings";
 
-const drawerWidth = 224;
-const topBarHeight = 52;
-
-type NavItem = { href: string; labelKey: string; icon: ReactNode; adminOnly?: boolean };
-type NavGroup = {
-  id: string;
-  labelKey: string;
-  icon: ReactNode;
-  items: NavItem[];
-  adminOnly?: boolean;
-  href?: string;
-  sectionLabelKey?: string;
-};
-
-const navGroups: NavGroup[] = [
-  {
-    id: "overview",
-    labelKey: "nav.overview",
-    icon: <DashboardOutlinedIcon sx={{ fontSize: 18 }} />,
-    href: "/",
-    items: [],
-  },
-  {
-    id: "hosts",
-    labelKey: "nav.hosts",
-    icon: <ComputerOutlinedIcon sx={{ fontSize: 18 }} />,
-    href: "/hosts",
-    items: [],
-  },
-  {
-    id: "monitoring",
-    labelKey: "nav.monitoring",
-    icon: <ShowChartOutlinedIcon sx={{ fontSize: 18 }} />,
-    items: [
-      {
-        href: "/metrics?tab=problems",
-        labelKey: "nav.problems",
-        icon: <WarningAmberOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/metrics?tab=latest-data",
-        labelKey: "nav.latestData",
-        icon: <StorageOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/items",
-        labelKey: "nav.items",
-        icon: <UploadFileOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/triggers",
-        labelKey: "nav.triggers",
-        icon: <NotificationsActiveOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-    ],
-  },
-  {
-    id: "dashboard",
-    labelKey: "nav.dashboard",
-    icon: <SpaceDashboardOutlinedIcon sx={{ fontSize: 18 }} />,
-    items: [
-      {
-        href: "/dashboard?tab=graphs",
-        labelKey: "nav.graphs",
-        icon: <ShowChartOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/dashboard?tab=host-metrics",
-        labelKey: "nav.hostMetrics",
-        icon: <ComputerOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/dashboard?tab=recent-items",
-        labelKey: "nav.recentItems",
-        icon: <StorageOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-    ],
-  },
-  {
-    id: "services",
-    labelKey: "nav.services",
-    icon: <TaskAltOutlinedIcon sx={{ fontSize: 18 }} />,
-    items: [
-      {
-        href: "/services",
-        labelKey: "nav.businessServices",
-        icon: <TaskAltOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-    ],
-  },
-  {
-    id: "alerts",
-    labelKey: "nav.alerts",
-    icon: <NotificationsActiveOutlinedIcon sx={{ fontSize: 18 }} />,
-    items: [
-      {
-        href: "/metrics?tab=alert-rules",
-        labelKey: "nav.alertRules",
-        icon: <NotificationsActiveOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/alerts-management",
-        labelKey: "nav.zabbixActions",
-        icon: <PlayArrowOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-    ],
-  },
-  {
-    id: "datacollection",
-    labelKey: "nav.dataCollection",
-    icon: <AccountTreeOutlinedIcon sx={{ fontSize: 18 }} />,
-    items: [
-      {
-        href: "/data-collection?tab=template-groups",
-        labelKey: "nav.templateGroups",
-        icon: <AccountTreeOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/data-collection?tab=host-groups",
-        labelKey: "nav.hostGroups",
-        icon: <GroupsOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/data-collection?tab=templates",
-        labelKey: "nav.templates",
-        icon: <StorageOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/data-collection?tab=maintenance",
-        labelKey: "nav.maintenance",
-        icon: <SettingsOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/data-collection?tab=event-correlation",
-        labelKey: "nav.eventCorrelation",
-        icon: <ShowChartOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/data-collection?tab=discovery",
-        labelKey: "nav.discovery",
-        icon: <ComputerOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-    ],
-  },
-  {
-    id: "reports",
-    labelKey: "nav.reports",
-    icon: <AssessmentOutlinedIcon sx={{ fontSize: 18 }} />,
-    items: [
-      {
-        href: "/reports?tab=availability",
-        labelKey: "nav.availability",
-        icon: <AssessmentOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/reports?tab=top-triggers",
-        labelKey: "nav.topTriggers",
-        icon: <WarningAmberOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/reports?tab=audit-log",
-        labelKey: "nav.auditLog",
-        icon: <StorageOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/reports?tab=action-log",
-        labelKey: "nav.actionLog",
-        icon: <PlayArrowOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/reports?tab=notifications",
-        labelKey: "nav.alertHistory",
-        icon: <NotificationsNoneOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-    ],
-  },
-  {
-    id: "users",
-    labelKey: "nav.usersGroup",
-    icon: <PeopleOutlinedIcon sx={{ fontSize: 18 }} />,
-    sectionLabelKey: "nav.sectionManagement",
-    items: [
-      {
-        href: "/users",
-        labelKey: "nav.portalUsers",
-        icon: <PeopleOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      { href: "/teams", labelKey: "nav.teams", icon: <GroupsOutlinedIcon sx={{ fontSize: 18 }} /> },
-    ],
-  },
-  {
-    id: "useradmin",
-    labelKey: "nav.userAdmin",
-    icon: <AdminPanelSettingsOutlinedIcon sx={{ fontSize: 18 }} />,
-    sectionLabelKey: "nav.sectionAdministration",
-    adminOnly: true,
-    items: [
-      {
-        href: "/users-management?tab=user-groups",
-        labelKey: "nav.userGroups",
-        icon: <GroupsOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/users-management?tab=roles",
-        labelKey: "nav.userRoles",
-        icon: <AdminPanelSettingsOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/users-management?tab=api-tokens",
-        labelKey: "nav.apiTokens",
-        icon: <KeyOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/users-management?tab=authentication",
-        labelKey: "nav.portalLogin",
-        icon: <LockOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-    ],
-  },
-  {
-    id: "administration",
-    labelKey: "nav.zabbixServer",
-    icon: <SettingsOutlinedIcon sx={{ fontSize: 18 }} />,
-    adminOnly: true,
-    items: [
-      {
-        href: "/administration?tab=proxies",
-        labelKey: "nav.proxies",
-        icon: <RouterOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/administration?tab=proxy-groups",
-        labelKey: "nav.proxyGroups",
-        icon: <AccountTreeOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/administration?tab=macros",
-        labelKey: "nav.globalMacros",
-        icon: <CodeOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/administration?tab=housekeeping",
-        labelKey: "nav.housekeeping",
-        icon: <SettingsOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-      {
-        href: "/administration?tab=authentication",
-        labelKey: "nav.zabbixAuth",
-        icon: <SecurityOutlinedIcon sx={{ fontSize: 18 }} />,
-      },
-    ],
-  },
-];
-
-// ── Sidebar navigation ────────────────────────────────────────────────
-
-const NavSubItem = ({
-  item,
-  selected,
-  problemCount,
-  t,
-}: {
-  item: NavItem;
-  selected: boolean;
-  problemCount: number;
-  t: (key: string) => string;
-}) => {
-  const isProblems = item.href === "/metrics?tab=problems";
-  return (
-    <ListItemButton
-      component={Link}
-      href={item.href}
-      sx={{
-        borderRadius: "6px",
-        mb: 0.25,
-        pl: 1.5,
-        pr: 1,
-        py: 0.6,
-        backgroundColor: selected ? "action.selected" : "transparent",
-        "&:hover": {
-          backgroundColor: selected ? "action.selected" : "action.hover",
-        },
-        transition: "background-color 0.15s ease",
-      }}
-    >
-      <ListItemIcon
-        sx={{
-          minWidth: 30,
-          color: selected ? "primary.main" : "text.secondary",
-          transition: "color 0.15s ease",
-        }}
-      >
-        {isProblems && problemCount > 0 ? (
-          <Badge
-            badgeContent={problemCount > 99 ? "99+" : problemCount}
-            color="error"
-            sx={{
-              "& .MuiBadge-badge": { fontSize: "0.5rem", height: 13, minWidth: 13, p: "0 2px" },
-            }}
-          >
-            {item.icon}
-          </Badge>
-        ) : (
-          item.icon
-        )}
-      </ListItemIcon>
-      <ListItemText
-        primary={t(item.labelKey)}
-        primaryTypographyProps={{
-          fontSize: "0.8125rem",
-          fontWeight: selected ? 600 : 400,
-          color: selected ? "text.primary" : "text.secondary",
-        }}
-      />
-    </ListItemButton>
-  );
-};
-
-const NavSectionLabel = ({ labelKey, t }: { labelKey: string; t: (key: string) => string }) => (
-  <Typography
-    variant="overline"
-    sx={{
-      px: 1.5,
-      pt: 2,
-      pb: 0.5,
-      display: "block",
-      color: "text.disabled",
-      fontSize: "0.625rem",
-    }}
-  >
-    {t(labelKey)}
-  </Typography>
-);
-
-const NavGroupLink = ({
-  group,
-  isActive,
-  t,
-}: {
-  group: NavGroup;
-  isActive: boolean;
-  t: (key: string) => string;
-}) => (
-  <Box sx={{ mb: 0.25 }}>
-    {group.sectionLabelKey && <NavSectionLabel labelKey={group.sectionLabelKey} t={t} />}
-    <ListItemButton
-      component={Link}
-      href={group.href ?? "/"}
-      sx={{
-        borderRadius: "6px",
-        px: 1.5,
-        py: 0.6,
-        minHeight: 32,
-        backgroundColor: isActive ? "action.selected" : "transparent",
-        "&:hover": {
-          bgcolor: isActive ? "action.selected" : "action.hover",
-        },
-      }}
-    >
-      <ListItemIcon sx={{ minWidth: 30, color: isActive ? "primary.main" : "text.secondary" }}>
-        {group.icon}
-      </ListItemIcon>
-      <ListItemText
-        primary={t(group.labelKey)}
-        primaryTypographyProps={{
-          fontSize: "0.8125rem",
-          fontWeight: isActive ? 600 : 500,
-          color: isActive ? "text.primary" : "text.secondary",
-        }}
-      />
-    </ListItemButton>
-  </Box>
-);
-
-const NavGroupCollapsible = ({
-  group,
-  isNavItemActive,
-  isOpen,
-  toggleGroup,
-  problemCount,
-  t,
-}: {
-  group: NavGroup;
-  isNavItemActive: (href: string) => boolean;
-  isOpen: boolean;
-  toggleGroup: (id: string) => void;
-  problemCount: number;
-  t: (key: string) => string;
-}) => {
-  const hasActive = group.items.some((item) => isNavItemActive(item.href));
-  return (
-    <Box sx={{ mb: 0.25 }}>
-      {group.sectionLabelKey && <NavSectionLabel labelKey={group.sectionLabelKey} t={t} />}
-      <ListItemButton
-        onClick={() => toggleGroup(group.id)}
-        sx={{
-          borderRadius: "6px",
-          px: 1.5,
-          py: 0.6,
-          minHeight: 32,
-          "&:hover": { bgcolor: "action.hover" },
-        }}
-      >
-        <ListItemIcon sx={{ minWidth: 30, color: hasActive ? "primary.main" : "text.secondary" }}>
-          {group.icon}
-        </ListItemIcon>
-        <ListItemText
-          primary={t(group.labelKey)}
-          primaryTypographyProps={{
-            fontSize: "0.8125rem",
-            fontWeight: hasActive ? 600 : 500,
-            color: hasActive ? "text.primary" : "text.secondary",
-          }}
-        />
-        {isOpen ? (
-          <ExpandMoreIcon sx={{ fontSize: 15, color: "text.disabled" }} />
-        ) : (
-          <ChevronRightIcon sx={{ fontSize: 15, color: "text.disabled" }} />
-        )}
-      </ListItemButton>
-
-      <Collapse in={isOpen} timeout="auto" unmountOnExit>
-        <List
-          disablePadding
-          sx={{ pl: 2, borderLeft: "1px solid", borderColor: "divider", ml: 2.25, mt: 0.25 }}
-        >
-          {group.items.map((item) => (
-            <NavSubItem
-              key={item.href}
-              item={item}
-              selected={isNavItemActive(item.href)}
-              problemCount={problemCount}
-              t={t}
-            />
-          ))}
-        </List>
-      </Collapse>
-    </Box>
-  );
-};
-
-const NavGroupRow = ({
-  group,
-  pathname,
-  isNavItemActive,
-  isOpen,
-  toggleGroup,
-  problemCount,
-  t,
-}: {
-  group: NavGroup;
-  pathname: string | null;
-  isNavItemActive: (href: string) => boolean;
-  isOpen: boolean;
-  toggleGroup: (id: string) => void;
-  problemCount: number;
-  t: (key: string) => string;
-}) =>
-  group.href ? (
-    <NavGroupLink group={group} isActive={pathname === group.href} t={t} />
-  ) : (
-    <NavGroupCollapsible
-      group={group}
-      isNavItemActive={isNavItemActive}
-      isOpen={isOpen}
-      toggleGroup={toggleGroup}
-      problemCount={problemCount}
-      t={t}
-    />
-  );
-
-const Sidebar = ({
-  t,
-  user,
-  pathname,
-  isNavItemActive,
-  openGroups,
-  toggleGroup,
-  problemCount,
-}: {
-  t: (key: string, opts?: { defaultValue: string }) => string;
-  user: { roles?: string[] } | null;
-  pathname: string | null;
-  isNavItemActive: (href: string) => boolean;
-  openGroups: Record<string, boolean>;
-  toggleGroup: (id: string) => void;
-  problemCount: number;
-}) => (
-  <Box sx={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-    {/* Brand */}
-    <Box
-      component={Link}
-      href="/"
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        gap: 1.25,
-        px: 2,
-        height: topBarHeight,
-        flexShrink: 0,
-        textDecoration: "none",
-        color: "inherit",
-        borderBottom: "1px solid",
-        borderColor: "divider",
-      }}
-    >
-      <Box
-        component="img"
-        src="/Overwatch_sign.png"
-        alt="Overwatch"
-        sx={{ width: 26, height: 26, objectFit: "contain", flexShrink: 0 }}
-      />
-      <Typography sx={{ fontWeight: 600, fontSize: "0.875rem", letterSpacing: 0.1 }}>
-        {t("app.name")}
-      </Typography>
-    </Box>
-
-    {/* Nav */}
-    <List sx={{ px: 1.25, pt: 1.25, pb: 2, flex: 1, overflowY: "auto" }} disablePadding>
-      {navGroups
-        .filter((group) => {
-          if (!group.adminOnly) {
-            return true;
-          }
-          const roles = user?.roles ?? [];
-          return roles.includes("root") || roles.includes("team_lead");
-        })
-        .map((group) => (
-          <NavGroupRow
-            key={group.id}
-            group={group}
-            pathname={pathname}
-            isNavItemActive={isNavItemActive}
-            isOpen={openGroups[group.id] !== false}
-            toggleGroup={toggleGroup}
-            problemCount={problemCount}
-            t={t}
-          />
-        ))}
-    </List>
-  </Box>
-);
+const topBarHeight = 48;
 
 // ── Top bar ───────────────────────────────────────────────────────────
 
@@ -616,6 +57,8 @@ const AlertSoundMenu = ({
   toggleSound,
   desktopNotifEnabled,
   toggleDesktopNotif,
+  desktopNotifPersistentEnabled,
+  toggleDesktopNotifPersistent,
   soundPreset,
   selectSoundPreset,
   customSounds,
@@ -630,13 +73,16 @@ const AlertSoundMenu = ({
   toggleSound: () => void;
   desktopNotifEnabled: boolean;
   toggleDesktopNotif: () => void;
+  desktopNotifPersistentEnabled: boolean;
+  toggleDesktopNotifPersistent: () => void;
   soundPreset: string;
   selectSoundPreset: (key: string) => void;
   customSounds: { id: string; name: string }[];
   previewingKey: string | null;
   handlePreview: (key: string) => void;
   handleDeleteCustomSound: (id: string) => void;
-  customFileInputRef: React.RefObject<HTMLInputElement>;
+  // React 19 types: useRef<T>(null) yields RefObject<T | null>, not RefObject<T>.
+  customFileInputRef: React.RefObject<HTMLInputElement | null>;
 }) => {
   const desktopNotifSupported = typeof window !== "undefined" && "Notification" in window;
   const desktopNotifDenied = desktopNotifSupported && Notification.permission === "denied";
@@ -663,6 +109,21 @@ const AlertSoundMenu = ({
           Desktop notifications
           <Switch size="small" checked={desktopNotifEnabled} tabIndex={-1} />
         </MenuItem>
+      )}
+      {desktopNotifSupported && (
+        <Tooltip
+          title="Keeps the Windows/Chrome popup on screen until someone dismisses it, instead of it auto-vanishing after a few seconds"
+          placement="left"
+        >
+          <MenuItem
+            onClick={desktopNotifEnabled ? toggleDesktopNotifPersistent : undefined}
+            disabled={!desktopNotifEnabled}
+            sx={{ fontSize: "0.8125rem", gap: 2, justifyContent: "space-between" }}
+          >
+            Keep notifications on screen
+            <Switch size="small" checked={desktopNotifPersistentEnabled} tabIndex={-1} />
+          </MenuItem>
+        </Tooltip>
       )}
       <Divider />
       {Object.entries(SOUND_PRESETS).map(([key, preset]) => (
@@ -774,7 +235,7 @@ const HealthIndicator = ({
                 width: 7,
                 height: 7,
                 borderRadius: "50%",
-                backgroundColor: ok === null ? "text.disabled" : ok ? "success.main" : "error.main",
+                backgroundColor: ok === null ? "text.disabled" : ok ? "#3FB950" : "#F0564F",
               }}
             />
             <Typography variant="caption" sx={{ color: "text.secondary", fontSize: "0.7rem" }}>
@@ -857,9 +318,474 @@ const UserMenu = ({
   );
 };
 
+// ── Horizontal navigation (rows 2-3 of the chrome) ────────────────────
+
+const groupFirstHref = (g: NavGroup): string => g.href ?? g.items[0]?.href ?? "/";
+
+// Determines which single nav group "owns" the current URL. An exact match
+// (tab-aware for query-string hrefs) always wins outright; only when nothing
+// matches exactly — e.g. a bare "/metrics" link with no ?tab= — do we fall
+// back to whichever group's item shares the base path first, in declaration
+// order, mirroring the page's own default-tab behavior. Checking every
+// group's exact match before ever consulting the fallback is what prevents
+// two groups that share a base path with different tabs (e.g. Monitoring's
+// "/metrics?tab=problems" and Alerts' "/metrics?tab=alert-rules") from both
+// showing active at once.
+const findActiveGroupId = (
+  groups: NavGroup[],
+  pathname: string | null,
+  isNavItemActive: (href: string) => boolean,
+): string | undefined => {
+  const exact = groups.find((g) =>
+    g.href ? pathname === g.href : g.items.some((i) => isNavItemActive(i.href)),
+  );
+  if (exact) {
+    return exact.id;
+  }
+  return groups.find((g) => g.items.some((i) => i.href.split("?")[0] === pathname))?.id;
+};
+
+const railWidth = 56;
+const panelWidth = 216;
+
+// Activity rail — narrow, icon-only, always visible. VS Code's activity-bar
+// pattern: pick a section here, its sub-pages populate the adjacent panel.
+// Chosen because this app has 10 sections and several carry 4-6 sub-pages —
+// a horizontal nav row runs out of width fast; a two-tier top-nav did too.
+const ActivityRailItem = ({
+  g,
+  t,
+  active,
+  problemCount,
+  panelCollapsed,
+  onToggleCollapse,
+}: {
+  g: NavGroup;
+  t: (key: string) => string;
+  active: boolean;
+  problemCount: number;
+  panelCollapsed: boolean;
+  onToggleCollapse: () => void;
+}) => {
+  const showBadge = g.id === "monitoring" && problemCount > 0;
+  const hasPanel = g.items.length > 0;
+  return (
+    <Tooltip
+      title={
+        hasPanel && active
+          ? `${t(g.labelKey)} (${panelCollapsed ? "show" : "hide"})`
+          : t(g.labelKey)
+      }
+      placement="right"
+    >
+      <Box
+        component={Link}
+        href={groupFirstHref(g)}
+        aria-current={active ? "page" : undefined}
+        onClick={(e) => {
+          // Already on this section — toggle the panel instead of a no-op nav.
+          if (hasPanel && active) {
+            e.preventDefault();
+            onToggleCollapse();
+          }
+        }}
+        sx={{
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 40,
+          height: 40,
+          flexShrink: 0,
+          textDecoration: "none",
+          color: active ? "primary.main" : "text.secondary",
+          bgcolor: active ? "action.selected" : "transparent",
+          "&:hover": {
+            color: "text.primary",
+            bgcolor: active ? "action.selected" : "action.hover",
+          },
+        }}
+      >
+        {g.icon}
+        {showBadge && (
+          <Box
+            sx={{
+              position: "absolute",
+              top: 4,
+              right: 4,
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              bgcolor: "#F0564F",
+            }}
+          />
+        )}
+      </Box>
+    </Tooltip>
+  );
+};
+
+const ActivityRail = ({
+  t,
+  roles,
+  pathname,
+  isNavItemActive,
+  problemCount,
+  panelCollapsed,
+  onToggleCollapse,
+}: {
+  t: (key: string) => string;
+  roles: string[];
+  pathname: string | null;
+  isNavItemActive: (href: string) => boolean;
+  problemCount: number;
+  panelCollapsed: boolean;
+  onToggleCollapse: () => void;
+}) => {
+  const groups = visibleNavGroups(roles);
+  const activeGroupId = findActiveGroupId(groups, pathname, isNavItemActive);
+  return (
+    <Box
+      component="nav"
+      aria-label="Sections"
+      sx={{
+        width: railWidth,
+        flexShrink: 0,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 0.5,
+        py: 1.5,
+        bgcolor: "background.paper",
+        borderRight: "1px solid",
+        borderColor: "divider",
+        overflowY: "auto",
+      }}
+    >
+      {groups.map((g) => (
+        <ActivityRailItem
+          key={g.id}
+          g={g}
+          t={t}
+          active={g.id === activeGroupId}
+          problemCount={problemCount}
+          panelCollapsed={panelCollapsed}
+          onToggleCollapse={onToggleCollapse}
+        />
+      ))}
+    </Box>
+  );
+};
+
+// Section panel — the active rail item's sub-pages as a real vertical list
+// (not a hover flyout, not squeezed into a horizontal row). Absent entirely
+// for sections with no sub-pages (Overview, Hosts), which just get the rail.
+const SectionPanel = ({
+  t,
+  roles,
+  pathname,
+  isNavItemActive,
+  onCollapse,
+}: {
+  t: (key: string) => string;
+  roles: string[];
+  pathname: string | null;
+  isNavItemActive: (href: string) => boolean;
+  onCollapse: () => void;
+}) => {
+  const groups = visibleNavGroups(roles);
+  const activeGroupId = findActiveGroupId(groups, pathname, isNavItemActive);
+  const activeGroup = groups.find((g) => g.id === activeGroupId && g.items.length > 0);
+  if (!activeGroup) {
+    return null;
+  }
+  // On a tabless URL the page renders its first tab — mark that item active.
+  const selectedHref =
+    activeGroup.items.find((i) => isNavItemActive(i.href))?.href ??
+    activeGroup.items.find((i) => i.href.split("?")[0] === pathname)?.href;
+  return (
+    <Box
+      component="nav"
+      aria-label={t(activeGroup.labelKey)}
+      sx={{
+        width: panelWidth,
+        flexShrink: 0,
+        display: "flex",
+        flexDirection: "column",
+        bgcolor: "background.paper",
+        borderRight: "1px solid",
+        borderColor: "divider",
+        overflowY: "auto",
+      }}
+    >
+      <Stack
+        direction="row"
+        sx={{
+          alignItems: "center",
+          justifyContent: "space-between",
+          pl: 2,
+          pr: 0.5,
+          pt: 1.25,
+          pb: 0.5,
+        }}
+      >
+        <Typography
+          sx={{
+            fontSize: "0.6875rem",
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: "0.1em",
+            color: "text.secondary",
+          }}
+        >
+          {t(activeGroup.labelKey)}
+        </Typography>
+        <Tooltip title="Collapse">
+          <IconButton size="small" onClick={onCollapse} sx={{ color: "text.disabled" }}>
+            <ChevronLeftIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Stack>
+      {activeGroup.items.map((item) => {
+        const sel = item.href === selectedHref;
+        return (
+          <Box
+            key={item.href}
+            component={Link}
+            href={item.href}
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 1.25,
+              px: 2,
+              py: 0.9,
+              textDecoration: "none",
+              fontSize: "0.8125rem",
+              fontWeight: sel ? 600 : 400,
+              color: sel ? "text.primary" : "text.secondary",
+              bgcolor: sel ? "action.selected" : "transparent",
+              "&:hover": { bgcolor: sel ? "action.selected" : "action.hover" },
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                color: sel ? "primary.main" : "text.disabled",
+                "& svg": { fontSize: 17 },
+              }}
+            >
+              {item.icon}
+            </Box>
+            {t(item.labelKey)}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+};
+
+// Stays put after the panel collapses so there's always a visible way back
+// in — re-clicking the active rail icon also works, but isn't discoverable.
+// Mirrors the panel's own "Collapse" chevron button (same size/color/hover),
+// just flipped direction and top-aligned in a narrow bordered column.
+const CollapsedPanelHandle = ({ onExpand }: { onExpand: () => void }) => (
+  <Box
+    sx={{
+      flexShrink: 0,
+      display: "flex",
+      justifyContent: "center",
+      pt: 1.25,
+      bgcolor: "background.paper",
+      borderRight: "1px solid",
+      borderColor: "divider",
+    }}
+  >
+    <Tooltip title="Expand section panel">
+      <IconButton size="small" onClick={onExpand} sx={{ color: "text.disabled" }}>
+        <ChevronRightIcon fontSize="small" />
+      </IconButton>
+    </Tooltip>
+  </Box>
+);
+
+// Mobile fallback — the rail + panel are desktop-only (no room on a phone
+// for two persistent columns). A temporary drawer with expandable groups
+// covers the same nav tree in one scrollable list.
+const MobileNavDrawer = ({
+  open,
+  onClose,
+  t,
+  roles,
+  pathname,
+  isNavItemActive,
+  problemCount,
+}: {
+  open: boolean;
+  onClose: () => void;
+  t: (key: string) => string;
+  roles: string[];
+  pathname: string | null;
+  isNavItemActive: (href: string) => boolean;
+  problemCount: number;
+}) => {
+  const groups = visibleNavGroups(roles);
+  const activeGroupId = findActiveGroupId(groups, pathname, isNavItemActive);
+  const [openId, setOpenId] = useState<string | null>(() => activeGroupId ?? null);
+  return (
+    <Drawer
+      slotProps={{ paper: { sx: { width: 260, bgcolor: "background.paper" } } }}
+      anchor="left"
+      open={open}
+      onClose={onClose}
+      ModalProps={{ keepMounted: true }}
+    >
+      <Box
+        sx={{
+          height: topBarHeight,
+          display: "flex",
+          alignItems: "center",
+          px: 2,
+          borderBottom: "1px solid",
+          borderColor: "divider",
+        }}
+      >
+        <Box component="img" src="/Overwatch_sign.png" alt="" sx={{ width: 22, height: 22 }} />
+        <Typography
+          sx={{
+            ml: 1.25,
+            fontWeight: 700,
+            fontSize: "0.75rem",
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
+            color: "text.primary",
+          }}
+        >
+          {t("app.name")}
+        </Typography>
+      </Box>
+      <Box sx={{ flex: 1, overflowY: "auto", py: 1 }}>
+        {groups.map((g) => (
+          <MobileNavGroupRow
+            key={g.id}
+            group={g}
+            active={g.id === activeGroupId}
+            isOpen={openId === g.id}
+            onToggle={() => setOpenId(openId === g.id ? null : g.id)}
+            isNavItemActive={isNavItemActive}
+            problemCount={problemCount}
+            onNavigate={onClose}
+            t={t}
+          />
+        ))}
+      </Box>
+    </Drawer>
+  );
+};
+
+const MobileNavGroupRow = ({
+  group: g,
+  active,
+  isOpen,
+  onToggle,
+  isNavItemActive,
+  problemCount,
+  onNavigate,
+  t,
+}: {
+  group: NavGroup;
+  active: boolean;
+  isOpen: boolean;
+  onToggle: () => void;
+  isNavItemActive: (href: string) => boolean;
+  problemCount: number;
+  onNavigate: () => void;
+  t: (key: string) => string;
+}) => {
+  const hasItems = g.items.length > 0;
+  return (
+    <Box>
+      <Box
+        component={hasItems ? "button" : Link}
+        type={hasItems ? "button" : undefined}
+        href={hasItems ? undefined : groupFirstHref(g)}
+        onClick={hasItems ? onToggle : onNavigate}
+        sx={{
+          all: "unset",
+          boxSizing: "border-box",
+          display: "flex",
+          alignItems: "center",
+          gap: 1.5,
+          width: "100%",
+          px: 2,
+          py: 1,
+          cursor: "pointer",
+          color: active ? "text.primary" : "text.secondary",
+        }}
+      >
+        <Box sx={{ display: "flex", color: active ? "primary.main" : "text.secondary" }}>
+          {g.icon}
+        </Box>
+        <Typography sx={{ flex: 1, fontSize: "0.8125rem", fontWeight: active ? 600 : 400 }}>
+          {t(g.labelKey)}
+        </Typography>
+        {g.id === "monitoring" && problemCount > 0 && (
+          <Box
+            sx={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              bgcolor: "#F0564F",
+              mr: hasItems ? 0.5 : 0,
+            }}
+          />
+        )}
+        {hasItems && (
+          <ExpandMoreIcon
+            sx={{
+              fontSize: 18,
+              color: "text.disabled",
+              transform: isOpen ? "rotate(180deg)" : "none",
+              transition: "transform 0.15s ease",
+            }}
+          />
+        )}
+      </Box>
+      {hasItems && (
+        <Collapse in={isOpen} timeout="auto" unmountOnExit>
+          {g.items.map((item) => {
+            const sel = isNavItemActive(item.href);
+            return (
+              <Box
+                key={item.href}
+                component={Link}
+                href={item.href}
+                onClick={onNavigate}
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1.5,
+                  pl: 5.5,
+                  pr: 2,
+                  py: 0.85,
+                  textDecoration: "none",
+                  fontSize: "0.8rem",
+                  fontWeight: sel ? 600 : 400,
+                  color: sel ? "text.primary" : "text.secondary",
+                }}
+              >
+                {t(item.labelKey)}
+              </Box>
+            );
+          })}
+        </Collapse>
+      )}
+    </Box>
+  );
+};
+
 const TopBar = ({
   t,
-  pageTitle,
+  onOpenPalette,
   onOpenMobileNav,
   problemCount,
   health,
@@ -874,7 +800,7 @@ const TopBar = ({
   logout,
 }: {
   t: (key: string, opts?: { defaultValue: string }) => string;
-  pageTitle: string;
+  onOpenPalette: () => void;
   onOpenMobileNav: () => void;
   problemCount: number;
   health: { ok: boolean; zabbix: boolean } | null;
@@ -894,105 +820,189 @@ const TopBar = ({
       position: "sticky",
       top: 0,
       zIndex: (theme) => theme.zIndex.appBar,
-      height: topBarHeight,
       flexShrink: 0,
-      display: "flex",
-      alignItems: "center",
-      gap: 1,
-      px: { xs: 1.5, sm: 2.5 },
+      bgcolor: "background.paper",
       borderBottom: "1px solid",
       borderColor: "divider",
-      bgcolor: "background.paper",
     }}
   >
-    <IconButton
-      onClick={onOpenMobileNav}
-      size="small"
-      sx={{ display: { md: "none" }, color: "text.secondary" }}
-    >
-      <MenuIcon fontSize="small" />
-    </IconButton>
-
-    <Typography sx={{ fontSize: "0.875rem", fontWeight: 600, flex: 1 }} noWrap>
-      {pageTitle}
-    </Typography>
-
-    {/* Active problems */}
-    <Chip
-      component={Link}
-      href="/metrics?tab=problems"
-      clickable
-      size="small"
-      icon={
-        problemCount > 0 ? (
-          <WarningAmberOutlinedIcon sx={{ fontSize: "0.85rem !important" }} />
-        ) : (
-          <TaskAltOutlinedIcon sx={{ fontSize: "0.85rem !important" }} />
-        )
-      }
-      label={
-        problemCount > 0
-          ? `${problemCount} problem${problemCount !== 1 ? "s" : ""}`
-          : t("metrics.noProblems")
-      }
+    {/* Row 1 — brand · search · status cluster */}
+    <Box
       sx={{
-        height: 24,
-        fontSize: "0.72rem",
-        fontWeight: 500,
-        color: problemCount > 0 ? "error.main" : "text.secondary",
-        bgcolor: (theme) =>
-          problemCount > 0 ? alpha(theme.palette.error.main, 0.1) : "transparent",
-        border: "1px solid",
-        borderColor: (theme) =>
-          problemCount > 0 ? alpha(theme.palette.error.main, 0.35) : theme.palette.divider,
-        "& .MuiChip-icon": { color: "inherit" },
+        display: "flex",
+        alignItems: "center",
+        gap: 1,
+        height: topBarHeight,
+        px: { xs: 1, sm: 2.5 },
+        overflow: "hidden",
       }}
-    />
-
-    <HealthIndicator health={health} t={t} />
-
-    <Divider
-      orientation="vertical"
-      flexItem
-      sx={{ my: 1.25, display: { xs: "none", sm: "block" } }}
-    />
-
-    {/* Notification center */}
-    <Tooltip title={t("nav.notificationCenter")}>
-      <IconButton size="small" onClick={openNotifCenter} sx={{ color: "text.secondary" }}>
-        <Badge
-          badgeContent={unreadCenterCount || null}
-          color="error"
-          sx={{ "& .MuiBadge-badge": { fontSize: "0.5rem", height: 13, minWidth: 13, p: "0 2px" } }}
-        >
-          <InboxOutlinedIcon sx={{ fontSize: 18 }} />
-        </Badge>
-      </IconButton>
-    </Tooltip>
-
-    {/* Alert sound & notification settings */}
-    <Tooltip title="Alert settings">
+    >
       <IconButton
+        onClick={onOpenMobileNav}
         size="small"
-        onClick={(e) => setSoundMenuAnchor(e.currentTarget)}
-        sx={{ color: soundEnabled ? "text.secondary" : "text.disabled" }}
+        sx={{ display: { md: "none" }, color: "text.secondary", flexShrink: 0 }}
       >
-        <TuneOutlinedIcon sx={{ fontSize: 17 }} />
+        <MenuIcon fontSize="small" />
       </IconButton>
-    </Tooltip>
 
-    {/* Theme */}
-    <Tooltip title={t("theme.toggle")}>
-      <IconButton size="small" onClick={toggleMode} sx={{ color: "text.secondary" }}>
-        {isDark ? (
-          <LightModeOutlinedIcon sx={{ fontSize: 17 }} />
-        ) : (
-          <DarkModeOutlinedIcon sx={{ fontSize: 17 }} />
-        )}
-      </IconButton>
-    </Tooltip>
+      <Box
+        component={Link}
+        href="/"
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 1.25,
+          textDecoration: "none",
+          mr: { xs: 1, md: 3 },
+          flexShrink: 0,
+        }}
+      >
+        <Box
+          component="img"
+          src="/Overwatch_sign.png"
+          alt=""
+          sx={{ width: 24, height: 24, objectFit: "contain" }}
+        />
+        <Typography
+          sx={{
+            fontWeight: 700,
+            fontSize: "0.8125rem",
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
+            color: "text.primary",
+            display: { xs: "none", sm: "block" },
+          }}
+        >
+          {t("app.name")}
+        </Typography>
+      </Box>
 
-    {user && <UserMenu user={user} initials={initials} logout={logout} t={t} />}
+      {/* Global search — the primary navigation instrument */}
+      <Box
+        component="button"
+        type="button"
+        onClick={onOpenPalette}
+        aria-label="Search pages"
+        sx={{
+          flex: { xs: "0 0 auto", sm: 1 },
+          maxWidth: 440,
+          display: "flex",
+          alignItems: "center",
+          gap: 1,
+          px: { xs: 0.75, sm: 1.25 },
+          height: 30,
+          cursor: "pointer",
+          bgcolor: "action.hover",
+          border: "1px solid",
+          borderColor: "divider",
+          color: "text.disabled",
+          "&:hover": { borderColor: "text.secondary", color: "text.secondary" },
+        }}
+      >
+        <SearchIcon sx={{ fontSize: 15 }} />
+        <Typography sx={{ fontSize: "0.75rem", flex: 1, textAlign: "left", whiteSpace: "nowrap" }}>
+          <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
+            {t("nav.goTo", { defaultValue: "Search or jump to…" })}
+          </Box>
+        </Typography>
+        <Typography
+          sx={{
+            fontFamily: monoFontFamily,
+            fontSize: "0.6563rem",
+            display: { xs: "none", sm: "block" },
+          }}
+        >
+          ⌘K
+        </Typography>
+      </Box>
+
+      <Box sx={{ flex: 1, display: { xs: "none", sm: "block" } }} />
+
+      {/* Active problems */}
+      <Chip
+        component={Link}
+        href="/metrics?tab=problems"
+        clickable
+        size="small"
+        icon={
+          problemCount > 0 ? (
+            <WarningAmberOutlinedIcon sx={{ fontSize: "0.85rem !important" }} />
+          ) : (
+            <TaskAltOutlinedIcon sx={{ fontSize: "0.85rem !important" }} />
+          )
+        }
+        label={
+          <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
+            {problemCount > 0
+              ? `${problemCount} problem${problemCount !== 1 ? "s" : ""}`
+              : t("metrics.noProblems")}
+          </Box>
+        }
+        sx={{
+          height: 24,
+          fontSize: "0.72rem",
+          fontWeight: 500,
+          flexShrink: 0,
+          color: problemCount > 0 ? "#F0564F" : "text.secondary",
+          bgcolor: problemCount > 0 ? "rgba(240,86,79,0.12)" : "transparent",
+          border: "1px solid",
+          borderColor: problemCount > 0 ? "rgba(240,86,79,0.4)" : "divider",
+          "& .MuiChip-icon": { color: "inherit" },
+          "& .MuiChip-label": { px: { xs: 0.75, sm: 1 } },
+        }}
+      />
+
+      <HealthIndicator health={health} t={t} />
+
+      <Divider
+        orientation="vertical"
+        flexItem
+        sx={{
+          my: 1.25,
+          display: { xs: "none", sm: "block" },
+          borderColor: "divider",
+        }}
+      />
+
+      {/* Notification center */}
+      <Tooltip title={t("nav.notificationCenter")}>
+        <IconButton size="small" onClick={openNotifCenter} sx={{ color: "text.secondary" }}>
+          <Badge
+            badgeContent={unreadCenterCount || null}
+            color="error"
+            sx={{
+              "& .MuiBadge-badge": { fontSize: "0.5rem", height: 13, minWidth: 13, p: "0 2px" },
+            }}
+          >
+            <InboxOutlinedIcon sx={{ fontSize: 18 }} />
+          </Badge>
+        </IconButton>
+      </Tooltip>
+
+      {/* Alert sound & notification settings */}
+      <Tooltip title="Alert settings">
+        <IconButton
+          size="small"
+          onClick={(e) => setSoundMenuAnchor(e.currentTarget)}
+          sx={{ color: soundEnabled ? "text.secondary" : "text.disabled" }}
+        >
+          <TuneOutlinedIcon sx={{ fontSize: 17 }} />
+        </IconButton>
+      </Tooltip>
+
+      {/* Theme */}
+      <Tooltip title={t("theme.toggle")}>
+        <IconButton size="small" onClick={toggleMode} sx={{ color: "text.secondary" }}>
+          {isDark ? (
+            <LightModeOutlinedIcon sx={{ fontSize: 17 }} />
+          ) : (
+            <DarkModeOutlinedIcon sx={{ fontSize: 17 }} />
+          )}
+        </IconButton>
+      </Tooltip>
+
+      {user && <UserMenu user={user} initials={initials} logout={logout} t={t} />}
+    </Box>
   </Box>
 );
 
@@ -1066,18 +1076,23 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
     [pathname, searchParams],
   );
 
+  // Section panel collapse — persists while browsing within one section,
+  // resets when the user switches to a different top-level section so it
+  // never stays hidden somewhere confusing.
+  const navGroups = visibleNavGroups(user?.roles ?? []);
+  const activeGroupId = findActiveGroupId(navGroups, pathname, isNavItemActive);
+  const hasSectionPanel = (navGroups.find((g) => g.id === activeGroupId)?.items.length ?? 0) > 0;
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const prevActiveGroupId = useRef(activeGroupId);
+  useEffect(() => {
+    if (prevActiveGroupId.current !== activeGroupId) {
+      prevActiveGroupId.current = activeGroupId;
+      setPanelCollapsed(false);
+    }
+  }, [activeGroupId]);
+
   const { mode, toggle: toggleMode } = useThemeMode();
   const isDark = mode === "dark";
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
-    const state: Record<string, boolean> = {};
-    for (const g of navGroups) {
-      state[g.id] = false;
-    }
-    return state;
-  });
-  const toggleGroup = (id: string) => setOpenGroups((prev) => ({ ...prev, [id]: !prev[id] }));
-
   const [notifCenterOpen, setNotifCenterOpen] = useState(false);
   const [storedHistory, setStoredHistory] = useState<StoredNotif[]>([]);
   const [centerLoading, setCenterLoading] = useState(false);
@@ -1124,6 +1139,7 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
     soundEnabled,
     soundPreset,
     desktopNotifEnabled,
+    desktopNotifPersistentEnabled,
     customSounds,
     soundMenuAnchor,
     setSoundMenuAnchor,
@@ -1131,6 +1147,7 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
     previewingKey,
     showDesktopNotification,
     toggleDesktopNotif,
+    toggleDesktopNotifPersistent,
     toggleSound,
     selectSoundPreset,
     handlePreview,
@@ -1202,107 +1219,90 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
     });
   };
 
-  const pageTitle = useMemo(() => {
-    for (const g of navGroups) {
-      if (g.href && pathname === g.href) {
-        return t(g.labelKey);
+  // ⌘K / Ctrl+K opens the command palette.
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
       }
-      const found = g.items.find((n) => isNavItemActive(n.href));
-      if (found) {
-        return t(found.labelKey);
-      }
-    }
-    return "Overwatch";
-  }, [pathname, isNavItemActive, t]);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const initials = (user?.display_name || user?.username)?.slice(0, 2).toUpperCase() ?? "??";
   const problemCount = activeProblems.filter((p) => !p.acknowledged).length;
 
-  const drawer = (
-    <Sidebar
-      t={t}
-      user={user}
-      pathname={pathname}
-      isNavItemActive={isNavItemActive}
-      openGroups={openGroups}
-      toggleGroup={toggleGroup}
-      problemCount={problemCount}
-    />
-  );
-
   return (
-    <Box sx={{ display: "flex", minHeight: "100%" }}>
-      <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>
-        <Drawer
-          anchor="left"
-          variant="temporary"
-          open={mobileOpen}
-          onClose={() => setMobileOpen(false)}
-          ModalProps={{ keepMounted: true }}
-          sx={{
-            display: { xs: "block", md: "none" },
-            "& .MuiDrawer-paper": {
-              width: drawerWidth,
-              boxSizing: "border-box",
-              overflowY: "hidden",
-            },
-          }}
-        >
-          {drawer}
-        </Drawer>
-        <Drawer
-          anchor="left"
-          variant="permanent"
-          sx={{
-            display: { xs: "none", md: "block" },
-            "& .MuiDrawer-paper": {
-              width: drawerWidth,
-              boxSizing: "border-box",
-              overflowY: "hidden",
-              borderRight: "1px solid",
-              borderRightColor: "divider",
-              backgroundColor: "background.paper",
-            },
-          }}
-          open
-        >
-          {drawer}
-        </Drawer>
-      </Box>
+    <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+      <TopBar
+        t={t}
+        onOpenPalette={() => setPaletteOpen(true)}
+        onOpenMobileNav={() => setMobileNavOpen(true)}
+        problemCount={problemCount}
+        health={health}
+        unreadCenterCount={unreadCenterCount}
+        openNotifCenter={openNotifCenter}
+        setSoundMenuAnchor={setSoundMenuAnchor}
+        soundEnabled={soundEnabled}
+        toggleMode={toggleMode}
+        isDark={isDark}
+        user={user}
+        initials={initials}
+        logout={logout}
+      />
 
-      <Box
-        sx={{
-          flexGrow: 1,
-          width: { md: `calc(100% - ${drawerWidth}px)` },
-          display: "flex",
-          flexDirection: "column",
-          minHeight: "100vh",
-        }}
-      >
-        <TopBar
-          t={t}
-          pageTitle={pageTitle}
-          onOpenMobileNav={() => setMobileOpen(true)}
-          problemCount={problemCount}
-          health={health}
-          unreadCenterCount={unreadCenterCount}
-          openNotifCenter={openNotifCenter}
-          setSoundMenuAnchor={setSoundMenuAnchor}
-          soundEnabled={soundEnabled}
-          toggleMode={toggleMode}
-          isDark={isDark}
-          user={user}
-          initials={initials}
-          logout={logout}
-        />
+      <Box sx={{ flex: 1, display: "flex", minHeight: 0 }}>
+        <Box sx={{ display: { xs: "none", md: "flex" } }}>
+          <ActivityRail
+            t={t}
+            roles={user?.roles ?? []}
+            pathname={pathname}
+            isNavItemActive={isNavItemActive}
+            problemCount={problemCount}
+            panelCollapsed={panelCollapsed}
+            onToggleCollapse={() => setPanelCollapsed((v) => !v)}
+          />
+          {hasSectionPanel && panelCollapsed && (
+            <CollapsedPanelHandle onExpand={() => setPanelCollapsed(false)} />
+          )}
+          {!panelCollapsed && (
+            <SectionPanel
+              t={t}
+              roles={user?.roles ?? []}
+              pathname={pathname}
+              isNavItemActive={isNavItemActive}
+              onCollapse={() => setPanelCollapsed(true)}
+            />
+          )}
+        </Box>
 
         <Box
           component="main"
-          sx={{ flex: 1, pt: { xs: 2, sm: 3 }, px: { xs: 2, sm: 3.5 }, pb: 5, maxWidth: "100%" }}
+          sx={{ flex: 1, minWidth: 0, pt: { xs: 2, sm: 2.5 }, px: { xs: 2, sm: 3 }, pb: 5 }}
         >
           {children}
         </Box>
       </Box>
+
+      <MobileNavDrawer
+        open={mobileNavOpen}
+        onClose={() => setMobileNavOpen(false)}
+        t={t}
+        roles={user?.roles ?? []}
+        pathname={pathname}
+        isNavItemActive={isNavItemActive}
+        problemCount={problemCount}
+      />
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        roles={user?.roles ?? []}
+      />
 
       <AlertSoundMenu
         anchorEl={soundMenuAnchor}
@@ -1311,6 +1311,8 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
         toggleSound={toggleSound}
         desktopNotifEnabled={desktopNotifEnabled}
         toggleDesktopNotif={toggleDesktopNotif}
+        desktopNotifPersistentEnabled={desktopNotifPersistentEnabled}
+        toggleDesktopNotifPersistent={toggleDesktopNotifPersistent}
         soundPreset={soundPreset}
         selectSoundPreset={selectSoundPreset}
         customSounds={customSounds}

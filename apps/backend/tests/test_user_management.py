@@ -119,15 +119,19 @@ def test_create_user_ok(mc):
     import User_Management as um
 
     conn, cur = mc
-    cur.fetchone.return_value = {
-        "id": 5,
-        "username": "bob",
-        "email": "b@b.com",
-        "roles": ["member"],
-        "team_id": 1,
-        "source": "local",
-        "display_name": "",
-    }
+    # 1st fetchone = case-insensitive duplicate check (None → free), 2nd = INSERT RETURNING.
+    cur.fetchone.side_effect = [
+        None,
+        {
+            "id": 5,
+            "username": "bob",
+            "email": "b@b.com",
+            "roles": ["member"],
+            "team_id": 1,
+            "source": "local",
+            "display_name": "",
+        },
+    ]
     with _patch(conn):
         result = um.create_user("bob", "hash", email="b@b.com", team_id=1)
     assert result["id"] == 5
@@ -139,18 +143,38 @@ def test_create_user_default_roles(mc):
     import User_Management as um
 
     conn, cur = mc
-    cur.fetchone.return_value = {
-        "id": 6,
-        "username": "alice",
-        "email": "",
-        "roles": ["member"],
-        "team_id": None,
-        "source": "local",
-        "display_name": "",
-    }
+    cur.fetchone.side_effect = [
+        None,
+        {
+            "id": 6,
+            "username": "alice",
+            "email": "",
+            "roles": ["member"],
+            "team_id": None,
+            "source": "local",
+            "display_name": "",
+        },
+    ]
     with _patch(conn):
         result = um.create_user("alice", "hash")
     assert result["roles"] == ["member"]
+    conn.close.assert_called_once()
+
+
+def test_create_user_rejects_case_insensitive_duplicate(mc):
+    """A pre-existing `Shift_User` must block creating `shift_user`.
+
+    The table's UNIQUE(username) is case-sensitive, so without the explicit guard both
+    rows would coexist and a single login would match two rows via LOWER().
+    """
+    import User_Management as um
+
+    conn, cur = mc
+    cur.fetchone.return_value = (1,)  # duplicate check finds an existing row
+    with _patch(conn):
+        result = um.create_user("shift_user", "hash")
+    assert result is None
+    conn.commit.assert_not_called()
     conn.close.assert_called_once()
 
 
@@ -170,27 +194,93 @@ def test_get_user_by_username_found(mc):
     import User_Management as um
 
     conn, cur = mc
-    cur.fetchone.return_value = {
-        "id": 1,
-        "username": "admin",
-        "email": "",
-        "roles": ["root"],
-        "team_id": None,
-        "password_hash": "x",
-        "source": "local",
-        "display_name": "",
-    }
+    cur.fetchall.return_value = [
+        {
+            "id": 1,
+            "username": "admin",
+            "email": "",
+            "roles": ["root"],
+            "team_id": None,
+            "password_hash": "x",
+            "source": "local",
+            "display_name": "",
+        }
+    ]
     with _patch(conn):
         result = um.get_user_by_username("admin")
     assert result["username"] == "admin"
     conn.close.assert_called_once()
 
 
+def test_get_user_by_username_case_insensitive_for_stored_casing(mc):
+    """Typing 'admin' must reach the seeded root row stored as 'Admin'.
+
+    Regression guard: lowercasing the login input instead of the comparison
+    made this return None and 401'd the root account out of the portal.
+    """
+    import User_Management as um
+
+    conn, cur = mc
+    cur.fetchall.return_value = [
+        {
+            "id": 1,
+            "username": "Admin",
+            "email": "",
+            "roles": ["root"],
+            "team_id": None,
+            "password_hash": "x",
+            "source": "local",
+            "display_name": "",
+        }
+    ]
+    with _patch(conn):
+        result = um.get_user_by_username("admin")
+    assert result is not None
+    assert result["username"] == "Admin"  # stored casing preserved for display
+    sql = cur.execute.call_args[0][0]
+    assert "LOWER(username) = LOWER(" in sql
+
+
+def test_get_user_by_username_warns_on_ambiguous_match(mc, caplog):
+    """Several rows sharing a name must resolve deterministically AND be logged,
+    so an admin can discover the duplicates instead of silently mis-assigning roles."""
+    import User_Management as um
+
+    conn, cur = mc
+    cur.fetchall.return_value = [
+        {
+            "id": 2,
+            "username": "idokuli",
+            "email": "",
+            "roles": ["operator"],
+            "team_id": 1,
+            "password_hash": "x",
+            "source": "ldap",
+            "display_name": "",
+        },
+        {
+            "id": 3,
+            "username": "IdOkUlI",
+            "email": "",
+            "roles": ["member"],
+            "team_id": None,
+            "password_hash": "y",
+            "source": "ldap",
+            "display_name": "",
+        },
+    ]
+    with _patch(conn), caplog.at_level("WARNING"):
+        result = um.get_user_by_username("idokuli")
+    assert result["id"] == 2  # first row wins, deterministically
+    assert "matches multiple accounts" in caplog.text
+    assert "find_duplicate_usernames" in caplog.text
+
+
 def test_get_user_by_username_not_found(mc):
     import User_Management as um
 
     conn, cur = mc
-    cur.fetchone.return_value = None
+    cur.fetchall.return_value = []
     with _patch(conn):
         result = um.get_user_by_username("nobody")
     assert result is None

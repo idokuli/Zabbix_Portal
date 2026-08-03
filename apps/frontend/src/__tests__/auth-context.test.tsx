@@ -1,3 +1,11 @@
+/**
+ * Start jsdom already on /login. AuthProvider's failure path only redirects when
+ * `window.location.pathname !== "/login"`, so this exercises the real branch instead
+ * of stubbing window.location — which jsdom 26 (Jest 30) no longer permits, since
+ * `location` is now a non-configurable property and Object.defineProperty throws.
+ *
+ * @jest-environment-options {"url": "http://localhost/login"}
+ */
 import { render, screen, waitFor } from "@testing-library/react";
 import { AuthProvider, useAuth } from "../app/context/AuthContext";
 
@@ -43,12 +51,8 @@ describe("AuthProvider", () => {
 
   it("shows no-user when api.me() rejects", async () => {
     (api.me as jest.Mock).mockRejectedValue(new Error("401"));
-    // Suppress window.location redirect error in jsdom.
-    const origHref = window.location.href;
-    Object.defineProperty(window, "location", {
-      value: { href: origHref, pathname: "/dashboard" },
-      writable: true,
-    });
+    // Already on /login (see the @jest-environment-options docblock), so the provider
+    // clears the token and renders the signed-out state without attempting a redirect.
     render(
       <AuthProvider>
         <UserDisplay />

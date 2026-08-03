@@ -3,18 +3,18 @@
 # =============================================================================
 # Replace the public image with your internal mirror before building.
 #
-#  Stage    | Public image         | Replace with
-#  -------- | -------------------- | ------------------------------------------
-#  builder  | node:22.2-alpine     | <registry>/docker-virtual/node:22.2-alpine
-#  runner   | node:22.2-alpine     | <registry>/docker-virtual/node:22.2-alpine
+#  Stage    | Public image      | Replace with
+#  -------- | ----------------- | ---------------------------------------
+#  builder  | node:24-alpine    | <registry>/docker-virtual/node:24-alpine
+#  runner   | node:24-alpine    | <registry>/docker-virtual/node:24-alpine
 #
 # Build context: apps/frontend/
 #   docker build -t zabbix-portal-frontend apps/frontend/
 # =============================================================================
 
 # ── Build ─────────────────────────────────────────────────────────────────────
-# PRIVATE NETWORK: change to <your-registry>/docker-virtual/node:22.2-alpine
-FROM node:22.2-alpine AS builder
+# PRIVATE NETWORK: change to <your-registry>/docker-virtual/node:24-alpine
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
@@ -22,9 +22,12 @@ WORKDIR /app
 # RUN npm config set registry https://<your-registry>/api/npm/npm/ \
 #     && npm config set strict-ssl false
 
+# .npmrc must be copied in explicitly — it is not picked up automatically, and
+# without it `save-exact`/`update-notifier=false` never apply inside the image,
+# even though they're set for local installs.
+COPY package.json package-lock.json .npmrc ./
 # npm ci installs exactly what package-lock.json specifies — reproducible and
 # faster than npm install, and fails if the lock file is out of sync.
-COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
@@ -35,8 +38,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # ── Runtime ───────────────────────────────────────────────────────────────────
-# PRIVATE NETWORK: change to <your-registry>/docker-virtual/node:22.2-alpine
-FROM node:22.2-alpine AS runner
+# PRIVATE NETWORK: change to <your-registry>/docker-virtual/node:24-alpine
+FROM node:24-alpine AS runner
 
 WORKDIR /app
 

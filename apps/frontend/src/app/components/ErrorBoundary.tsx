@@ -1,7 +1,7 @@
 "use client";
 import { Box, Button, Typography } from "@mui/material";
-import { Component } from "react";
 import type { ErrorInfo, PropsWithChildren } from "react";
+import { Component } from "react";
 
 type State = { error: Error | null };
 

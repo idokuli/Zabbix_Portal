@@ -1,11 +1,9 @@
 "use client";
 import { Box, Typography } from "@mui/material";
 import type { AlertEvent } from "../../app/api";
+import { formatTime } from "../../app/datetime";
 
-const formatEventTime = (ts: number): string => {
-  const d = new Date(ts * 1000);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-};
+const formatEventTime = (ts: number): string => formatTime(ts);
 
 export const AlertEventRow = ({ event }: { event: AlertEvent }) => (
   <Box

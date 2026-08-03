@@ -24,6 +24,17 @@ FAKE_ROOT = {
 }
 
 
+def _fake_conn(fetchall_results):
+    """Mock DB connection whose cursor().fetchall() returns each given list
+    in turn — one per cur.execute()/fetchall() pair issued by the route."""
+    fake_conn = MagicMock()
+    fake_cur = MagicMock()
+    fake_cur.fetchall.side_effect = fetchall_results
+    fake_conn.cursor.return_value.__enter__ = MagicMock(return_value=fake_cur)
+    fake_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+    return fake_conn
+
+
 def make_app():
     from api.routes.metrics import router
 
@@ -58,11 +69,13 @@ def test_get_problems_root_sees_all():
     with patch("api.routes.metrics.metrics_bot", mock_bot):
         # root → team_hostname_filter returns None (no filter)
         with patch("api.routes.metrics.team_hostname_filter", return_value=None):
-            with patch("api.routes.metrics.get_conn"):
+            with patch("api.routes.metrics.get_conn", return_value=_fake_conn([[], []])):
                 with TestClient(make_app()) as c:
                     r = c.get("/metrics/problems")
     assert r.status_code == 200
-    assert len(r.json()["problems"]) == 1
+    problems = r.json()["problems"]
+    assert len(problems) == 1
+    assert problems[0]["notes"] == []
 
 
 def test_get_problems_team_filter():
@@ -73,8 +86,9 @@ def test_get_problems_team_filter():
     ]
     with patch("api.routes.metrics.metrics_bot", mock_bot):
         with patch("api.routes.metrics.team_hostname_filter", return_value={"web01"}):
-            with TestClient(make_app()) as c:
-                r = c.get("/metrics/problems")
+            with patch("api.routes.metrics.get_conn", return_value=_fake_conn([[], []])):
+                with TestClient(make_app()) as c:
+                    r = c.get("/metrics/problems")
     assert r.status_code == 200
     assert len(r.json()["problems"]) == 1
     assert r.json()["problems"][0]["hostname"] == "web01"
@@ -165,9 +179,7 @@ def test_get_problems_with_acked_db_enrichment():
     mock_bot.get_problems.return_value = [
         {"hostname": "web01", "eventid": "evt1", "acknowledged": True},
     ]
-    fake_conn = MagicMock()
-    fake_cur = MagicMock()
-    fake_cur.fetchall.return_value = [
+    ack_rows = [
         {
             "eventid": "evt1",
             "acknowledged_by": "admin",
@@ -175,17 +187,43 @@ def test_get_problems_with_acked_db_enrichment():
             "note": "ok",
         },
     ]
-    fake_conn.cursor.return_value.__enter__ = MagicMock(return_value=fake_cur)
-    fake_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
     with patch("api.routes.metrics.metrics_bot", mock_bot):
         with patch("api.routes.metrics.team_hostname_filter", return_value=None):
-            with patch("api.routes.metrics.get_conn", return_value=fake_conn):
+            with patch("api.routes.metrics.get_conn", return_value=_fake_conn([ack_rows, []])):
                 with TestClient(make_app()) as c:
                     r = c.get("/metrics/problems")
     assert r.status_code == 200
     problems = r.json()["problems"]
     assert len(problems) == 1
     assert problems[0]["ack_user"] == "admin"
+    assert problems[0]["notes"] == []
+
+
+def test_get_problems_with_notes():
+    """Standalone notes are attached even for unacknowledged problems."""
+    mock_bot = MagicMock()
+    mock_bot.get_problems.return_value = [
+        {"hostname": "web01", "eventid": "evt1", "acknowledged": False},
+    ]
+    note_rows = [
+        {
+            "eventid": "evt1",
+            "username": "operator",
+            "note": "Investigating",
+            "created_at": __import__("datetime").datetime(2025, 1, 1),
+        },
+    ]
+    with patch("api.routes.metrics.metrics_bot", mock_bot):
+        with patch("api.routes.metrics.team_hostname_filter", return_value=None):
+            with patch("api.routes.metrics.get_conn", return_value=_fake_conn([[], note_rows])):
+                with TestClient(make_app()) as c:
+                    r = c.get("/metrics/problems")
+    assert r.status_code == 200
+    problems = r.json()["problems"]
+    assert len(problems) == 1
+    assert problems[0]["notes"] == [
+        {"username": "operator", "note": "Investigating", "created_at": "2025-01-01T00:00:00"}
+    ]
 
 
 FAKE_NON_ROOT = {
@@ -266,3 +304,65 @@ def test_acknowledge_problem_non_root_ok():
                         },
                     )
     assert r.status_code == 200
+
+
+# ── add note ──────────────────────────────────────────────────────────────────
+
+
+def test_add_note_empty_rejected():
+    with TestClient(make_app()) as c:
+        r = c.post("/metrics/problems/evt1/note", json={"hostname": "web01", "note": "   "})
+    assert r.status_code == 400
+
+
+def test_add_note_root_ok():
+    mock_bot = MagicMock()
+    mock_bot.add_problem_note.return_value = True
+    fake_conn = MagicMock()
+    fake_cur = MagicMock()
+    fake_cur.fetchone.return_value = {"created_at": __import__("datetime").datetime(2025, 1, 1)}
+    fake_conn.cursor.return_value.__enter__ = MagicMock(return_value=fake_cur)
+    fake_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+    with patch("api.routes.metrics.metrics_bot", mock_bot):
+        with patch("api.routes.metrics.get_conn", return_value=fake_conn):
+            with TestClient(make_app()) as c:
+                r = c.post(
+                    "/metrics/problems/evt1/note",
+                    json={"hostname": "web01", "note": "Escalated"},
+                )
+    assert r.status_code == 200
+    assert r.json()["username"] == "admin"
+    assert r.json()["note"] == "Escalated"
+    mock_bot.add_problem_note.assert_called_once_with("evt1", username="admin", note="Escalated")
+
+
+def test_add_note_zabbix_fail():
+    mock_bot = MagicMock()
+    mock_bot.add_problem_note.return_value = False
+    with patch("api.routes.metrics.metrics_bot", mock_bot):
+        with TestClient(make_app()) as c:
+            r = c.post(
+                "/metrics/problems/evt1/note",
+                json={"hostname": "web01", "note": "Escalated"},
+            )
+    assert r.status_code == 503
+
+
+def test_add_note_non_root_wrong_team():
+    """Non-root user for a host not on their team gets 403."""
+    mock_bot = MagicMock()
+    mock_bot.add_problem_note.return_value = True
+    fake_conn = MagicMock()
+    fake_cur = MagicMock()
+    fake_cur.fetchall.return_value = [{"team_id": 99}]  # different team
+    fake_conn.cursor.return_value.__enter__ = MagicMock(return_value=fake_cur)
+    fake_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+    with patch("api.routes.metrics.metrics_bot", mock_bot):
+        with patch("api.routes.metrics.get_conn", return_value=fake_conn):
+            with patch("api.routes.metrics.live_team_id", return_value=5):
+                with TestClient(make_app_non_root()) as c:
+                    r = c.post(
+                        "/metrics/problems/evt1/note",
+                        json={"hostname": "web01", "note": "Escalated"},
+                    )
+    assert r.status_code == 403

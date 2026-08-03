@@ -1,3 +1,5 @@
+import { formatDateTime } from "./datetime";
+
 // Uppercase "B" = bytes (Zabbix "B", "KB", ...ps variants); lowercase "b" = bits
 // (Zabbix "bps", "Kbps", ...) and must never be treated as the byte scale — a
 // 1000 Kbps link is 1000 kilobits/sec, not 1000 kilobytes/sec.
@@ -39,13 +41,8 @@ export const formatSizeValue = (rawValue: string | number, units: string): strin
   return `${rounded} ${BYTE_UNIT_SCALE[scaleIndex]}${parsed.rateSuffix}`;
 };
 
-export const fmtTs = (ts: number): string =>
-  ts
-    ? new Date(ts * 1000).toLocaleString("en-US", {
-        dateStyle: "short",
-        timeStyle: "short",
-      })
-    : "—";
+/** Kept as a thin alias so existing call sites keep working; the format lives in datetime.ts. */
+export const fmtTs = (ts: number): string => formatDateTime(ts);
 
 // crypto.randomUUID() requires a secure context (HTTPS / localhost).
 // This fallback works on plain HTTP too.

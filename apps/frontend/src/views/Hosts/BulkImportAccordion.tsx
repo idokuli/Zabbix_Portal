@@ -39,7 +39,6 @@ export const BulkImportAccordion = ({
     sx={{
       border: "1px solid",
       borderColor: "divider",
-      borderRadius: "12px !important",
       "&:before": { display: "none" },
     }}
   >
@@ -80,7 +79,6 @@ export const BulkImportAccordion = ({
           sx={{
             border: "2px dashed",
             borderColor: dragActive ? "primary.main" : "divider",
-            borderRadius: 2,
             p: 3,
             textAlign: "center",
             bgcolor: dragActive ? "rgba(59,130,246,0.06)" : "action.hover",
@@ -113,7 +111,7 @@ export const BulkImportAccordion = ({
             </Typography>
           }
         />
-        <Stack direction="row" spacing={2} alignItems="center">
+        <Stack sx={{ alignItems: "center" }} direction="row" spacing={2}>
           <Button variant="outlined" size="small" component="label" htmlFor="bulk-upload-input">
             Choose file
           </Button>

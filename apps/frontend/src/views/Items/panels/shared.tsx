@@ -95,22 +95,24 @@ export const MultiHostSelect = ({
     renderInput={(params) => (
       <TextField
         {...params}
+        slotProps={{
+          input: {
+            ...params.slotProps.input,
+            endAdornment: (
+              <>
+                {hostsLoading && <CircularProgress size={14} />}
+                {params.slotProps.input.endAdornment}
+              </>
+            ),
+          },
+        }}
         label={label}
         placeholder={value.length > 0 ? "" : "Select hosts…"}
-        InputProps={{
-          ...params.InputProps,
-          endAdornment: (
-            <>
-              {hostsLoading && <CircularProgress size={14} />}
-              {params.InputProps.endAdornment}
-            </>
-          ),
-        }}
       />
     )}
-    renderTags={(value, getTagProps) =>
+    renderValue={(value, getItemProps) =>
       value.map((opt, index) => {
-        const { key, ...tagProps } = getTagProps({ index });
+        const { key, ...tagProps } = getItemProps({ index });
         return <Chip key={key} label={opt.host} size="small" {...tagProps} />;
       })
     }
@@ -130,7 +132,7 @@ export const CustomIntervalsEditor = ({
     </Typography>
     <Stack spacing={1}>
       {intervals.map((ci, i) => (
-        <Stack key={ci._key} direction="row" spacing={1} alignItems="flex-start">
+        <Stack sx={{ alignItems: "flex-start" }} key={ci._key} direction="row" spacing={1}>
           <TextField
             select
             size="small"
@@ -211,7 +213,7 @@ export const TimeoutSelector = ({
   onModeChange: (m: "global" | "override") => void;
   onValueChange: (v: string) => void;
 }) => (
-  <Stack direction="row" spacing={1} alignItems="center">
+  <Stack sx={{ alignItems: "center" }} direction="row" spacing={1}>
     <Typography variant="body2" color="text.secondary" sx={{ minWidth: 80 }}>
       Timeout
     </Typography>
@@ -327,7 +329,10 @@ export const CommonFields = ({
 export const EnabledSwitch = ({
   value,
   onChange,
-}: { value: boolean; onChange: (v: boolean) => void }) => (
+}: {
+  value: boolean;
+  onChange: (v: boolean) => void;
+}) => (
   <FormControlLabel
     control={<Switch checked={value} onChange={(_, v) => onChange(v)} size="small" />}
     label={<Typography variant="body2">Enabled</Typography>}
@@ -337,7 +342,10 @@ export const EnabledSwitch = ({
 export const TeamTagSwitch = ({
   value,
   onChange,
-}: { value: boolean; onChange: (v: boolean) => void }) => (
+}: {
+  value: boolean;
+  onChange: (v: boolean) => void;
+}) => (
   <FormControlLabel
     control={<Switch checked={value} onChange={(_, v) => onChange(v)} size="small" />}
     label={<Typography variant="body2">Tag with my team</Typography>}
@@ -405,7 +413,10 @@ export const useCommonItemState = () => {
 export const BulkModeToggle = ({
   value,
   onChange,
-}: { value: boolean; onChange: (v: boolean) => void }) => (
+}: {
+  value: boolean;
+  onChange: (v: boolean) => void;
+}) => (
   <FormControlLabel
     control={
       <Switch checked={value} onChange={(_, v) => onChange(v)} size="small" color="secondary" />
@@ -443,7 +454,10 @@ export const useInlineItems = (hostname: string, skip = false) => {
 export const InlineItemsList = ({
   hostname,
   skip = false,
-}: { hostname: string; skip?: boolean }) => {
+}: {
+  hostname: string;
+  skip?: boolean;
+}) => {
   const { items, loading } = useInlineItems(hostname, skip);
   if (!hostname || skip) {
     return null;

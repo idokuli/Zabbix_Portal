@@ -27,7 +27,8 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../../app/api";
 import type { StoredNotif } from "../../app/api/types";
 import { TabHeader } from "../../app/components/TabHeader";
-import { SeverityChip, formatAge } from "../Metrics/shared";
+import { formatDateTime } from "../../app/datetime";
+import { formatAge, SeverityChip } from "../Metrics/shared";
 
 export const NotificationHistoryTab = () => {
   const [history, setHistory] = useState<StoredNotif[]>([]);
@@ -79,18 +80,20 @@ export const NotificationHistoryTab = () => {
 
       <Box sx={{ display: "flex", gap: 1.5, mb: 2, alignItems: "center", flexWrap: "wrap" }}>
         <TextField
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ fontSize: 16 }} />
+                </InputAdornment>
+              ),
+            },
+          }}
           size="small"
           placeholder="Search host or name…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           sx={{ flex: 1, minWidth: 180 }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon sx={{ fontSize: 16 }} />
-              </InputAdornment>
-            ),
-          }}
         />
         <FormControl size="small" sx={{ minWidth: 130 }}>
           <InputLabel sx={{ fontSize: "0.78rem" }}>Source</InputLabel>
@@ -179,7 +182,7 @@ export const NotificationHistoryTab = () => {
               filtered.map((n) => (
                 <TableRow key={n.id} hover>
                   <TableCell>
-                    <Tooltip title={new Date(n.clock * 1000).toLocaleString()}>
+                    <Tooltip title={formatDateTime(n.clock)}>
                       <Typography
                         variant="body2"
                         sx={{ fontSize: "0.75rem", color: "text.secondary", cursor: "default" }}

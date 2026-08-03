@@ -64,9 +64,9 @@ export const SOUND_PRESETS: Record<string, SoundPreset> = {
     label: "Chime",
     play: (ctx, severity) => {
       const notes = severity >= 4 ? [523, 659, 784, 1047] : [523, 659, 784];
-      notes.forEach((freq, i) =>
-        tone(ctx, { freq, start: i * 0.13, dur: 0.35, type: "triangle", peak: 0.3 }),
-      );
+      notes.forEach((freq, i) => {
+        tone(ctx, { freq, start: i * 0.13, dur: 0.35, type: "triangle", peak: 0.3 });
+      });
     },
   },
   ping: {

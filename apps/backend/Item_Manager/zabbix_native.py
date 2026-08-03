@@ -5,11 +5,14 @@ calculated (15), dependent (18), JS script (21), browser (26).
 import logging
 from Zabbix_Base import zabbix_err
 from typing import TYPE_CHECKING
+from api.schemas.items import BrowserItemRequest, ZabbixScriptItemRequest
 
 if TYPE_CHECKING:
     from zabbix_utils import ZabbixAPI
 
 logger = logging.getLogger(__name__)
+
+_ZABBIX_NOT_CONNECTED = "Zabbix API not connected."
 
 
 class ZabbixNativeItemsMixin:
@@ -34,7 +37,7 @@ class ZabbixNativeItemsMixin:
     ) -> tuple[str | None, str | None]:
         """Add a Zabbix internal item (type 5) using built-in zabbix[...] keys."""
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         try:
             host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
@@ -86,7 +89,7 @@ class ZabbixNativeItemsMixin:
     ) -> tuple[str | None, str | None]:
         """Add a Zabbix trapper item (type 2). Accepts data pushed via zabbix_sender."""
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         try:
             host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
@@ -137,7 +140,7 @@ class ZabbixNativeItemsMixin:
     ) -> tuple[str | None, str | None]:
         """Add an external check item (type 10). Script must exist in ExternalScripts dir on Zabbix server."""
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         try:
             host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
@@ -196,7 +199,7 @@ class ZabbixNativeItemsMixin:
     ) -> tuple[str | None, str | None]:
         """Add a calculated item (type 15). Derives its value from a formula referencing other items."""
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         if not formula.strip():
             return None, "Formula is required."
         try:
@@ -251,7 +254,7 @@ class ZabbixNativeItemsMixin:
     ) -> tuple[str | None, str | None]:
         """Add a dependent item (type 18). Its value is derived from preprocessing a master item."""
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         if not master_itemid:
             return None, "master_itemid is required."
         try:
@@ -289,25 +292,25 @@ class ZabbixNativeItemsMixin:
             return None, zabbix_err(e)
 
     def add_zabbix_script_item(
-        self,
-        hostname: str,
-        item_name: str,
-        item_key: str,
-        params: str,
-        parameters: list[dict] | None = None,
-        value_type: int = 4,
-        team_name: str = "",
-        delay: str = "1m",
-        units: str = "",
-        history: str = "31d",
-        trends: str = "365d",
-        description: str = "",
-        status: int = 0,
-        timeout: str = "",
+        self, request: ZabbixScriptItemRequest, team_name: str = ""
     ) -> tuple[str | None, str | None]:
         """Add a Zabbix Script item (type 21). JavaScript code runs on the Zabbix server/proxy."""
+        hostname = request.hostname
+        item_name = request.item_name
+        item_key = request.item_key
+        params = request.params
+        parameters = request.parameters
+        value_type = request.value_type
+        delay = request.delay
+        units = request.units
+        history = request.history
+        trends = request.trends
+        description = request.description
+        status = request.status
+        timeout = request.timeout
+
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         if not params.strip():
             return None, "Script code is required."
         try:
@@ -329,9 +332,7 @@ class ZabbixNativeItemsMixin:
             )
             if parameters:
                 kwargs["parameters"] = [
-                    {"name": p["name"], "value": p.get("value", "")}
-                    for p in parameters
-                    if p.get("name")
+                    {"name": p.name, "value": p.value} for p in parameters if p.name
                 ]
             if units:
                 kwargs["units"] = units
@@ -356,25 +357,25 @@ class ZabbixNativeItemsMixin:
             return None, zabbix_err(e)
 
     def add_browser_item(
-        self,
-        hostname: str,
-        item_name: str,
-        item_key: str,
-        params: str,
-        parameters: list[dict] | None = None,
-        value_type: int = 4,
-        team_name: str = "",
-        delay: str = "1m",
-        units: str = "",
-        history: str = "31d",
-        trends: str = "365d",
-        description: str = "",
-        status: int = 0,
-        timeout: str = "",
+        self, request: BrowserItemRequest, team_name: str = ""
     ) -> tuple[str | None, str | None]:
         """Add a Browser item (type 26). JavaScript browser automation on Zabbix server (7.x+)."""
+        hostname = request.hostname
+        item_name = request.item_name
+        item_key = request.item_key
+        params = request.params
+        parameters = request.parameters
+        value_type = request.value_type
+        delay = request.delay
+        units = request.units
+        history = request.history
+        trends = request.trends
+        description = request.description
+        status = request.status
+        timeout = request.timeout
+
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         if not params.strip():
             return None, "Browser script code is required."
         try:
@@ -396,9 +397,7 @@ class ZabbixNativeItemsMixin:
             )
             if parameters:
                 kwargs["parameters"] = [
-                    {"name": p["name"], "value": p.get("value", "")}
-                    for p in parameters
-                    if p.get("name")
+                    {"name": p.name, "value": p.value} for p in parameters if p.name
                 ]
             if units:
                 kwargs["units"] = units

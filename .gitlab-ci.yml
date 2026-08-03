@@ -35,6 +35,13 @@ variables:
   # ── Artifactory registry ──────────────────────────────────────────────────
   ARTIFACTORY_REGISTRY: "<your-artifactory-registry>"  # registry path (e.g. artifactory.example.com/docker-local)
 
+  # ── SonarQube ─────────────────────────────────────────────────────────────
+  # SONAR_TOKEN is sensitive — set it in GitLab Settings → CI/CD → Variables
+  # (masked + protected), never here. Generate it in SonarQube under
+  # My Account → Security → Generate Token.
+  SONAR_HOST_URL: "http://158.178.131.158:9000" # SonarQube server URL
+  SONAR_SCANNER_IMAGE: "<your-sonar-scanner-image>" # e.g. your-registry/sonar-scanner-cli:latest
+
   # ── Build control ────────────────────────────────────────────────────────
   # Set to "1" to force-build and redeploy every app regardless of code changes.
   # Leave empty ("") for automatic change detection.
@@ -54,4 +61,5 @@ include:
   - local: ".gitlab/ci/detect.yml"
   - local: ".gitlab/ci/python.yml"
   - local: ".gitlab/ci/node.yml"
+  - local: ".gitlab/ci/sonarqube.yml"
   - local: ".gitlab/ci/gitops.yml"

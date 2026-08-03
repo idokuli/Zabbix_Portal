@@ -1,12 +1,13 @@
 "use client";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
 import LocalOfferOutlinedIcon from "@mui/icons-material/LocalOfferOutlined";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import RouterOutlinedIcon from "@mui/icons-material/RouterOutlined";
 import SearchIcon from "@mui/icons-material/Search";
@@ -28,7 +29,6 @@ import {
   LinearProgress,
   Menu,
   MenuItem,
-  Paper,
   Select,
   Snackbar,
   Stack,
@@ -40,18 +40,30 @@ import { useTheme } from "@mui/material/styles";
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { type Host, type HostInterface, type HostTag, api } from "../../app/api";
+import { api, type Host, type HostInterface, type HostTag } from "../../app/api";
 import { hostsApi } from "../../app/api/hosts";
 import { ConfirmDelete } from "../../app/components/ConfirmDelete";
+import { StatTicker } from "../../app/components/StatTicker";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { useSync } from "../../app/context/SyncContext";
+import { monoFontFamily } from "../../app/theme";
 import { useFavorites } from "../../lib/favorites";
 import { AddHostAccordion } from "./AddHostAccordion";
 import { BulkImportAccordion } from "./BulkImportAccordion";
 import { EditHostDialog } from "./EditHostDialog";
 import { HostDetailDrawer } from "./HostDetailDrawer";
+import { AVAIL_CONFIG, AvailabilityCell, ProblemsCell } from "./shared";
 import { TagEditorDialog } from "./TagEditorDialog";
-import { AvailabilityCell, ProblemsCell } from "./shared";
+
+// Metadata chip language (proxy, tags) — outlined and neutral, visually
+// distinct from the solid state badges (Availability, Status) above.
+const METADATA_CHIP_SX = {
+  height: 20,
+  fontSize: "0.68rem",
+  fontWeight: 500,
+  borderColor: "#8C939E",
+  color: "text.primary",
+} as const;
 
 type HostEditForm = {
   name: string;
@@ -106,7 +118,7 @@ const HostTagsCell = ({
 }) => {
   if (tags.length === 0) {
     return (
-      <Typography variant="caption" color="text.disabled">
+      <Typography variant="caption" color="text.secondary">
         —
       </Typography>
     );
@@ -118,19 +130,16 @@ const HostTagsCell = ({
           key={`${t.tag}:${t.value}`}
           label={t.value ? `${t.tag}: ${t.value}` : t.tag}
           size="small"
+          variant="outlined"
           onDelete={t.tag !== "team" ? () => deleteTagInline(rowHost, t) : undefined}
           sx={{
-            fontSize: "0.62rem",
-            height: 20,
-            bgcolor: "action.selected",
-            color: "primary.main",
-            border: "none",
+            ...METADATA_CHIP_SX,
             flexShrink: 0,
             "& .MuiChip-deleteIcon": {
               fontSize: "0.7rem",
-              color: "primary.main",
-              opacity: 0.6,
-              "&:hover": { opacity: 1 },
+              color: "text.secondary",
+              opacity: 0.7,
+              "&:hover": { color: "error.main", opacity: 1 },
             },
           }}
         />
@@ -142,12 +151,88 @@ const HostTagsCell = ({
             .map((t) => `${t.tag}: ${t.value}`)
             .join(", ")}
         >
-          <Typography variant="caption" color="text.disabled" sx={{ alignSelf: "center" }}>
+          <Typography variant="caption" color="text.secondary" sx={{ alignSelf: "center" }}>
             +{tags.length - 3}
           </Typography>
         </Tooltip>
       )}
     </Box>
+  );
+};
+
+// Row actions consolidate into a single kebab, dimmed until the row is
+// hovered or the menu is open — keeps the ledger quiet at rest.
+const HostRowActionsMenu = ({
+  onEdit,
+  onEditTags,
+  onManageTemplates,
+  onDelete,
+}: {
+  onEdit: () => void;
+  onEditTags: () => void;
+  onManageTemplates: () => void;
+  onDelete: () => void;
+}) => {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  return (
+    <>
+      <IconButton
+        size="small"
+        onClick={(e) => {
+          e.stopPropagation();
+          setAnchor(e.currentTarget);
+        }}
+        sx={{
+          opacity: anchor ? 1 : 0,
+          transition: "opacity 0.1s ease",
+          ".MuiDataGrid-row:hover &, &:focus-visible": { opacity: 1 },
+        }}
+      >
+        <MoreVertIcon fontSize="small" />
+      </IconButton>
+      <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}>
+        <MenuItem
+          onClick={() => {
+            setAnchor(null);
+            onEdit();
+          }}
+          sx={{ fontSize: "0.8125rem", gap: 1.25 }}
+        >
+          <EditOutlinedIcon sx={{ fontSize: 16 }} />
+          Edit host
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            setAnchor(null);
+            onEditTags();
+          }}
+          sx={{ fontSize: "0.8125rem", gap: 1.25 }}
+        >
+          <LocalOfferOutlinedIcon sx={{ fontSize: 16 }} />
+          Edit tags
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            setAnchor(null);
+            onManageTemplates();
+          }}
+          sx={{ fontSize: "0.8125rem", gap: 1.25 }}
+        >
+          <LayersOutlinedIcon sx={{ fontSize: 16 }} />
+          Manage templates
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            setAnchor(null);
+            onDelete();
+          }}
+          sx={{ fontSize: "0.8125rem", gap: 1.25, color: "error.main" }}
+        >
+          <DeleteOutlineOutlinedIcon sx={{ fontSize: 16 }} />
+          Delete host
+        </MenuItem>
+      </Menu>
+    </>
   );
 };
 
@@ -507,6 +592,8 @@ export const Hosts = () => {
     });
   }, [hosts, search]);
 
+  const totalProblems = hosts.reduce((sum, h) => sum + (h.problem_count ?? 0), 0);
+
   const rows = useMemo(() => filteredHosts.map((h) => ({ id: h.hostid, ...h })), [filteredHosts]);
 
   const headerSx = useMemo(
@@ -520,8 +607,29 @@ export const Hosts = () => {
     [],
   );
 
+  // Clean labeled columns with native click-to-sort headers (asc → desc →
+  // unsorted) — a dedicated Sort control can't be cleared; a column header
+  // click cycle can. Actions live in a single hover-revealed kebab, moved to
+  // the leading column instead of a persistent icon cluster on the right.
   const columns = useMemo<GridColDef[]>(
     () => [
+      {
+        field: "actions",
+        headerName: "",
+        width: 40,
+        sortable: false,
+        filterable: false,
+        renderCell: (params) => (
+          <Box onClick={(e) => e.stopPropagation()}>
+            <HostRowActionsMenu
+              onEdit={() => openEditHost(params.row as Host)}
+              onEditTags={() => openTagEditor(params.row as Host)}
+              onManageTemplates={() => void openTplDialog(params.row as Host)}
+              onDelete={() => setConfirmDelete(params.row as Host)}
+            />
+          </Box>
+        ),
+      },
       {
         field: "host",
         headerName: "Name",
@@ -530,8 +638,8 @@ export const Hosts = () => {
         renderHeader: () => <Typography sx={headerSx}>Name</Typography>,
         renderCell: (params) => (
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <RouterOutlinedIcon sx={{ fontSize: 15, color: "text.disabled", flexShrink: 0 }} />
-            <Typography sx={{ fontSize: "0.85rem", fontWeight: 600 }}>{params.value}</Typography>
+            <RouterOutlinedIcon sx={{ fontSize: 16, color: "text.secondary", flexShrink: 0 }} />
+            <Typography sx={{ fontSize: "0.9rem", fontWeight: 700 }}>{params.value}</Typography>
           </Box>
         ),
       },
@@ -539,15 +647,20 @@ export const Hosts = () => {
         field: "ip",
         headerName: "IP",
         width: 220,
-        sortable: false,
         filterable: false,
+        // v7+ signature: (value, row, column, apiRef) — the old single `params` object is gone.
+        valueGetter: (_value, row: Host) => {
+          const ifaces = row.interfaces as HostInterface[] | undefined;
+          const iface = ifaces?.find((i) => i.type === "1") ?? ifaces?.[0];
+          return iface?.ip ?? "";
+        },
         renderHeader: () => <Typography sx={headerSx}>IP Address</Typography>,
         renderCell: (params) => {
           const ifaces = params.row.interfaces as HostInterface[] | undefined;
           const iface = ifaces?.find((i) => i.type === "1") ?? ifaces?.[0];
           if (!iface) {
             return (
-              <Typography variant="caption" color="text.disabled">
+              <Typography variant="caption" color="text.secondary">
                 —
               </Typography>
             );
@@ -556,12 +669,12 @@ export const Hosts = () => {
             <Tooltip title={`${iface.ip}:${iface.port}`} placement="top">
               <Typography
                 noWrap
-                sx={{ fontSize: "0.8rem", fontFamily: "monospace", color: "text.secondary" }}
+                sx={{ fontSize: "0.8rem", fontFamily: monoFontFamily, color: "text.primary" }}
               >
                 {iface.ip}
                 <Typography
                   component="span"
-                  sx={{ opacity: 0.5, fontSize: "inherit", fontFamily: "inherit" }}
+                  sx={{ opacity: 0.6, fontSize: "inherit", fontFamily: "inherit" }}
                 >
                   :{iface.port}
                 </Typography>
@@ -574,77 +687,37 @@ export const Hosts = () => {
         field: "proxyid",
         headerName: "Proxy",
         width: 140,
-        sortable: false,
         filterable: false,
+        valueGetter: (value) => {
+          const pid = value as string | undefined;
+          if (!pid || pid === "0") {
+            return "";
+          }
+          return proxies.find((p) => p.proxyid === pid)?.name ?? pid;
+        },
         renderHeader: () => <Typography sx={headerSx}>Proxy</Typography>,
         renderCell: (params) => {
-          const pid = params.value as string | undefined;
-          if (!pid || pid === "0") {
+          const name = params.value as string;
+          if (!name) {
             return (
-              <Typography variant="caption" color="text.disabled">
+              <Typography variant="caption" color="text.secondary">
                 Direct
               </Typography>
             );
           }
-          const proxy = proxies.find((p) => p.proxyid === pid);
-          return (
-            <Chip
-              label={proxy?.name ?? pid}
-              size="small"
-              variant="outlined"
-              sx={{ height: 18, fontSize: "0.65rem" }}
-            />
-          );
-        },
-      },
-      {
-        field: "parentTemplates",
-        headerName: "Templates",
-        flex: 1,
-        minWidth: 160,
-        sortable: false,
-        filterable: false,
-        renderHeader: () => <Typography sx={headerSx}>Templates</Typography>,
-        renderCell: (params) => {
-          const tmpls =
-            (params.value as Array<{ templateid: string; name: string }> | undefined) ?? [];
-          if (tmpls.length === 0) {
-            return (
-              <Typography variant="caption" color="text.disabled">
-                —
-              </Typography>
-            );
-          }
-          return (
-            <Tooltip title={tmpls.map((t) => t.name).join(", ")} placement="top">
-              <Box sx={{ display: "flex", gap: 0.4, overflow: "hidden", flexWrap: "nowrap" }}>
-                {tmpls.slice(0, 2).map((t) => (
-                  <Chip
-                    key={t.templateid}
-                    label={t.name}
-                    size="small"
-                    variant="outlined"
-                    sx={{ fontSize: "0.62rem", height: 20, maxWidth: 140 }}
-                  />
-                ))}
-                {tmpls.length > 2 && (
-                  <Chip
-                    label={`+${tmpls.length - 2}`}
-                    size="small"
-                    sx={{ fontSize: "0.62rem", height: 20 }}
-                  />
-                )}
-              </Box>
-            </Tooltip>
-          );
+          return <Chip label={name} size="small" variant="outlined" sx={METADATA_CHIP_SX} />;
         },
       },
       {
         field: "availability",
         headerName: "Availability",
         width: 140,
-        sortable: false,
         filterable: false,
+        valueGetter: (_value, row: Host) => {
+          const ifaces = row.interfaces as HostInterface[] | undefined;
+          const iface = ifaces?.find((i) => i.type === "1") ?? ifaces?.[0];
+          return AVAIL_CONFIG[iface?.available ?? "0"]?.label ?? "Unknown";
+        },
         renderHeader: () => <Typography sx={headerSx}>Availability</Typography>,
         renderCell: (params) => (
           <AvailabilityCell interfaces={params.row.interfaces as HostInterface[]} />
@@ -655,38 +728,54 @@ export const Hosts = () => {
         headerName: "Status",
         width: 130,
         renderHeader: () => <Typography sx={headerSx}>Status</Typography>,
-        renderCell: (params) => (
-          <Chip
-            size="small"
-            label={params.value === "0" ? "Enabled" : "Disabled"}
-            sx={{
-              fontSize: "0.7rem",
-              height: 20,
-              fontWeight: 600,
-              bgcolor: params.value === "0" ? "rgba(46,160,67,0.14)" : "action.hover",
-              color: params.value === "0" ? "success.main" : "text.disabled",
-              border: "none",
-            }}
-          />
-        ),
+        renderCell: (params) => {
+          const on = params.value === "0";
+          return (
+            <Box
+              sx={{
+                display: "inline-flex",
+                alignItems: "center",
+                px: 1,
+                py: 0.3,
+                border: "1px solid",
+                borderColor: on ? "#2EA043" : "#6E7681",
+                bgcolor: on ? "#1A7F37" : "#3A414D",
+              }}
+            >
+              <Typography
+                sx={{
+                  fontSize: "0.65rem",
+                  fontWeight: 700,
+                  color: on ? "#fff" : "#E2E4E8",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                {on ? "Enabled" : "Disabled"}
+              </Typography>
+            </Box>
+          );
+        },
       },
       {
         field: "tags",
         headerName: "Tags",
         flex: 1.4,
         minWidth: 140,
-        sortable: false,
         filterable: false,
-        renderHeader: () => <Typography sx={headerSx}>Tags</Typography>,
+        valueGetter: (value) =>
+          ((value as HostTag[] | undefined) ?? [])
+            .map((t) => (t.value ? `${t.tag}:${t.value}` : t.tag))
+            .join(", "),
         renderCell: (params) => (
           <HostTagsCell
-            tags={(params.value as HostTag[] | undefined) ?? []}
+            tags={(params.row.tags as HostTag[] | undefined) ?? []}
             rowHost={params.row as Host}
             deleteTagInline={(host, tag) => {
               void deleteTagInline(host, tag);
             }}
           />
         ),
+        renderHeader: () => <Typography sx={headerSx}>Tags</Typography>,
       },
       {
         field: "problem_count",
@@ -695,58 +784,9 @@ export const Hosts = () => {
         renderHeader: () => <Typography sx={headerSx}>Problems</Typography>,
         renderCell: (params) => <ProblemsCell count={params.value as number} />,
       },
-      {
-        field: "actions",
-        headerName: "",
-        width: 145,
-        sortable: false,
-        filterable: false,
-        renderCell: (params) => (
-          <Box sx={{ display: "flex", gap: 0.5 }} onClick={(e) => e.stopPropagation()}>
-            <Tooltip title="Edit host" placement="left">
-              <IconButton
-                size="small"
-                onClick={() => openEditHost(params.row as Host)}
-                sx={{ color: "text.disabled", "&:hover": { color: "primary.main" } }}
-              >
-                <EditOutlinedIcon sx={{ fontSize: 16 }} />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Edit tags" placement="left">
-              <IconButton
-                size="small"
-                onClick={() => openTagEditor(params.row as Host)}
-                sx={{ color: "text.disabled", "&:hover": { color: "primary.main" } }}
-              >
-                <LocalOfferOutlinedIcon sx={{ fontSize: 16 }} />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Manage templates" placement="left">
-              <IconButton
-                size="small"
-                onClick={() => void openTplDialog(params.row as Host)}
-                sx={{ color: "text.disabled", "&:hover": { color: "primary.main" } }}
-              >
-                <LayersOutlinedIcon sx={{ fontSize: 16 }} />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Delete host" placement="left">
-              <IconButton
-                size="small"
-                onClick={() => setConfirmDelete(params.row as Host)}
-                sx={{ color: "text.disabled", "&:hover": { color: "error.main" } }}
-              >
-                <DeleteOutlineOutlinedIcon sx={{ fontSize: 17 }} />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        ),
-      },
     ],
     [headerSx, deleteTagInline, proxies, openEditHost, openTagEditor, openTplDialog],
   );
-
-  const totalProblems = hosts.reduce((sum, h) => sum + (h.problem_count ?? 0), 0);
 
   return (
     <Stack spacing={2}>
@@ -798,53 +838,31 @@ export const Hosts = () => {
         </Menu>
       </Box>
 
-      {/* ── Stats strip ── */}
-      <Paper
-        sx={{
-          display: "flex",
-          flexWrap: "wrap",
-          overflow: "hidden",
-          "& > div:not(:first-of-type)": { borderLeft: "1px solid", borderLeftColor: "divider" },
-        }}
-      >
-        {[
-          { label: "Total hosts", value: hosts.length },
+      {/* ── Stats ticker ── */}
+      <StatTicker
+        stats={[
+          { label: "Total hosts", value: loading ? "–" : hosts.length },
           {
             label: "Available",
-            value: hosts.filter((h) => h.interfaces?.some((i) => i.available === "1")).length,
+            value: loading
+              ? "–"
+              : hosts.filter((h) => h.interfaces?.some((i) => i.available === "1")).length,
           },
           {
             label: "Unavailable",
-            value: hosts.filter((h) => h.interfaces?.some((i) => i.available === "2")).length,
-            color: "error.main",
+            value: loading
+              ? "–"
+              : hosts.filter((h) => h.interfaces?.some((i) => i.available === "2")).length,
+            tone: "error.main",
           },
           {
             label: "Active problems",
-            value: totalProblems,
-            color: totalProblems > 0 ? "warning.main" : undefined,
+            value: loading ? "–" : totalProblems,
+            tone: !loading && totalProblems > 0 ? "warning.main" : undefined,
           },
-        ].map((s) => (
-          <Box key={s.label} sx={{ flex: 1, minWidth: 130, px: 2.25, py: 1.5 }}>
-            <Typography
-              variant="overline"
-              sx={{ color: "text.secondary", display: "block", mb: 0.25 }}
-            >
-              {s.label}
-            </Typography>
-            <Typography
-              sx={{
-                fontSize: "1.25rem",
-                fontWeight: 600,
-                lineHeight: 1.3,
-                fontVariantNumeric: "tabular-nums",
-                color: (s.value > 0 ? s.color : undefined) ?? "text.primary",
-              }}
-            >
-              {loading ? "—" : s.value}
-            </Typography>
-          </Box>
-        ))}
-      </Paper>
+        ]}
+        sx={{ mb: 2 }}
+      />
 
       {/* ── Inventory table ── */}
       <Card sx={{ overflow: "hidden" }}>
@@ -863,18 +881,20 @@ export const Hosts = () => {
             Host inventory
           </Typography>
           <TextField
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon sx={{ fontSize: 18, color: "text.disabled" }} />
+                  </InputAdornment>
+                ),
+              },
+            }}
             size="small"
             placeholder="Search by name or IP…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             sx={{ flex: 1 }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon sx={{ fontSize: 18, color: "text.disabled" }} />
-                </InputAdornment>
-              ),
-            }}
           />
           <Tooltip title="Refresh">
             <IconButton size="small" onClick={() => void reload()}>
@@ -899,7 +919,7 @@ export const Hosts = () => {
             sx={{
               border: "none",
               "& .MuiDataGrid-columnHeaders": {
-                bgcolor: "background.paper",
+                bgcolor: "action.hover",
                 borderBottom: "1px solid",
                 borderColor: "divider",
               },
@@ -916,8 +936,12 @@ export const Hosts = () => {
               "& .MuiDataGrid-row": {
                 cursor: "pointer",
               },
-              "& .MuiDataGrid-row:hover": {
+              // Subtle zebra — a structural cue against "flat", not a loud stripe.
+              "& .MuiDataGrid-row:nth-of-type(even)": {
                 bgcolor: "action.hover",
+              },
+              "& .MuiDataGrid-row:hover": {
+                bgcolor: "action.selected",
               },
               "& .MuiDataGrid-row.Mui-selected": {
                 bgcolor: "action.selected",
@@ -1017,7 +1041,7 @@ export const Hosts = () => {
               <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: "block" }}>
                 Link a new template
               </Typography>
-              <Stack direction="row" spacing={1} alignItems="center">
+              <Stack sx={{ alignItems: "center" }} direction="row" spacing={1}>
                 <FormControl size="small" sx={{ flex: 1 }}>
                   <InputLabel>Template</InputLabel>
                   <Select

@@ -2,9 +2,6 @@
 import RefreshIcon from "@mui/icons-material/Refresh";
 import {
   Alert,
-  Box,
-  Chip,
-  CircularProgress,
   IconButton,
   Stack,
   Table,
@@ -23,7 +20,9 @@ import { useRefreshTick } from "../../app/context/RefreshContext";
 
 export const QueueTab = ({
   showToast,
-}: { showToast: (m: string, s: "success" | "error") => void }) => {
+}: {
+  showToast: (m: string, s: "success" | "error") => void;
+}) => {
   const [data, setData] = useState<{
     items: Record<string, string>[];
     total: number;
@@ -82,29 +81,16 @@ export const QueueTab = ({
       <TabHeader
         title="Item Queue"
         description="Current item processing queue showing delayed and stuck checks."
+        count={data && !data.error ? data.total : undefined}
+        loading={loading}
+        actions={
+          <Tooltip title="Refresh">
+            <IconButton size="small" onClick={() => void load()} disabled={loading}>
+              <RefreshIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+        }
       />
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-        <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-          Queue Overview
-        </Typography>
-        {loading ? (
-          <CircularProgress size={14} />
-        ) : (
-          data &&
-          !data.error && (
-            <Chip
-              label={`${data.total} items`}
-              size="small"
-              sx={{ height: 18, fontSize: "0.62rem" }}
-            />
-          )
-        )}
-        <Tooltip title="Refresh">
-          <IconButton size="small" onClick={() => void load()} disabled={loading}>
-            <RefreshIcon sx={{ fontSize: 16 }} />
-          </IconButton>
-        </Tooltip>
-      </Box>
       {data?.error && <Alert severity="info">{data.error}</Alert>}
       {data && !data.error && data.items.length === 0 && (
         <Alert severity="success">Queue is empty — all items are up to date.</Alert>
@@ -114,7 +100,6 @@ export const QueueTab = ({
           sx={{
             border: "1px solid",
             borderColor: "divider",
-            borderRadius: 1.5,
             maxHeight: 480,
             overflow: "auto",
           }}

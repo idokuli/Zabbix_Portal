@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.6/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -7,11 +7,13 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "ignore": [
-      "**/dist/**",
-      "**/node_modules/**",
-      "**/.next/**",
-      "**/build/**"
+    "includes": [
+      "**",
+      "!**/dist/**",
+      "!**/node_modules/**",
+      "!**/.next/**",
+      "!**/build/**",
+      "!**/public/**"
     ]
   },
   "formatter": {
@@ -20,40 +22,34 @@
     "indentWidth": 2,
     "lineWidth": 100
   },
-  "organizeImports": {
-    "enabled": true
-  },
+  "assist": { "actions": { "source": { "organizeImports": "on" } } },
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "correctness": {
         "noUnusedImports": "error",
         "noUnusedVariables": "error"
       },
       "complexity": {
-        "all": true,
         "noVoid": "off"
       },
       "suspicious": {
-        "all": true,
         "noReactSpecificProps": "off",
         "noEmptyBlockStatements": "off",
         "noConsole": { "level": "warn", "options": { "allow": ["error", "warn"] } }
       },
       "style": {
-        "all": true,
         "useNamingConvention": "off",
         "noImplicitBoolean": "off",
         "noDefaultExport": "off",
         "useFilenamingConvention": "off"
       },
       "performance": {
-        "all": true,
         "noBarrelFile": "off"
       },
-      "security": { "all": true },
-      "a11y": { "all": true }
+      "security": {},
+      "a11y": {}
     }
   },
   "javascript": {

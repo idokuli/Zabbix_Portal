@@ -40,11 +40,13 @@ class MacrosMixin:
             logger.exception("list_global_macros failed")
             raise RuntimeError(str(e)) from e
 
+    _ZABBIX_NOT_CONNECTED = "Zabbix not connected"
+
     def create_global_macro(
         self, macro: str, value: str, description: str = "", macro_type: int = 0
     ) -> str:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(self._ZABBIX_NOT_CONNECTED)
         if not macro.startswith("{$"):
             macro = "{$" + macro.strip("{$}") + "}"
         try:
@@ -57,7 +59,7 @@ class MacrosMixin:
 
     def update_global_macro(self, globalmacroid: str, value: str, description: str = "") -> bool:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(self._ZABBIX_NOT_CONNECTED)
         try:
             self.zapi.usermacro.updateglobal(
                 globalmacroid=globalmacroid, value=value, description=description
@@ -68,7 +70,7 @@ class MacrosMixin:
 
     def delete_global_macro(self, globalmacroid: str) -> bool:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(self._ZABBIX_NOT_CONNECTED)
         try:
             self.zapi.usermacro.deleteglobal([globalmacroid])
             return True

@@ -1,6 +1,6 @@
 "use client";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import {
   Box,
@@ -64,7 +64,9 @@ export const makeEmptyUGForm = () => ({
 
 export const UserGroupsTab = ({
   showToast,
-}: { showToast: (m: string, s: "success" | "error") => void }) => {
+}: {
+  showToast: (m: string, s: "success" | "error") => void;
+}) => {
   const tick = useRefreshTick();
   const [items, setItems] = useState<UserGroup[]>([]);
   const [loading, setLoading] = useState(false);
@@ -185,36 +187,28 @@ export const UserGroupsTab = ({
       <TabHeader
         title="User Groups"
         description="Group users to simplify host and template permission assignments."
+        count={items.length}
+        loading={loading}
+        actions={
+          <>
+            <Tooltip title="Refresh">
+              <IconButton size="small" onClick={() => void load()} disabled={loading}>
+                <RefreshIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+            <Button
+              size="small"
+              variant="contained"
+              color="secondary"
+              startIcon={<AddOutlinedIcon />}
+              onClick={openAdd}
+            >
+              Add
+            </Button>
+          </>
+        }
       />
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-            User Groups
-          </Typography>
-          {loading ? (
-            <CircularProgress size={14} />
-          ) : (
-            <Chip label={items.length} size="small" sx={{ height: 18, fontSize: "0.62rem" }} />
-          )}
-        </Box>
-        <Stack direction="row" spacing={1}>
-          <Tooltip title="Refresh">
-            <IconButton size="small" onClick={() => void load()} disabled={loading}>
-              <RefreshIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
-          <Button
-            size="small"
-            variant="contained"
-            color="secondary"
-            startIcon={<AddOutlinedIcon />}
-            onClick={openAdd}
-          >
-            Add
-          </Button>
-        </Stack>
-      </Box>
-      <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5 }}>
+      <TableContainer sx={{ border: "1px solid", borderColor: "divider" }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -278,10 +272,10 @@ export const UserGroupsTab = ({
       <Dialog open={addOpen} onClose={() => setAddOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle sx={{ fontWeight: 700, pb: 0 }}>Create user group</DialogTitle>
         <Tabs
+          slotProps={{ indicator: { style: { height: 2 } } }}
           value={dialogTab}
           onChange={(_, v) => setDialogTab(v)}
           sx={{ px: 3, borderBottom: "1px solid", borderColor: "divider", minHeight: 36 }}
-          TabIndicatorProps={{ style: { height: 2 } }}
         >
           <Tab
             label="User group"
@@ -371,7 +365,6 @@ export const UserGroupsTab = ({
                     overflowY: "auto",
                     border: "1px solid",
                     borderColor: "divider",
-                    borderRadius: 1,
                   }}
                 >
                   {zabbixUsers.map((u) => (
@@ -418,9 +411,7 @@ export const UserGroupsTab = ({
                 Set host group access permissions:
               </Typography>
               {form.hostgroup_rights.length > 0 && (
-                <TableContainer
-                  sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, mb: 1.5 }}
-                >
+                <TableContainer sx={{ border: "1px solid", borderColor: "divider", mb: 1.5 }}>
                   <Table size="small">
                     <TableHead>
                       <TableRow>
@@ -510,9 +501,7 @@ export const UserGroupsTab = ({
                 Set template group access permissions:
               </Typography>
               {form.templategroup_rights.length > 0 && (
-                <TableContainer
-                  sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, mb: 1.5 }}
-                >
+                <TableContainer sx={{ border: "1px solid", borderColor: "divider", mb: 1.5 }}>
                   <Table size="small">
                     <TableHead>
                       <TableRow>
@@ -602,7 +591,12 @@ export const UserGroupsTab = ({
                 Filter problems visible to this group by host group and tag:
               </Typography>
               {form.tag_filters.map((tf, idx) => (
-                <Stack key={tf._key} direction="row" spacing={1} sx={{ mb: 1 }} alignItems="center">
+                <Stack
+                  key={tf._key}
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: "center", mb: 1 }}
+                >
                   <FormControl size="small" sx={{ minWidth: 180 }}>
                     <InputLabel>Host group</InputLabel>
                     <Select

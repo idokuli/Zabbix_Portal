@@ -93,7 +93,6 @@ export const TagEditorDialog = ({
               p: 1.5,
               border: "1px solid",
               borderColor: "divider",
-              borderRadius: 1.5,
               bgcolor: "action.hover",
             }}
           >
@@ -137,7 +136,7 @@ export const TagEditorDialog = ({
           <Divider />
 
           {/* Add new tag row */}
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack sx={{ alignItems: "center" }} direction="row" spacing={1}>
             <TextField
               size="small"
               label="Tag name"

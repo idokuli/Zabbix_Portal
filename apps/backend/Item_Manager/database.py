@@ -4,11 +4,15 @@ import logging
 from Zabbix_Base import zabbix_err
 from typing import TYPE_CHECKING
 from collections.abc import Callable
+from api.schemas.items import DbOdbcRequest
 
 if TYPE_CHECKING:
     from zabbix_utils import ZabbixAPI
 
 logger = logging.getLogger(__name__)
+
+_LABEL_PING = "Ping (1=up, 0=down)"
+_LABEL_VERSION = "Server version"
 
 
 class DatabaseItemsMixin:
@@ -24,14 +28,14 @@ class DatabaseItemsMixin:
                 "metric": "ping",
                 "key": "pgsql.ping",
                 "vtype": 3,
-                "label": "Ping (1=up, 0=down)",
+                "label": _LABEL_PING,
                 "has_extra": False,
             },
             {
                 "metric": "version",
                 "key": "pgsql.version",
                 "vtype": 4,
-                "label": "Server version",
+                "label": _LABEL_VERSION,
                 "has_extra": False,
             },
             {
@@ -54,14 +58,14 @@ class DatabaseItemsMixin:
                 "metric": "ping",
                 "key": "mysql.ping",
                 "vtype": 3,
-                "label": "Ping (1=up, 0=down)",
+                "label": _LABEL_PING,
                 "has_extra": False,
             },
             {
                 "metric": "version",
                 "key": "mysql.version",
                 "vtype": 4,
-                "label": "Server version",
+                "label": _LABEL_VERSION,
                 "has_extra": False,
             },
             {
@@ -84,14 +88,14 @@ class DatabaseItemsMixin:
                 "metric": "ping",
                 "key": "mongodb.ping",
                 "vtype": 3,
-                "label": "Ping (1=up, 0=down)",
+                "label": _LABEL_PING,
                 "has_extra": False,
             },
             {
                 "metric": "version",
                 "key": "mongodb.server.version",
                 "vtype": 4,
-                "label": "Server version",
+                "label": _LABEL_VERSION,
                 "has_extra": False,
             },
             {
@@ -107,14 +111,14 @@ class DatabaseItemsMixin:
                 "metric": "ping",
                 "key": "mssql.ping",
                 "vtype": 3,
-                "label": "Ping (1=up, 0=down)",
+                "label": _LABEL_PING,
                 "has_extra": False,
             },
             {
                 "metric": "version",
                 "key": "mssql.version",
                 "vtype": 4,
-                "label": "Server version",
+                "label": _LABEL_VERSION,
                 "has_extra": False,
             },
             {
@@ -128,24 +132,15 @@ class DatabaseItemsMixin:
     }
 
     def add_db_odbc_item(
-        self,
-        hostname: str,
-        dsn: str,
-        sql_query: str,
-        description: str,
-        item_name: str = "",
-        value_type: int = 3,
-        username: str = "",
-        password: str = "",
-        team_name: str = "",
-        delay: str = "1m",
-        units: str = "",
-        history: str = "31d",
-        trends: str = "365d",
-        status: int = 0,
-        timeout: str = "",
+        self, request: DbOdbcRequest, team_name: str = ""
     ) -> tuple[str | None, str | None]:
         """Add a Zabbix ODBC database monitor item (type 11) using db.odbc.select."""
+        hostname, dsn, sql_query, description = (
+            request.hostname,
+            request.dsn,
+            request.sql_query,
+            request.description,
+        )
         if not self.zapi:
             return None, "Zabbix API not connected."
         if not dsn or not sql_query or not description:
@@ -155,30 +150,29 @@ class DatabaseItemsMixin:
             if not host_data:
                 return None, f"Host '{hostname}' not found."
             host_id = host_data[0]["hostid"]
+            item_name = request.item_name or f"ODBC: {description} on {hostname}"
             safe_desc = description.replace(",", "_").replace("]", "_").replace("[", "_")
             item_key = f"db.odbc.select[{safe_desc},{dsn}]"
-            if not item_name:
-                item_name = f"ODBC: {description} on {hostname}"
             kwargs: dict = dict(
                 name=item_name,
                 key_=item_key,
                 hostid=host_id,
                 type=11,  # DB monitor (ODBC); type 4 was legacy SNMPv2c
-                value_type=value_type,
+                value_type=request.value_type,
                 params=sql_query,
-                delay=delay or "1m",
-                history=history or "31d",
-                trends=trends or "365d",
-                status=status,
+                delay=request.delay or "1m",
+                history=request.history or "31d",
+                trends=request.trends or "365d",
+                status=request.status,
             )
-            if units:
-                kwargs["units"] = units
-            if timeout:
-                kwargs["timeout"] = timeout
-            if username:
-                kwargs["username"] = username
-            if password:
-                kwargs["password"] = password
+            if request.units:
+                kwargs["units"] = request.units
+            if request.timeout:
+                kwargs["timeout"] = request.timeout
+            if request.username:
+                kwargs["username"] = request.username
+            if request.password:
+                kwargs["password"] = request.password
             if team_name:
                 kwargs["tags"] = [{"tag": "team", "value": team_name}]
             result = self.zapi.item.create(**kwargs)

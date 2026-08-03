@@ -182,7 +182,7 @@ The backend exposes a health endpoint that reports API + Zabbix connectivity:
 curl http://localhost:6769/health
 ```
 
-In the UI, the sidebar shows two live status dots — one for the Backend API and one for Zabbix (green = up, red = down) — updated every 15 seconds. On mobile, the top bar shows a single "Healthy" / "Degraded" chip.
+In the UI, the top bar shows two live status dots — one for the Backend API and one for Zabbix (green = up, red = down) — updated every 15 seconds. They're hidden below the `sm` breakpoint to save space on narrow phones.
 
 ---
 

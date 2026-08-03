@@ -1,6 +1,6 @@
 "use client";
 import AddIcon from "@mui/icons-material/Add";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
 import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
@@ -35,7 +35,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { type AlertEvent, type AlertRule, type Host, api } from "../../app/api";
+import { type AlertEvent, type AlertRule, api, type Host } from "../../app/api";
 import { ConfirmDelete } from "../../app/components/ConfirmDelete";
 import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
@@ -365,7 +365,6 @@ const RulesTable = ({
           gap: 1.5,
           border: "1px dashed",
           borderColor: "divider",
-          borderRadius: 2,
         }}
       >
         <NotificationsActiveOutlinedIcon sx={{ fontSize: 40, color: "text.disabled" }} />
@@ -465,7 +464,6 @@ const RecentFiringsSection = ({
           justifyContent: "center",
           border: "1px dashed",
           borderColor: "divider",
-          borderRadius: 2,
         }}
       >
         <Typography color="text.secondary" variant="body2">
@@ -666,20 +664,22 @@ export const AlertRulesTab = () => {
         description="Define custom threshold rules that trigger notifications based on item values."
       />
       {/* Toolbar */}
-      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
+      <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", mb: 2 }}>
         <TextField
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ fontSize: 18, color: "text.disabled" }} />
+                </InputAdornment>
+              ),
+            },
+          }}
           placeholder="Search host or item…"
           size="small"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           sx={{ flex: 1 }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon sx={{ fontSize: 18, color: "text.disabled" }} />
-              </InputAdornment>
-            ),
-          }}
         />
         <FormControl size="small" sx={{ minWidth: 160 }}>
           <InputLabel sx={{ fontSize: "0.82rem" }}>Host group</InputLabel>

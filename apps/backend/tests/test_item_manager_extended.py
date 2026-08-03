@@ -12,6 +12,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from api.schemas.items import TelnetItemRequest
+
 
 @pytest.fixture()
 def mgr():
@@ -123,14 +125,18 @@ def test_add_ipmi_item_zapi_none(mgr):
 def test_add_telnet_item_success(mgr):
     _mock_host_iface(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["41"]}
-    item_id, err = mgr.add_telnet_item("h1", "Telnet check", "uptime", "telnet.run[uptime]")
+    req = TelnetItemRequest(
+        hostname="h1", item_name="Telnet check", params="uptime", item_key="telnet.run[uptime]"
+    )
+    item_id, err = mgr.add_telnet_item(req)
     assert item_id == "41"
     assert err is None
 
 
 def test_add_telnet_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_telnet_item("h1", "x", "cmd", "k")
+    req = TelnetItemRequest(hostname="h1", item_name="x", params="cmd", item_key="k")
+    item_id, err = mgr.add_telnet_item(req)
     assert item_id is None
 
 

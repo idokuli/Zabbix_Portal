@@ -17,7 +17,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
-import { type RecentItem, api } from "../../app/api";
+import { api, type RecentItem } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
 import { formatSizeValue } from "../../app/utils";
 import { formatLastSeen } from "./shared";

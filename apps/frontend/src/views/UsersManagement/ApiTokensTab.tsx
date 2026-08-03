@@ -1,10 +1,9 @@
 "use client";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import {
   Alert,
-  Box,
   Button,
   Chip,
   CircularProgress,
@@ -50,7 +49,9 @@ type ApiToken = {
 
 export const ApiTokensTab = ({
   showToast,
-}: { showToast: (m: string, s: "success" | "error") => void }) => {
+}: {
+  showToast: (m: string, s: "success" | "error") => void;
+}) => {
   const tick = useRefreshTick();
   const [items, setItems] = useState<ApiToken[]>([]);
   const [users, setUsers] = useState<Array<{ id: number; username: string }>>([]);
@@ -134,35 +135,27 @@ export const ApiTokensTab = ({
       <TabHeader
         title="API Tokens"
         description="Generate and manage long-lived tokens for programmatic Zabbix API access."
+        count={items.length}
+        loading={loading}
+        actions={
+          <>
+            <Tooltip title="Refresh">
+              <IconButton size="small" onClick={() => void load()} disabled={loading}>
+                <RefreshIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+            <Button
+              size="small"
+              variant="contained"
+              color="secondary"
+              startIcon={<AddOutlinedIcon />}
+              onClick={() => setAddOpen(true)}
+            >
+              Add
+            </Button>
+          </>
+        }
       />
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-            API Tokens
-          </Typography>
-          {loading ? (
-            <CircularProgress size={14} />
-          ) : (
-            <Chip label={items.length} size="small" sx={{ height: 18, fontSize: "0.62rem" }} />
-          )}
-        </Box>
-        <Stack direction="row" spacing={1}>
-          <Tooltip title="Refresh">
-            <IconButton size="small" onClick={() => void load()} disabled={loading}>
-              <RefreshIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
-          <Button
-            size="small"
-            variant="contained"
-            color="secondary"
-            startIcon={<AddOutlinedIcon />}
-            onClick={() => setAddOpen(true)}
-          >
-            Add
-          </Button>
-        </Stack>
-      </Box>
 
       {newToken && (
         <Alert severity="success" onClose={() => setNewToken(null)} sx={{ mb: 1.5 }}>
@@ -176,7 +169,6 @@ export const ApiTokensTab = ({
               wordBreak: "break-all",
               bgcolor: "rgba(0,0,0,0.12)",
               p: 0.75,
-              borderRadius: 1,
             }}
           >
             {newToken}
@@ -184,7 +176,7 @@ export const ApiTokensTab = ({
         </Alert>
       )}
 
-      <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5 }}>
+      <TableContainer sx={{ border: "1px solid", borderColor: "divider" }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -293,12 +285,12 @@ export const ApiTokensTab = ({
               </Select>
             </FormControl>
             <TextField
+              slotProps={{ inputLabel: { shrink: true } }}
               size="small"
               label="Expires (optional)"
               type="datetime-local"
               value={form.expires_at}
               onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))}
-              InputLabelProps={{ shrink: true }}
               helperText="Leave blank for no expiry"
             />
           </Stack>

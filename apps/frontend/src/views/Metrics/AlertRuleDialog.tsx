@@ -25,7 +25,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type AlertRule, type Host, api } from "../../app/api";
+import { type AlertRule, api, type Host } from "../../app/api";
 import { SEVERITIES } from "../../app/severity";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { type CustomSound, isCustomId, listSounds, playSoundById } from "../../lib/soundLibrary";
@@ -399,13 +399,14 @@ const ItemListItem = ({
       sx={{ p: 0, mr: 1.5 }}
     />
     <ListItemText
+      slotProps={{
+        primary: {
+          sx: { fontSize: "0.82rem", fontWeight: checked ? 600 : 400 },
+        },
+        secondary: { sx: { fontSize: "0.7rem", fontFamily: "monospace" } },
+      }}
       primary={item.name}
       secondary={item.key_}
-      primaryTypographyProps={{
-        fontSize: "0.82rem",
-        fontWeight: checked ? 600 : 400,
-      }}
-      secondaryTypographyProps={{ fontSize: "0.7rem", fontFamily: "monospace" }}
     />
   </ListItem>
 );
@@ -437,13 +438,14 @@ const MonitorListItem = ({
       sx={{ p: 0, mr: 1.5 }}
     />
     <ListItemText
+      slotProps={{
+        primary: {
+          sx: { fontSize: "0.82rem", fontWeight: selected ? 600 : 400 },
+        },
+        secondary: { sx: { fontSize: "0.7rem" } },
+      }}
       primary={m.name}
       secondary={m.host}
-      primaryTypographyProps={{
-        fontSize: "0.82rem",
-        fontWeight: selected ? 600 : 400,
-      }}
-      secondaryTypographyProps={{ fontSize: "0.7rem" }}
     />
     <Box
       sx={{
@@ -935,7 +937,7 @@ export const AddRuleDialog = ({
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <Typography fontWeight={700}>New Alert Rule</Typography>
+        <Typography sx={{ fontWeight: 700 }}>New Alert Rule</Typography>
         <IconButton size="small" aria-label="Close dialog" onClick={onClose}>
           <CloseIcon fontSize="small" />
         </IconButton>
@@ -1342,7 +1344,7 @@ export const EditRuleDialog = ({
   return (
     <Dialog open={!!rule} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <Typography fontWeight={700}>Edit Alert Rule</Typography>
+        <Typography sx={{ fontWeight: 700 }}>Edit Alert Rule</Typography>
         <IconButton size="small" aria-label="Close dialog" onClick={onClose}>
           <CloseIcon fontSize="small" />
         </IconButton>

@@ -40,6 +40,8 @@ _LDAP_FULL_FIELDS = [
     "user_ref_attr",
 ]
 
+_ZABBIX_NOT_CONNECTED = "Zabbix not connected"
+
 
 class AuthMixin:
     """Mixed into ZabbixAdmin_Manager. Assumes `self.zapi`/`self._zabbix_version` from Zabbix_Base."""
@@ -50,7 +52,7 @@ class AuthMixin:
 
     def _require_ldap_multi_server(self) -> None:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(_ZABBIX_NOT_CONNECTED)
         if self._zabbix_version < (6, 4):
             raise RuntimeError("LDAP server management requires Zabbix 6.4 or later.")
 
@@ -154,7 +156,7 @@ class AuthMixin:
 
     def get_auth_settings(self) -> dict:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(_ZABBIX_NOT_CONNECTED)
         try:
             return self.zapi.authentication.get(output="extend")
         except Exception as e:
@@ -162,7 +164,7 @@ class AuthMixin:
 
     def update_auth_settings(self, params: dict) -> bool:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(_ZABBIX_NOT_CONNECTED)
         try:
             params = dict(params)
             # ldap_configured was the pre-6.4 name for the same on/off flag.
@@ -182,7 +184,7 @@ class AuthMixin:
         directory's credentials by id instead of sending an empty password.
         """
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(_ZABBIX_NOT_CONNECTED)
         if self._zabbix_version < (6, 4):
             raise RuntimeError("LDAP connection testing requires Zabbix 6.4 or later.")
         try:

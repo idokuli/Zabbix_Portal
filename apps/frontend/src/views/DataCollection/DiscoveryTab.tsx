@@ -1,5 +1,5 @@
 "use client";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import {
   Box,
   Button,
@@ -27,9 +27,8 @@ import {
 } from "@mui/material";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../app/api";
-import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
-import { ConfirmDelete, type DiscoveryRule, SectionHeader, StatusChip, fmtTs } from "./shared";
+import { ConfirmDelete, type DiscoveryRule, fmtTs, SectionHeader, StatusChip } from "./shared";
 
 const CHECK_TYPE_OPTIONS = [
   "icmp",
@@ -47,7 +46,9 @@ const CHECK_TYPE_OPTIONS = [
 
 export const DiscoveryTab = ({
   showToast,
-}: { showToast: (m: string, s: "success" | "error") => void }) => {
+}: {
+  showToast: (m: string, s: "success" | "error") => void;
+}) => {
   const [rules, setRules] = useState<DiscoveryRule[]>([]);
   const [loading, setLoading] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -121,12 +122,9 @@ export const DiscoveryTab = ({
 
   return (
     <>
-      <TabHeader
+      <SectionHeader
         title="Discovery Rules"
         description="Configure network discovery rules to automatically detect and add hosts."
-      />
-      <SectionHeader
-        title="Discovery"
         count={rules.length}
         loading={loading}
         onRefresh={load}
@@ -136,7 +134,7 @@ export const DiscoveryTab = ({
         }}
         addLabel="Add rule"
       />
-      <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5 }}>
+      <TableContainer sx={{ border: "1px solid", borderColor: "divider" }}>
         <Table size="small">
           <TableHead>
             <TableRow>

@@ -63,7 +63,6 @@ export const AddHostAccordion = ({
     sx={{
       border: "1px solid",
       borderColor: "divider",
-      borderRadius: "12px !important",
       "&:before": { display: "none" },
     }}
   >

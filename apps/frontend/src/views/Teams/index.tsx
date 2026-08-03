@@ -20,7 +20,6 @@ import {
   InputAdornment,
   InputLabel,
   MenuItem,
-  Paper,
   Select,
   type SelectChangeEvent,
   Snackbar,
@@ -31,10 +30,11 @@ import {
   Typography,
 } from "@mui/material";
 import type React from "react";
-import { useCallback, useEffect, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { type Host, type Team, type TeamUser, type UserRow, api } from "../../app/api";
+import { useCallback, useEffect, useState } from "react";
+import { api, type Host, type Team, type TeamUser, type UserRow } from "../../app/api";
 import { ConfirmDelete } from "../../app/components/ConfirmDelete";
+import { StatTicker } from "../../app/components/StatTicker";
 import { useAuth } from "../../app/context/AuthContext";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { useSync } from "../../app/context/SyncContext";
@@ -46,26 +46,22 @@ const ROLE_OPTIONS = [
   {
     value: "team_lead",
     label: "Team Lead",
-    color: "#4C7FDB",
     description: "Full team management — add/remove users, assign servers, reset passwords.",
   },
   {
     value: "operator",
     label: "Operator",
-    color: "#3B9E5A",
     description:
       "Create and delete hosts, items, and triggers within the team. Cannot manage users.",
   },
   {
     value: "member",
     label: "Member",
-    color: "#7D8590",
     description: "Read-only access to the team's hosts. Cannot create, delete, or modify anything.",
   },
   {
     value: "auditor",
     label: "Auditor",
-    color: "#C08A2D",
     description: "Read-only access across ALL teams. Intended for compliance and security reviews.",
   },
 ] as const;
@@ -244,33 +240,22 @@ const RoleOptionRow = ({
       gap: 1.5,
       px: 1.5,
       py: 1,
-      borderRadius: 2,
-      border: `1px solid ${selected ? `${r.color}55` : "rgba(148,163,184,0.2)"}`,
-      backgroundColor: selected ? `${r.color}12` : "transparent",
+      border: "1px solid",
+      borderColor: selected ? "primary.main" : "divider",
+      backgroundColor: selected ? "action.selected" : "transparent",
       cursor: "pointer",
-      transition: "all 0.15s ease",
-      "&:hover": { borderColor: `${r.color}88`, backgroundColor: `${r.color}08` },
+      transition: "border-color 0.15s ease, background-color 0.15s ease",
+      "&:hover": { backgroundColor: selected ? "action.selected" : "action.hover" },
     }}
   >
-    <Checkbox
-      checked={selected}
-      size="small"
-      sx={{ p: 0, mt: 0.1, color: r.color, "&.Mui-checked": { color: r.color } }}
-      disableRipple
-    />
+    <Checkbox checked={selected} size="small" sx={{ p: 0, mt: 0.1 }} disableRipple />
     <Box sx={{ flex: 1 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-        <Typography
-          variant="body2"
-          sx={{ fontWeight: 600, color: selected ? r.color : "text.primary", lineHeight: 1.3 }}
-        >
+        <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.3 }}>
           {r.label}
         </Typography>
         {inherited && (
-          <Typography
-            variant="caption"
-            sx={{ color: r.color, opacity: 0.7, fontSize: "0.6rem", fontWeight: 500 }}
-          >
+          <Typography variant="caption" color="text.secondary">
             inherited
           </Typography>
         )}
@@ -417,20 +402,22 @@ const AddMemberDialog = ({
         </Typography>
       ) : (
         <>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 1 }}>
             <TextField
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon sx={{ fontSize: 16, color: "text.disabled" }} />
+                    </InputAdornment>
+                  ),
+                },
+              }}
               size="small"
               placeholder="Search users…"
               value={memberSearch}
               onChange={(e) => setMemberSearch(e.target.value)}
               sx={{ flex: 1 }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon sx={{ fontSize: 16, color: "text.disabled" }} />
-                  </InputAdornment>
-                ),
-              }}
             />
             <Button size="small" onClick={() => setSelectedMembers(addableUsers.map((u) => u.id))}>
               All
@@ -449,7 +436,6 @@ const AddMemberDialog = ({
               overflowY: "auto",
               border: "1px solid",
               borderColor: "divider",
-              borderRadius: 1,
             }}
           >
             {addableUsers
@@ -594,12 +580,14 @@ const AssignHostsTab = ({
         value={hostSearch}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => setHostSearch(e.target.value)}
         sx={{ mb: 1 }}
-        InputProps={{
-          startAdornment: (
-            <InputAdornment position="start">
-              <SearchIcon sx={{ fontSize: 16, color: "text.disabled" }} />
-            </InputAdornment>
-          ),
+        slotProps={{
+          input: {
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ fontSize: 16, color: "text.disabled" }} />
+              </InputAdornment>
+            ),
+          },
         }}
       />
       <Box
@@ -608,7 +596,6 @@ const AssignHostsTab = ({
           overflowY: "auto",
           border: "1px solid",
           borderColor: "divider",
-          borderRadius: 1,
         }}
       >
         {assignableHosts
@@ -678,12 +665,14 @@ const AssignGroupsTab = ({
         value={groupSearch}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGroupSearch(e.target.value)}
         sx={{ mb: 1 }}
-        InputProps={{
-          startAdornment: (
-            <InputAdornment position="start">
-              <SearchIcon sx={{ fontSize: 16, color: "text.disabled" }} />
-            </InputAdornment>
-          ),
+        slotProps={{
+          input: {
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ fontSize: 16, color: "text.disabled" }} />
+              </InputAdornment>
+            ),
+          },
         }}
       />
       <Box
@@ -692,7 +681,6 @@ const AssignGroupsTab = ({
           overflowY: "auto",
           border: "1px solid",
           borderColor: "divider",
-          borderRadius: 1,
         }}
       >
         {assignableGroups
@@ -909,38 +897,15 @@ const TeamsStats = ({
   assignedCount: number;
   unassignedCount: number;
 }) => (
-  <Paper
-    sx={{
-      display: "flex",
-      flexWrap: "wrap",
-      overflow: "hidden",
-      mb: 3,
-      "& > div:not(:first-of-type)": { borderLeft: "1px solid", borderLeftColor: "divider" },
-    }}
-  >
-    {[
+  <StatTicker
+    sx={{ mb: 3 }}
+    stats={[
       { label: "Teams", value: teamsCount },
       { label: "Users", value: usersCount },
       { label: "Assigned servers", value: assignedCount },
       { label: "Unassigned servers", value: unassignedCount },
-    ].map((s) => (
-      <Box key={s.label} sx={{ flex: 1, minWidth: 130, px: 2.25, py: 1.5 }}>
-        <Typography variant="overline" sx={{ color: "text.secondary", display: "block", mb: 0.25 }}>
-          {s.label}
-        </Typography>
-        <Typography
-          sx={{
-            fontSize: "1.25rem",
-            fontWeight: 600,
-            lineHeight: 1.3,
-            fontVariantNumeric: "tabular-nums",
-          }}
-        >
-          {s.value}
-        </Typography>
-      </Box>
-    ))}
-  </Paper>
+    ]}
+  />
 );
 
 const TeamCardsGrid = ({
@@ -974,7 +939,7 @@ const TeamCardsGrid = ({
 }) => (
   <Grid container spacing={3}>
     {teams.map((team) => (
-      <Grid item xs={12} md={6} xl={4} key={team.id}>
+      <Grid size={{ xs: 12, md: 6, xl: 4 }} key={team.id}>
         <TeamCard
           team={team}
           canManage={isSuperadmin || (isAdmin && currentUserTeamId === team.id)}
@@ -996,7 +961,7 @@ const TeamCardsGrid = ({
     ))}
 
     {teams.length === 0 && (
-      <Grid item xs={12}>
+      <Grid size={{ xs: 12 }}>
         <Typography color="text.secondary" sx={{ py: 6, textAlign: "center" }}>
           No teams yet. Create one to get started.
         </Typography>

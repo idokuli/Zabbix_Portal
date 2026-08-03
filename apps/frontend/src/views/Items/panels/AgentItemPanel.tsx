@@ -10,14 +10,14 @@ import {
   Typography,
 } from "@mui/material";
 import { useEffect, useState } from "react";
-import { api } from "../../../app/api";
 import type { Host } from "../../../app/api";
+import { api } from "../../../app/api";
 import type { BulkResult, ServerItemKey } from "../shared";
 import {
+  assembleAgentKey,
   BulkResults,
   COMMON_ITEM_KEYS,
   KEY_PARAM_DEFS,
-  assembleAgentKey,
   valueTypes,
 } from "../shared";
 import {
@@ -249,8 +249,11 @@ export const AgentItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pa
       />
 
       {agentParamMode ? (
-        <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, p: 1.5 }}>
-          <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1.5}>
+        <Box sx={{ border: "1px solid", borderColor: "divider", p: 1.5 }}>
+          <Stack
+            sx={{ alignItems: "center", justifyContent: "space-between", mb: 1.5 }}
+            direction="row"
+          >
             <Typography
               variant="body2"
               sx={{ fontFamily: "monospace", fontWeight: 600, color: "primary.main" }}
@@ -367,6 +370,17 @@ export const AgentItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pa
           renderInput={(params) => (
             <TextField
               {...params}
+              slotProps={{
+                input: {
+                  ...params.slotProps.input,
+                  endAdornment: (
+                    <>
+                      {itemKeysLoading && <CircularProgress size={14} />}
+                      {params.slotProps.input.endAdornment}
+                    </>
+                  ),
+                },
+              }}
               label="Item key *"
               placeholder="e.g. system.cpu.util[,user]"
               helperText={
@@ -374,15 +388,6 @@ export const AgentItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pa
                   ? "Loading items from Zabbix…"
                   : `${serverItemKeys.length > 0 ? `${serverItemKeys.length} keys from Zabbix` : "Using built-in keys"} — select or type your own`
               }
-              InputProps={{
-                ...params.InputProps,
-                endAdornment: (
-                  <>
-                    {itemKeysLoading && <CircularProgress size={14} />}
-                    {params.InputProps.endAdornment}
-                  </>
-                ),
-              }}
             />
           )}
         />

@@ -4,6 +4,8 @@ from Zabbix_Base import Zabbix_Base, zabbix_err
 
 logger = logging.getLogger(__name__)
 
+_ZABBIX_NOT_CONNECTED = "Zabbix API not connected."
+
 
 class DataCollection_Manager(Zabbix_Base):
     def __init__(self):
@@ -57,7 +59,7 @@ class DataCollection_Manager(Zabbix_Base):
 
     def create_template_group(self, name: str) -> tuple[str | None, str | None]:
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         try:
             result = self.zapi.templategroup.create(name=name)
             gid = result["groupids"][0]
@@ -161,7 +163,7 @@ class DataCollection_Manager(Zabbix_Base):
 
     def create_host_group(self, name: str) -> tuple[str | None, str | None]:
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         try:
             result = self.zapi.hostgroup.create(name=name)
             gid = result["groupids"][0]
@@ -196,9 +198,9 @@ class DataCollection_Manager(Zabbix_Base):
             logger.exception("delete_host_group(%s) failed", groupid)
             return False
 
-    def set_host_group_members(self, groupid: str, hostids: list[str]) -> bool:
+    def set_host_group_members(self, groupid: str, hostids: list[str]) -> tuple[bool, str | None]:
         if not self.zapi:
-            return False
+            return False, _ZABBIX_NOT_CONNECTED
         try:
             current = self.zapi.host.get(groupids=[groupid], output=["hostid"])
             current_ids = {h["hostid"] for h in current}
@@ -212,10 +214,10 @@ class DataCollection_Manager(Zabbix_Base):
             if to_remove:
                 self.zapi.host.massremove(hostids=to_remove, groupids=[groupid])
             self._invalidate("host_groups")
-            return True
-        except Exception:
+            return True, None
+        except Exception as e:
             logger.exception("set_host_group_members(%s) failed", groupid)
-            return False
+            return False, zabbix_err(e)
 
     # ── Templates ─────────────────────────────────────────────────────
 
@@ -271,7 +273,7 @@ class DataCollection_Manager(Zabbix_Base):
         macros: list[dict] | None = None,
     ) -> tuple[str | None, str | None]:
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         if not group_ids:
             return None, "At least one template group is required."
         try:
@@ -376,7 +378,7 @@ class DataCollection_Manager(Zabbix_Base):
         macros: list[dict] | None = None,
     ) -> tuple[bool, str | None]:
         if not self.zapi:
-            return False, "Zabbix API not connected."
+            return False, _ZABBIX_NOT_CONNECTED
         try:
             params: dict = {"templateid": templateid}
             if name is not None:
@@ -480,7 +482,7 @@ class DataCollection_Manager(Zabbix_Base):
         description: str = "",
     ) -> tuple[str | None, str | None]:
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         if not hostids and not groupids:
             return None, "At least one host or host group is required."
         try:
@@ -565,7 +567,7 @@ class DataCollection_Manager(Zabbix_Base):
     ) -> tuple[str | None, str | None]:
         """Create a correlation with one or more tag conditions."""
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         try:
             cond_list = []
             for c in conditions or []:
@@ -658,7 +660,7 @@ class DataCollection_Manager(Zabbix_Base):
         ports: str = "",
     ) -> tuple[str | None, str | None]:
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         if not check_types:
             return None, "At least one check type is required."
         try:

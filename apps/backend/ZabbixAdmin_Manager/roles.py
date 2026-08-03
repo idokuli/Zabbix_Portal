@@ -42,6 +42,8 @@ class RolesMixin:
             logger.exception("list_roles failed")
             raise RuntimeError(str(e)) from e
 
+    _ZABBIX_NOT_CONNECTED = "Zabbix not connected"
+
     def create_role(
         self,
         name: str,
@@ -54,7 +56,7 @@ class RolesMixin:
         api_access: int = 1,
     ) -> str:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(self._ZABBIX_NOT_CONNECTED)
         try:
             params: dict = {"name": name, "type": role_type}
             rules: dict = {
@@ -78,7 +80,7 @@ class RolesMixin:
 
     def update_role(self, roleid: str, name: str) -> bool:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(self._ZABBIX_NOT_CONNECTED)
         try:
             self.zapi.role.update(roleid=roleid, name=name)
             return True
@@ -87,7 +89,7 @@ class RolesMixin:
 
     def delete_role(self, roleid: str) -> bool:
         if not self.zapi:
-            raise RuntimeError("Zabbix not connected")
+            raise RuntimeError(self._ZABBIX_NOT_CONNECTED)
         try:
             self.zapi.role.delete([roleid])
             return True

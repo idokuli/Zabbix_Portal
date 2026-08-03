@@ -4,11 +4,14 @@ import logging
 from Zabbix_Base import zabbix_err
 import re
 from typing import TYPE_CHECKING
+from api.schemas.items import JmxItemRequest, SshItemRequest, TelnetItemRequest
 
 if TYPE_CHECKING:
     from zabbix_utils import ZabbixAPI
 
 logger = logging.getLogger(__name__)
+
+_ZABBIX_NOT_CONNECTED = "Zabbix API not connected."
 
 
 class RemoteItemsMixin:
@@ -34,7 +37,7 @@ class RemoteItemsMixin:
     ) -> tuple[str | None, str | None]:
         """Add an IPMI agent item (type 12). Requires an IPMI interface on the host."""
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         try:
             host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
             if not host_data:
@@ -85,30 +88,43 @@ class RemoteItemsMixin:
             logger.exception("add_ipmi_item(%r) failed", hostname)
             return None, zabbix_err(e)
 
+    @staticmethod
+    def _ssh_extra_kwargs(request: SshItemRequest, team_name: str) -> dict:
+        """Build the optional SSH-item fields that are only sent when set."""
+        kwargs: dict = {}
+        if request.authtype == 0 and request.password:
+            kwargs["password"] = request.password
+        if request.authtype == 1:
+            kwargs["publickey"] = request.publickey
+            kwargs["privatekey"] = request.privatekey
+        if request.units:
+            kwargs["units"] = request.units
+        if request.description:
+            kwargs["description"] = request.description
+        if request.timeout:
+            kwargs["timeout"] = request.timeout
+        if team_name:
+            kwargs["tags"] = [{"tag": "team", "value": team_name}]
+        return kwargs
+
     def add_ssh_item(
-        self,
-        hostname: str,
-        item_name: str,
-        params: str,
-        item_key: str = "",
-        authtype: int = 0,  # 0=password, 1=public key
-        username: str = "",
-        password: str = "",
-        publickey: str = "",
-        privatekey: str = "",
-        value_type: int = 1,
-        team_name: str = "",
-        delay: str = "1m",
-        units: str = "",
-        history: str = "31d",
-        trends: str = "365d",
-        description: str = "",
-        status: int = 0,
-        timeout: str = "",
+        self, request: SshItemRequest, team_name: str = ""
     ) -> tuple[str | None, str | None]:
         """Add an SSH agent item (type 13). Zabbix server connects via SSH and runs the script."""
+        hostname = request.hostname
+        item_name = request.item_name
+        params = request.params
+        item_key = request.item_key
+        authtype = request.authtype
+        username = request.username
+        value_type = request.value_type
+        delay = request.delay
+        history = request.history
+        trends = request.trends
+        status = request.status
+
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         if not params.strip():
             return None, "SSH script/commands are required."
         try:
@@ -138,19 +154,7 @@ class RemoteItemsMixin:
                 trends=trends or "365d",
                 status=status,
             )
-            if authtype == 0 and password:
-                kwargs["password"] = password
-            if authtype == 1:
-                kwargs["publickey"] = publickey
-                kwargs["privatekey"] = privatekey
-            if units:
-                kwargs["units"] = units
-            if description:
-                kwargs["description"] = description
-            if timeout:
-                kwargs["timeout"] = timeout
-            if team_name:
-                kwargs["tags"] = [{"tag": "team", "value": team_name}]
+            kwargs.update(self._ssh_extra_kwargs(request, team_name))
             result = self.zapi.item.create(**kwargs)
             item_id = result["itemids"][0]
             logger.info("SSH item %r added to %r (ID: %s).", item_name, hostname, item_id)
@@ -160,25 +164,25 @@ class RemoteItemsMixin:
             return None, zabbix_err(e)
 
     def add_telnet_item(
-        self,
-        hostname: str,
-        item_name: str,
-        params: str,
-        item_key: str = "",
-        username: str = "",
-        password: str = "",
-        value_type: int = 1,
-        team_name: str = "",
-        delay: str = "1m",
-        units: str = "",
-        history: str = "31d",
-        trends: str = "365d",
-        description: str = "",
-        status: int = 0,
+        self, request: TelnetItemRequest, team_name: str = ""
     ) -> tuple[str | None, str | None]:
         """Add a Telnet agent item (type 14). Zabbix server connects via Telnet and runs the script."""
+        hostname = request.hostname
+        item_name = request.item_name
+        params = request.params
+        item_key = request.item_key
+        username = request.username
+        password = request.password
+        value_type = request.value_type
+        delay = request.delay
+        units = request.units
+        history = request.history
+        trends = request.trends
+        description = request.description
+        status = request.status
+
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         if not params.strip():
             return None, "Telnet script/commands are required."
         try:
@@ -223,25 +227,25 @@ class RemoteItemsMixin:
             return None, zabbix_err(e)
 
     def add_jmx_item(
-        self,
-        hostname: str,
-        item_name: str,
-        item_key: str,
-        jmx_endpoint: str = "",
-        username: str = "",
-        password: str = "",
-        value_type: int = 3,
-        team_name: str = "",
-        delay: str = "1m",
-        units: str = "",
-        history: str = "31d",
-        trends: str = "365d",
-        description: str = "",
-        status: int = 0,
+        self, request: JmxItemRequest, team_name: str = ""
     ) -> tuple[str | None, str | None]:
         """Add a JMX agent item (type 16). Requires Zabbix Java Gateway and a JMX interface on the host."""
+        hostname = request.hostname
+        item_name = request.item_name
+        item_key = request.item_key
+        jmx_endpoint = request.jmx_endpoint
+        username = request.username
+        password = request.password
+        value_type = request.value_type
+        delay = request.delay
+        units = request.units
+        history = request.history
+        trends = request.trends
+        description = request.description
+        status = request.status
+
         if not self.zapi:
-            return None, "Zabbix API not connected."
+            return None, _ZABBIX_NOT_CONNECTED
         if not item_key:
             return (
                 None,

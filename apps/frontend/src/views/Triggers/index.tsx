@@ -1,10 +1,11 @@
 "use client";
-import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
+import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutlineOutlined";
 import ClearIcon from "@mui/icons-material/Clear";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import WifiOffIcon from "@mui/icons-material/WifiOff";
@@ -21,6 +22,7 @@ import {
   IconButton,
   InputAdornment,
   InputLabel,
+  Menu,
   MenuItem,
   Select,
   Skeleton,
@@ -37,8 +39,10 @@ import {
   Typography,
 } from "@mui/material";
 import { useEffect, useState } from "react";
-import { type Host, api } from "../../app/api";
+import { api, type Host } from "../../app/api";
 import { ConfirmDelete } from "../../app/components/ConfirmDelete";
+import { formatDateTime } from "../../app/datetime";
+import { monoFontFamily } from "../../app/theme";
 import { AddTriggerDialog } from "./AddTriggerDialog";
 import { BulkTriggerDialog } from "./BulkTriggerDialog";
 import { EditTriggerDialog } from "./EditTriggerDialog";
@@ -48,6 +52,7 @@ const WHITESPACE_RE = /\s+/;
 
 type TriggerRowItemProps = {
   t: TriggerRow;
+  index: number;
   isExpanded: boolean;
   hostAvailable: string;
   onToggleExpand: () => void;
@@ -55,8 +60,58 @@ type TriggerRowItemProps = {
   onDeleteRequest: (t: TriggerRow) => void;
 };
 
+// Row actions consolidate into a single kebab, dimmed until the row is
+// hovered or the menu is open — keeps the ledger quiet at rest.
+const RowActionsMenu = ({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) => {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  return (
+    <>
+      <IconButton
+        size="small"
+        className="row-actions-trigger"
+        onClick={(e) => {
+          e.stopPropagation();
+          setAnchor(e.currentTarget);
+        }}
+        sx={{
+          opacity: anchor ? 1 : 0,
+          transition: "opacity 0.1s ease",
+          ".MuiTableRow-root:hover &, &:focus-visible": { opacity: 1 },
+        }}
+      >
+        <MoreVertIcon fontSize="small" />
+      </IconButton>
+      <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}>
+        <MenuItem
+          onClick={(e) => {
+            e.stopPropagation();
+            setAnchor(null);
+            onEdit();
+          }}
+          sx={{ fontSize: "0.8125rem", gap: 1.25 }}
+        >
+          <EditOutlinedIcon sx={{ fontSize: 16 }} />
+          Edit
+        </MenuItem>
+        <MenuItem
+          onClick={(e) => {
+            e.stopPropagation();
+            setAnchor(null);
+            onDelete();
+          }}
+          sx={{ fontSize: "0.8125rem", gap: 1.25, color: "error.main" }}
+        >
+          <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+          Delete
+        </MenuItem>
+      </Menu>
+    </>
+  );
+};
+
 const TriggerRowItem = ({
   t,
+  index,
   isExpanded,
   hostAvailable,
   onToggleExpand,
@@ -67,15 +122,29 @@ const TriggerRowItem = ({
   return (
     <>
       <TableRow hover onClick={onToggleExpand} sx={{ cursor: "pointer" }}>
-        {/* Expand arrow */}
-        <TableCell sx={{ width: 28, pr: 0 }}>
-          <IconButton size="small" sx={{ p: 0.25 }}>
+        <TableCell onClick={(e) => e.stopPropagation()} sx={{ width: 40, pr: 0 }}>
+          <RowActionsMenu onEdit={() => onEdit(t)} onDelete={() => onDeleteRequest(t)} />
+        </TableCell>
+        {/* Ledger index + expand arrow */}
+        <TableCell sx={{ width: 52, pr: 0 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            <Typography
+              sx={{
+                fontFamily: monoFontFamily,
+                fontSize: "0.6875rem",
+                color: "text.disabled",
+                width: 20,
+                textAlign: "right",
+              }}
+            >
+              {String(index + 1).padStart(2, "0")}
+            </Typography>
             {isExpanded ? (
-              <KeyboardArrowDownIcon sx={{ fontSize: 16 }} />
+              <KeyboardArrowDownIcon sx={{ fontSize: 16, color: "text.disabled" }} />
             ) : (
-              <KeyboardArrowRightIcon sx={{ fontSize: 16 }} />
+              <KeyboardArrowRightIcon sx={{ fontSize: 16, color: "text.disabled" }} />
             )}
-          </IconButton>
+          </Box>
         </TableCell>
         <TableCell>
           <Typography variant="body2">{t.description}</Typography>
@@ -107,14 +176,8 @@ const TriggerRowItem = ({
               <Chip
                 label="No data"
                 size="small"
-                variant="filled"
-                sx={{
-                  height: 18,
-                  fontSize: "0.65rem",
-                  fontWeight: 600,
-                  bgcolor: "#6E7681",
-                  color: "#fff",
-                }}
+                variant="outlined"
+                sx={{ height: 18, fontSize: "0.65rem", fontWeight: 600 }}
               />
             </Tooltip>
           ) : (
@@ -146,33 +209,6 @@ const TriggerRowItem = ({
             sx={{ height: 18, fontSize: "0.65rem" }}
           />
         </TableCell>
-        <TableCell>
-          <Stack direction="row" spacing={0.5}>
-            <Tooltip title="Edit trigger">
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEdit(t);
-                }}
-              >
-                <EditOutlinedIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Delete trigger">
-              <IconButton
-                size="small"
-                color="error"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteRequest(t);
-                }}
-              >
-                <DeleteOutlineIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Stack>
-        </TableCell>
       </TableRow>
 
       {/* Expanded detail row */}
@@ -184,7 +220,6 @@ const TriggerRowItem = ({
                 px: 3,
                 py: 1.5,
                 bgcolor: "action.hover",
-                borderRadius: 1,
                 my: 0.5,
               }}
             >
@@ -221,7 +256,7 @@ const TriggerRowItem = ({
                     Last state change
                   </Typography>
                   <Typography variant="body2" sx={{ fontSize: "0.8rem" }}>
-                    {t.lastchange ? new Date(t.lastchange * 1000).toLocaleString() : "Never"}
+                    {formatDateTime(t.lastchange, "Never")}
                   </Typography>
                 </Box>
                 <Box>
@@ -246,8 +281,7 @@ const TriggerRowItem = ({
                   px: 1.5,
                   py: 0.75,
                   bgcolor: "background.paper",
-                  borderRadius: 1,
-                  borderLeft: "3px solid",
+                  border: "1px solid",
                   borderColor: "divider",
                 }}
               >
@@ -327,10 +361,11 @@ const TriggerTableBody = ({
   }
   return (
     <>
-      {filtered.map((t) => (
+      {filtered.map((t, index) => (
         <TriggerRowItem
           key={t.triggerid}
           t={t}
+          index={index}
           isExpanded={expandedTriggerId === t.triggerid}
           hostAvailable={hostAvailable}
           onToggleExpand={() => onToggleExpand(t.triggerid)}
@@ -581,28 +616,34 @@ export const Triggers = () => {
         <CardContent>
           <Stack spacing={2}>
             {/* Toolbar */}
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems="center">
+            <Stack
+              sx={{ alignItems: "center" }}
+              direction={{ xs: "column", sm: "row" }}
+              spacing={1.5}
+            >
               <TextField
+                slotProps={{
+                  input: {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchOutlinedIcon sx={{ fontSize: 18, color: "text.disabled" }} />
+                      </InputAdornment>
+                    ),
+                    endAdornment: search ? (
+                      <InputAdornment position="end">
+                        <IconButton size="small" onClick={() => setSearch("")}>
+                          <ClearIcon sx={{ fontSize: 16 }} />
+                        </IconButton>
+                      </InputAdornment>
+                    ) : null,
+                  },
+                }}
                 size="small"
                 placeholder="Search by name or expression…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 disabled={!selectedHost}
                 sx={{ flex: 1 }}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchOutlinedIcon sx={{ fontSize: 18, color: "text.disabled" }} />
-                    </InputAdornment>
-                  ),
-                  endAdornment: search ? (
-                    <InputAdornment position="end">
-                      <IconButton size="small" onClick={() => setSearch("")}>
-                        <ClearIcon sx={{ fontSize: 16 }} />
-                      </IconButton>
-                    </InputAdornment>
-                  ) : null,
-                }}
               />
               <FormControl size="small" sx={{ minWidth: 200 }}>
                 <InputLabel>Filter by host</InputLabel>
@@ -673,7 +714,8 @@ export const Triggers = () => {
                   <Table size="small" stickyHeader>
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ width: 28, pr: 0, bgcolor: "background.paper" }} />
+                        <TableCell sx={{ width: 40, bgcolor: "background.paper" }} />
+                        <TableCell sx={{ width: 52, pr: 0, bgcolor: "background.paper" }} />
                         <TableCell sx={{ fontWeight: 700, bgcolor: "background.paper" }}>
                           Name
                         </TableCell>
@@ -693,7 +735,6 @@ export const Triggers = () => {
                         <TableCell sx={{ fontWeight: 700, width: 90, bgcolor: "background.paper" }}>
                           Status
                         </TableCell>
-                        <TableCell sx={{ width: 96, bgcolor: "background.paper" }} />
                       </TableRow>
                     </TableHead>
                     <TableBody>

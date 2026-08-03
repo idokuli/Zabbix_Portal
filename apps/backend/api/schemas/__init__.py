@@ -69,7 +69,7 @@ from api.schemas.items import (
     TrapperItemRequest,
     ZabbixScriptItemRequest,
 )
-from api.schemas.metrics import AcknowledgeRequest
+from api.schemas.metrics import AcknowledgeRequest, AddNoteRequest
 from api.schemas.services import (
     HealthMonitorCreateRequest,
     ServiceCreateRequest,
@@ -146,6 +146,7 @@ __all__ = [
     "TrapperItemRequest",
     "ZabbixScriptItemRequest",
     "AcknowledgeRequest",
+    "AddNoteRequest",
     "HealthMonitorCreateRequest",
     "ServiceCreateRequest",
     "ServiceUpdateRequest",

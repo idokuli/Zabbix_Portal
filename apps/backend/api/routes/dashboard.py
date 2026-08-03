@@ -14,6 +14,10 @@ router = APIRouter(tags=["Dashboard"])
 
 _KINDS = ("dashboard", "metrics")
 
+_SCOPE_MUST_BE_USER_OR_TEAM = "scope must be 'user' or 'team'"
+_NOT_IN_A_TEAM = "You are not in a team."
+_KIND_MUST_BE_DASHBOARD_OR_METRICS = "kind must be 'dashboard' or 'metrics'"
+
 
 def _require_global_viewer(current_user: dict) -> None:
     if not is_global_viewer(current_user):
@@ -122,11 +126,11 @@ def save_dashboard_layout(
     current_user: dict = Depends(get_current_user),
 ):
     if data.scope not in ("user", "team"):
-        raise HTTPException(status_code=400, detail="scope must be 'user' or 'team'")
+        raise HTTPException(status_code=400, detail=_SCOPE_MUST_BE_USER_OR_TEAM)
     if data.scope == "team":
         team_id = live_team_id(current_user)
         if not team_id:
-            raise HTTPException(status_code=400, detail="You are not in a team.")
+            raise HTTPException(status_code=400, detail=_NOT_IN_A_TEAM)
         if not um.save_dashboard_layout("team", int(team_id), data.widgets, page):
             raise HTTPException(status_code=500, detail="Failed to save layout.")
     else:
@@ -143,7 +147,7 @@ def list_dashboard_pages(
     current_user: dict = Depends(get_current_user),
 ):
     if kind not in _KINDS:
-        raise HTTPException(status_code=400, detail="kind must be 'dashboard' or 'metrics'")
+        raise HTTPException(status_code=400, detail=_KIND_MUST_BE_DASHBOARD_OR_METRICS)
     if scope == "all":
         _require_global_viewer(current_user)
         return {"pages": _list_all_team_dashboard_pages(kind)}
@@ -193,16 +197,16 @@ def create_dashboard_page(
     data: DashboardPageCreateRequest, current_user: dict = Depends(get_current_user)
 ):
     if data.scope not in ("user", "team"):
-        raise HTTPException(status_code=400, detail="scope must be 'user' or 'team'")
+        raise HTTPException(status_code=400, detail=_SCOPE_MUST_BE_USER_OR_TEAM)
     if data.kind not in _KINDS:
-        raise HTTPException(status_code=400, detail="kind must be 'dashboard' or 'metrics'")
+        raise HTTPException(status_code=400, detail=_KIND_MUST_BE_DASHBOARD_OR_METRICS)
     name = data.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="name is required")
     if data.scope == "team":
         team_id = live_team_id(current_user)
         if not team_id:
-            raise HTTPException(status_code=400, detail="You are not in a team.")
+            raise HTTPException(status_code=400, detail=_NOT_IN_A_TEAM)
         page = um.create_dashboard_page("team", int(team_id), data.kind, name)
     else:
         user_id = int(current_user.get("sub", 0))
@@ -222,16 +226,16 @@ def rename_dashboard_page(
     if page_key in _KINDS:
         raise HTTPException(status_code=400, detail="Cannot rename the default dashboard.")
     if data.scope not in ("user", "team"):
-        raise HTTPException(status_code=400, detail="scope must be 'user' or 'team'")
+        raise HTTPException(status_code=400, detail=_SCOPE_MUST_BE_USER_OR_TEAM)
     if kind not in _KINDS:
-        raise HTTPException(status_code=400, detail="kind must be 'dashboard' or 'metrics'")
+        raise HTTPException(status_code=400, detail=_KIND_MUST_BE_DASHBOARD_OR_METRICS)
     name = data.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="name is required")
     if data.scope == "team":
         team_id = live_team_id(current_user)
         if not team_id:
-            raise HTTPException(status_code=400, detail="You are not in a team.")
+            raise HTTPException(status_code=400, detail=_NOT_IN_A_TEAM)
         owner_type, owner_id = "team", int(team_id)
     else:
         owner_type, owner_id = "user", int(current_user.get("sub", 0))
@@ -250,13 +254,13 @@ def delete_dashboard_page(
     if page_key in _KINDS:
         raise HTTPException(status_code=400, detail="Cannot delete the default dashboard.")
     if scope not in ("user", "team"):
-        raise HTTPException(status_code=400, detail="scope must be 'user' or 'team'")
+        raise HTTPException(status_code=400, detail=_SCOPE_MUST_BE_USER_OR_TEAM)
     if kind not in _KINDS:
-        raise HTTPException(status_code=400, detail="kind must be 'dashboard' or 'metrics'")
+        raise HTTPException(status_code=400, detail=_KIND_MUST_BE_DASHBOARD_OR_METRICS)
     if scope == "team":
         team_id = live_team_id(current_user)
         if not team_id:
-            raise HTTPException(status_code=400, detail="You are not in a team.")
+            raise HTTPException(status_code=400, detail=_NOT_IN_A_TEAM)
         owner_type, owner_id = "team", int(team_id)
     else:
         owner_type, owner_id = "user", int(current_user.get("sub", 0))

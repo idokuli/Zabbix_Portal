@@ -180,7 +180,7 @@ PREV_TAG=v1.3.0
 
 All downstream jobs consume these vars via `artifacts: reports: dotenv`. Jobs for unchanged apps are skipped entirely. On the first-ever tag (or with `FORCE_BUILD=1`) everything is marked changed.
 
-`validate:variables` also runs in `.pre`. It prints all pipeline variables and **hard-fails** if any required variable (`GITOPS_REPO_URL`, `GITOPS_DEPLOY_KEY`, `ARTIFACTORY_REGISTRY`, etc.) is missing — surfacing misconfiguration early.
+`validate:variables` also runs in `.pre`. It prints all pipeline variables and **hard-fails** if any required variable (`GITOPS_REPO_URL`, `GITOPS_TOKEN`, `ARTIFACTORY_REGISTRY`, the `*_ARGOCD_SERVER` URLs, the `SONAR_*` settings, etc.) is missing — surfacing misconfiguration early. The masked `*_ARGOCD_TOKEN`s are excluded, since the check cannot read masked values.
 
 ### 4.2 Stage `lint` — fast-fail static checks
 
@@ -208,7 +208,7 @@ Kaniko layer caching is enabled (`--cache=true --cache-ttl=1440h`).
 
 ### 4.4 Stage `promote` — update image tags in the GitOps repo
 
-`push-image-tags` clones the `zabbix-portal-gitops` repo (via `GITOPS_DEPLOY_KEY`), updates the `tag:` line in `environments/{staging,production,dr}/values.yaml` for each changed app, then commits and pushes back. The commit message references the pipeline URL, commit SHA, and changed apps.
+`push-image-tags` clones the GitOps repo over HTTPS (authenticating with `GITOPS_TOKEN`, a GitLab access token with `write_repository` scope), updates the `tag:` line in `environments/{staging,production,dr}/values.yaml` for each changed app, then commits and pushes back to `main`. The commit message references the pipeline URL, commit SHA, and changed apps. If `CHANGED_APPS` is empty the job exits early as a no-op.
 
 Only changed apps get a new tag — unchanged apps stay pinned to whatever was already in the values file. If neither app changed, the job exits cleanly with no commit.
 

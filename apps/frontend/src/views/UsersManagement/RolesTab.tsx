@@ -1,6 +1,6 @@
 "use client";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import {
@@ -166,7 +166,9 @@ const makeDefaultRoleForm = () => ({
 
 export const RolesTab = ({
   showToast,
-}: { showToast: (m: string, s: "success" | "error") => void }) => {
+}: {
+  showToast: (m: string, s: "success" | "error") => void;
+}) => {
   const tick = useRefreshTick();
   const [items, setItems] = useState<Role[]>([]);
   const [loading, setLoading] = useState(false);
@@ -277,39 +279,31 @@ export const RolesTab = ({
       <TabHeader
         title="User Roles"
         description="Define permission sets that control what users can see and do in Zabbix."
+        count={items.length}
+        loading={loading}
+        actions={
+          <>
+            <Tooltip title="Refresh">
+              <IconButton size="small" onClick={() => void load()} disabled={loading}>
+                <RefreshIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+            <Button
+              size="small"
+              variant="contained"
+              color="secondary"
+              startIcon={<AddOutlinedIcon />}
+              onClick={() => {
+                setForm(makeDefaultRoleForm());
+                setAddOpen(true);
+              }}
+            >
+              Add
+            </Button>
+          </>
+        }
       />
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-            Roles
-          </Typography>
-          {loading ? (
-            <CircularProgress size={14} />
-          ) : (
-            <Chip label={items.length} size="small" sx={{ height: 18, fontSize: "0.62rem" }} />
-          )}
-        </Box>
-        <Stack direction="row" spacing={1}>
-          <Tooltip title="Refresh">
-            <IconButton size="small" onClick={() => void load()} disabled={loading}>
-              <RefreshIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
-          <Button
-            size="small"
-            variant="contained"
-            color="secondary"
-            startIcon={<AddOutlinedIcon />}
-            onClick={() => {
-              setForm(makeDefaultRoleForm());
-              setAddOpen(true);
-            }}
-          >
-            Add
-          </Button>
-        </Stack>
-      </Box>
-      <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5 }}>
+      <TableContainer sx={{ border: "1px solid", borderColor: "divider" }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -394,11 +388,11 @@ export const RolesTab = ({
 
       {/* Create role dialog — full Zabbix-equivalent */}
       <Dialog
+        slotProps={{ paper: { sx: { maxHeight: "90vh" } } }}
         open={addOpen}
         onClose={() => setAddOpen(false)}
         maxWidth="md"
         fullWidth
-        PaperProps={{ sx: { maxHeight: "90vh" } }}
       >
         <DialogTitle sx={{ fontWeight: 700 }}>Create role</DialogTitle>
         <DialogContent dividers sx={{ overflowY: "auto" }}>

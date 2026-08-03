@@ -1,12 +1,10 @@
 "use client";
 import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import {
   Alert,
-  Box,
   Button,
-  Chip,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -32,7 +30,9 @@ import { ConfirmDelete, type ProxyGroup } from "./shared";
 
 export const ProxyGroupsTab = ({
   showToast,
-}: { showToast: (m: string, s: "success" | "error") => void }) => {
+}: {
+  showToast: (m: string, s: "success" | "error") => void;
+}) => {
   const [items, setItems] = useState<ProxyGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -107,41 +107,33 @@ export const ProxyGroupsTab = ({
       <TabHeader
         title="Proxy Groups"
         description="Group proxies for high-availability and load distribution."
+        count={items.length}
+        loading={loading}
+        actions={
+          <>
+            <Tooltip title="Refresh">
+              <IconButton size="small" onClick={() => void load()} disabled={loading}>
+                <RefreshIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
+            <Button
+              size="small"
+              variant="contained"
+              color="secondary"
+              startIcon={<AddOutlinedIcon />}
+              onClick={() => setAddOpen(true)}
+            >
+              Add
+            </Button>
+          </>
+        }
       />
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-            Proxy Groups
-          </Typography>
-          {loading ? (
-            <CircularProgress size={14} />
-          ) : (
-            <Chip label={items.length} size="small" sx={{ height: 18, fontSize: "0.62rem" }} />
-          )}
-        </Box>
-        <Stack direction="row" spacing={1}>
-          <Tooltip title="Refresh">
-            <IconButton size="small" onClick={() => void load()} disabled={loading}>
-              <RefreshIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Tooltip>
-          <Button
-            size="small"
-            variant="contained"
-            color="secondary"
-            startIcon={<AddOutlinedIcon />}
-            onClick={() => setAddOpen(true)}
-          >
-            Add
-          </Button>
-        </Stack>
-      </Box>
       {items.length === 0 && !loading && (
         <Alert severity="info" sx={{ mb: 1 }}>
           Proxy groups require Zabbix 7.0 or later. No proxy groups found.
         </Alert>
       )}
-      <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5 }}>
+      <TableContainer sx={{ border: "1px solid", borderColor: "divider" }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -212,6 +204,7 @@ export const ProxyGroupsTab = ({
               helperText="e.g. 1m, 30s, 5m"
             />
             <TextField
+              slotProps={{ htmlInput: { min: 1 } }}
               size="small"
               label="Minimum number of proxies *"
               type="number"
@@ -219,7 +212,6 @@ export const ProxyGroupsTab = ({
               onChange={(e) =>
                 setForm((f) => ({ ...f, min_online: Math.max(1, Number(e.target.value)) }))
               }
-              inputProps={{ min: 1 }}
             />
             <TextField
               size="small"

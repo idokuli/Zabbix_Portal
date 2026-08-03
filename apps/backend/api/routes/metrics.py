@@ -4,10 +4,37 @@ from Auth import get_current_user
 from Database import get_conn
 from api.deps import live_team_id, team_hostname_filter
 from api.managers import metrics_bot
-from api.schemas import AcknowledgeRequest
+from api.schemas import AcknowledgeRequest, AddNoteRequest
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Metrics"])
+
+
+def _require_host_access(current_user: dict, hostname: str, action_verb: str) -> None:
+    """Raise if a non-root user doesn't have their team assigned to this host."""
+    if "root" in current_user.get("roles", []):
+        return
+    if not hostname:
+        raise HTTPException(status_code=400, detail=f"hostname is required to {action_verb}.")
+    user_team_id = live_team_id(current_user)
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT team_id FROM host_assignments WHERE hostname = %s",
+                (hostname,),
+            )
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+    # A host with no assignment rows is unrestricted; one with assignments
+    # must include the user's own team among them (a host can belong to
+    # more than one team).
+    if rows and not any(r["team_id"] == user_team_id for r in rows):
+        raise HTTPException(
+            status_code=403,
+            detail=f"You can only {action_verb} problems for hosts assigned to your team.",
+        )
 
 
 @router.get("/metrics/problems", tags=["Metrics"], summary="Active Zabbix problems")
@@ -24,32 +51,51 @@ def get_problems(current_user: dict = Depends(get_current_user)):
     if not problems:
         return {"problems": problems}
 
-    # Enrich acknowledged problems with who/when/note from our DB.
-    acked_ids = [p["eventid"] for p in problems if p["acknowledged"]]
-    if acked_ids:
-        conn = get_conn()
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """SELECT DISTINCT ON (eventid) eventid, acknowledged_by, acked_at, note
-                       FROM problem_acknowledgements
-                       WHERE eventid = ANY(%s)
-                       ORDER BY eventid, acked_at DESC""",
-                    (acked_ids,),
-                )
-                ack_map = {
-                    row["eventid"]: {
-                        "ack_user": row["acknowledged_by"],
-                        "ack_time": row["acked_at"].isoformat(),
-                        "ack_note": row["note"],
-                    }
-                    for row in cur.fetchall()
+    event_ids = [p["eventid"] for p in problems]
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            # Enrich acknowledged problems with who/when/note from our DB.
+            cur.execute(
+                """SELECT DISTINCT ON (eventid) eventid, acknowledged_by, acked_at, note
+                   FROM problem_acknowledgements
+                   WHERE eventid = ANY(%s)
+                   ORDER BY eventid, acked_at DESC""",
+                (event_ids,),
+            )
+            ack_map = {
+                row["eventid"]: {
+                    "ack_user": row["acknowledged_by"],
+                    "ack_time": row["acked_at"].isoformat(),
+                    "ack_note": row["note"],
                 }
-        finally:
-            conn.close()
-        for p in problems:
-            if p["eventid"] in ack_map:
-                p.update(ack_map[p["eventid"]])
+                for row in cur.fetchall()
+            }
+
+            # Attach the full note thread — independent of acknowledgement.
+            cur.execute(
+                """SELECT eventid, username, note, created_at
+                   FROM problem_notes
+                   WHERE eventid = ANY(%s)
+                   ORDER BY created_at ASC""",
+                (event_ids,),
+            )
+            notes_map: dict[str, list[dict]] = {}
+            for row in cur.fetchall():
+                notes_map.setdefault(row["eventid"], []).append(
+                    {
+                        "username": row["username"],
+                        "note": row["note"],
+                        "created_at": row["created_at"].isoformat(),
+                    }
+                )
+    finally:
+        conn.close()
+
+    for p in problems:
+        if p["eventid"] in ack_map:
+            p.update(ack_map[p["eventid"]])
+        p["notes"] = notes_map.get(p["eventid"], [])
     return {"problems": problems}
 
 
@@ -63,32 +109,7 @@ def acknowledge_problem(
     body: AcknowledgeRequest = Body(default_factory=AcknowledgeRequest),
     current_user: dict = Depends(get_current_user),
 ):
-    roles = current_user.get("roles", [])
-    if "root" not in roles:
-        if not body.hostname:
-            raise HTTPException(
-                status_code=400,
-                detail="hostname is required to acknowledge a problem.",
-            )
-        user_team_id = live_team_id(current_user)
-        conn = get_conn()
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT team_id FROM host_assignments WHERE hostname = %s",
-                    (body.hostname,),
-                )
-                rows = cur.fetchall()
-        finally:
-            conn.close()
-        # A host with no assignment rows is unrestricted; one with assignments
-        # must include the user's own team among them (a host can belong to
-        # more than one team).
-        if rows and not any(r["team_id"] == user_team_id for r in rows):
-            raise HTTPException(
-                status_code=403,
-                detail="You can only acknowledge problems for hosts assigned to your team.",
-            )
+    _require_host_access(current_user, body.hostname, "acknowledge")
 
     username = current_user.get("username", "unknown")
     if not metrics_bot.acknowledge_problem(eventid, username=username, note=body.note):
@@ -114,6 +135,45 @@ def acknowledge_problem(
         conn.close()
     logger.info("Problem %s acknowledged by %s.", eventid, username)
     return {"message": "Problem acknowledged.", "acknowledged_by": username}
+
+
+@router.post(
+    "/metrics/problems/{eventid}/note",
+    tags=["Metrics"],
+    summary="Add a note to a problem without acknowledging it",
+)
+def add_problem_note(
+    eventid: str,
+    body: AddNoteRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    if not body.note.strip():
+        raise HTTPException(status_code=400, detail="note must not be empty.")
+    _require_host_access(current_user, body.hostname, "add notes to")
+
+    username = current_user.get("username", "unknown")
+    if not metrics_bot.add_problem_note(eventid, username=username, note=body.note):
+        raise HTTPException(status_code=503, detail="Zabbix not connected or note failed.")
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO problem_notes (eventid, hostname, username, note)
+                   VALUES (%s, %s, %s, %s)
+                   RETURNING created_at""",
+                (eventid, body.hostname, username, body.note),
+            )
+            created_at = cur.fetchone()["created_at"]
+            conn.commit()
+    finally:
+        conn.close()
+    logger.info("Note added to problem %s by %s.", eventid, username)
+    return {
+        "message": "Note added.",
+        "username": username,
+        "note": body.note,
+        "created_at": created_at.isoformat(),
+    }
 
 
 @router.get("/metrics/acknowledgements", tags=["Metrics"], summary="Acknowledgement audit log")
