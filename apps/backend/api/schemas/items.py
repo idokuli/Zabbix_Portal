@@ -22,6 +22,16 @@ class ItemRequest(TeamTaggableRequest):
     description: str = ""  # optional item description
     status: int = 0  # 0=enabled 1=disabled
     timeout: str = ""  # per-item timeout override (Zabbix 7.x+); empty = use global
+    # Optionally auto-create a trigger for this item via the maybe_create_trigger
+    # helper in triggers.py. Numeric value types get a threshold trigger if
+    # trigger_threshold is set; string/log/text types get a pattern-match trigger if
+    # trigger_pattern is set; otherwise falls back to a "no data" trigger.
+    create_trigger: bool = False
+    trigger_operator: str = ">"
+    trigger_threshold: float | None = None
+    trigger_pattern: str = ""
+    trigger_match_type: str = "like"
+    trigger_priority: int = 3
 
 
 class ItemUpdateRequest(BaseModel):
@@ -56,7 +66,7 @@ class HttpItemRequest(TeamTaggableRequest):
     query_fields: list[HttpQueryField] = []
     http_proxy: str = ""
     # authentication
-    authtype: int = 0  # 0=None, 1=Basic, 2=NTLM
+    authtype: int = 0  # auth type: 0 None, 1 Basic, 2 NTLM
     username: str = ""
     password: str = ""
     # SSL settings
@@ -64,7 +74,7 @@ class HttpItemRequest(TeamTaggableRequest):
     ssl_key_file: str = ""
     ssl_key_password: str = ""
     # output options
-    convert_to_json: bool = False  # output_format=1 in Zabbix
+    convert_to_json: bool = False  # sets Zabbix's output_format to 1
     allow_traps: bool = False
     status: int = 0  # 0=enabled 1=disabled
     # regex preprocessing
@@ -76,8 +86,18 @@ class HttpItemRequest(TeamTaggableRequest):
     delay: str = "1m"
     units: str = ""
     history: str = "31d"
-    trends: str = "365d"
+    trends: str = "0d"
     description: str = ""
+    # Optionally auto-create a trigger for this item via the maybe_create_trigger
+    # helper in triggers.py. Numeric value types get a threshold trigger if
+    # trigger_threshold is set; string/log/text types get a pattern-match trigger if
+    # trigger_pattern is set; otherwise falls back to a "no data" trigger.
+    create_trigger: bool = False
+    trigger_operator: str = ">"
+    trigger_threshold: float | None = None
+    trigger_pattern: str = ""
+    trigger_match_type: str = "like"
+    trigger_priority: int = 3
 
 
 class ServiceItemRequest(TeamTaggableRequest):
@@ -90,6 +110,16 @@ class ServiceItemRequest(TeamTaggableRequest):
     history: str = "31d"
     trends: str = "365d"
     description: str = ""
+    # Optionally auto-create a trigger for this item via the maybe_create_trigger
+    # helper in triggers.py. Numeric value types get a threshold trigger if
+    # trigger_threshold is set; string/log/text types get a pattern-match trigger if
+    # trigger_pattern is set; otherwise falls back to a "no data" trigger.
+    create_trigger: bool = False
+    trigger_operator: str = ">"
+    trigger_threshold: float | None = None
+    trigger_pattern: str = ""
+    trigger_match_type: str = "like"
+    trigger_priority: int = 3
 
 
 class WindowsServiceItemRequest(TeamTaggableRequest):
@@ -114,7 +144,7 @@ class ProcessItemRequest(TeamTaggableRequest):
     item_name: str = ""
     team_name: str = ""
     create_trigger: bool = True
-    trigger_priority: int = 3  # 3 = high
+    trigger_priority: int = 3  # severity level: high
     delay: str = "1m"
     history: str = "31d"
     trends: str = "365d"
@@ -155,6 +185,16 @@ class ScriptItemRequest(TeamTaggableRequest):
     description: str = ""
     status: int = 0  # 0=enabled 1=disabled
     timeout: str = ""  # per-item timeout override (Zabbix 7.x+)
+    # Optionally auto-create a trigger for this item via the maybe_create_trigger
+    # helper in triggers.py. Numeric value types get a threshold trigger if
+    # trigger_threshold is set; string/log/text types get a pattern-match trigger if
+    # trigger_pattern is set; otherwise falls back to a "no data" trigger.
+    create_trigger: bool = False
+    trigger_operator: str = ">"
+    trigger_threshold: float | None = None
+    trigger_pattern: str = ""
+    trigger_match_type: str = "like"
+    trigger_priority: int = 3
 
 
 class BulkItemRequest(TeamTaggableRequest):
@@ -208,6 +248,16 @@ class DbOdbcRequest(TeamTaggableRequest):
     trends: str = "365d"
     status: int = 0
     timeout: str = ""
+    # Optionally auto-create a trigger for this item via the maybe_create_trigger
+    # helper in triggers.py. Numeric value types get a threshold trigger if
+    # trigger_threshold is set; string/log/text types get a pattern-match trigger if
+    # trigger_pattern is set; otherwise falls back to a "no data" trigger.
+    create_trigger: bool = False
+    trigger_operator: str = ">"
+    trigger_threshold: float | None = None
+    trigger_pattern: str = ""
+    trigger_match_type: str = "like"
+    trigger_priority: int = 3
 
 
 class DbAgent2Request(TeamTaggableRequest):
@@ -218,6 +268,16 @@ class DbAgent2Request(TeamTaggableRequest):
     extra_param: str = ""
     item_name: str = ""
     value_type: int | None = None
+    # Optionally auto-create a trigger for this item via the maybe_create_trigger
+    # helper in triggers.py. Numeric value types get a threshold trigger if
+    # trigger_threshold is set; string/log/text types get a pattern-match trigger if
+    # trigger_pattern is set; otherwise falls back to a "no data" trigger.
+    create_trigger: bool = False
+    trigger_operator: str = ">"
+    trigger_threshold: float | None = None
+    trigger_pattern: str = ""
+    trigger_match_type: str = "like"
+    trigger_priority: int = 3
 
 
 class SnmpItemRequest(TeamTaggableRequest):
@@ -226,13 +286,15 @@ class SnmpItemRequest(TeamTaggableRequest):
     item_key: str = ""
     snmp_oid: str
     value_type: int = 3
-    snmp_version: int = 2  # 1=v1, 2=v2c, 3=v3
+    snmp_version: int = 2  # SNMP version: 1 v1, 2 v2c, 3 v3
     snmp_community: str = "public"
     snmpv3_securityname: str = ""
-    snmpv3_securitylevel: int = 0  # 0=noAuthNoPriv, 1=authNoPriv, 2=authPriv
-    snmpv3_authprotocol: int = 0  # 0=MD5,1=SHA,2=SHA224,3=SHA256,4=SHA384,5=SHA512
+    snmpv3_securitylevel: int = 0  # security level: 0 noAuthNoPriv, 1 authNoPriv, 2 authPriv
+    snmpv3_authprotocol: int = (
+        0  # auth protocol: 0 MD5, 1 SHA, 2 SHA224, 3 SHA256, 4 SHA384, 5 SHA512
+    )
     snmpv3_authpassphrase: str = ""
-    snmpv3_privprotocol: int = 0  # 0=DES,1=AES128,2=AES192,3=AES256
+    snmpv3_privprotocol: int = 0  # priv protocol: 0 DES, 1 AES128, 2 AES192, 3 AES256
     snmpv3_privpassphrase: str = ""
     snmpv3_contextname: str = ""
     delay: str = "1m"
@@ -241,6 +303,16 @@ class SnmpItemRequest(TeamTaggableRequest):
     trends: str = "365d"
     description: str = ""
     status: int = 0
+    # Optionally auto-create a trigger for this item via the maybe_create_trigger
+    # helper in triggers.py. Numeric value types get a threshold trigger if
+    # trigger_threshold is set; string/log/text types get a pattern-match trigger if
+    # trigger_pattern is set; otherwise falls back to a "no data" trigger.
+    create_trigger: bool = False
+    trigger_operator: str = ">"
+    trigger_threshold: float | None = None
+    trigger_pattern: str = ""
+    trigger_match_type: str = "like"
+    trigger_priority: int = 3
 
 
 class SnmpTrapRequest(TeamTaggableRequest):
@@ -252,6 +324,16 @@ class SnmpTrapRequest(TeamTaggableRequest):
     trends: str = "365d"
     description: str = ""
     status: int = 0
+    # Optionally auto-create a trigger for this item via the maybe_create_trigger
+    # helper in triggers.py. Numeric value types get a threshold trigger if
+    # trigger_threshold is set; string/log/text types get a pattern-match trigger if
+    # trigger_pattern is set; otherwise falls back to a "no data" trigger.
+    create_trigger: bool = False
+    trigger_operator: str = ">"
+    trigger_threshold: float | None = None
+    trigger_pattern: str = ""
+    trigger_match_type: str = "like"
+    trigger_priority: int = 3
 
 
 class InternalItemRequest(TeamTaggableRequest):
@@ -265,6 +347,16 @@ class InternalItemRequest(TeamTaggableRequest):
     trends: str = "365d"
     description: str = ""
     status: int = 0
+    # Optionally auto-create a trigger for this item via the maybe_create_trigger
+    # helper in triggers.py. Numeric value types get a threshold trigger if
+    # trigger_threshold is set; string/log/text types get a pattern-match trigger if
+    # trigger_pattern is set; otherwise falls back to a "no data" trigger.
+    create_trigger: bool = False
+    trigger_operator: str = ">"
+    trigger_threshold: float | None = None
+    trigger_pattern: str = ""
+    trigger_match_type: str = "like"
+    trigger_priority: int = 3
 
 
 class TrapperItemRequest(TeamTaggableRequest):
@@ -277,6 +369,16 @@ class TrapperItemRequest(TeamTaggableRequest):
     trends: str = "365d"
     description: str = ""
     status: int = 0
+    # Optionally auto-create a trigger for this item via the maybe_create_trigger
+    # helper in triggers.py. Numeric value types get a threshold trigger if
+    # trigger_threshold is set; string/log/text types get a pattern-match trigger if
+    # trigger_pattern is set; otherwise falls back to a "no data" trigger.
+    create_trigger: bool = False
+    trigger_operator: str = ">"
+    trigger_threshold: float | None = None
+    trigger_pattern: str = ""
+    trigger_match_type: str = "like"
+    trigger_priority: int = 3
 
 
 class ExternalItemRequest(TeamTaggableRequest):
@@ -290,6 +392,16 @@ class ExternalItemRequest(TeamTaggableRequest):
     trends: str = "365d"
     description: str = ""
     status: int = 0
+    # Optionally auto-create a trigger for this item via the maybe_create_trigger
+    # helper in triggers.py. Numeric value types get a threshold trigger if
+    # trigger_threshold is set; string/log/text types get a pattern-match trigger if
+    # trigger_pattern is set; otherwise falls back to a "no data" trigger.
+    create_trigger: bool = False
+    trigger_operator: str = ">"
+    trigger_threshold: float | None = None
+    trigger_pattern: str = ""
+    trigger_match_type: str = "like"
+    trigger_priority: int = 3
 
 
 class IpmiItemRequest(TeamTaggableRequest):
@@ -304,6 +416,16 @@ class IpmiItemRequest(TeamTaggableRequest):
     trends: str = "365d"
     description: str = ""
     status: int = 0
+    # Optionally auto-create a trigger for this item via the maybe_create_trigger
+    # helper in triggers.py. Numeric value types get a threshold trigger if
+    # trigger_threshold is set; string/log/text types get a pattern-match trigger if
+    # trigger_pattern is set; otherwise falls back to a "no data" trigger.
+    create_trigger: bool = False
+    trigger_operator: str = ">"
+    trigger_threshold: float | None = None
+    trigger_pattern: str = ""
+    trigger_match_type: str = "like"
+    trigger_priority: int = 3
 
 
 class SshItemRequest(TeamTaggableRequest):
@@ -324,6 +446,16 @@ class SshItemRequest(TeamTaggableRequest):
     description: str = ""
     status: int = 0
     timeout: str = ""
+    # Optionally auto-create a trigger for this item via the maybe_create_trigger
+    # helper in triggers.py. Numeric value types get a threshold trigger if
+    # trigger_threshold is set; string/log/text types get a pattern-match trigger if
+    # trigger_pattern is set; otherwise falls back to a "no data" trigger.
+    create_trigger: bool = False
+    trigger_operator: str = ">"
+    trigger_threshold: float | None = None
+    trigger_pattern: str = ""
+    trigger_match_type: str = "like"
+    trigger_priority: int = 3
 
 
 class TelnetItemRequest(TeamTaggableRequest):
@@ -340,6 +472,16 @@ class TelnetItemRequest(TeamTaggableRequest):
     trends: str = "365d"
     description: str = ""
     status: int = 0
+    # Optionally auto-create a trigger for this item via the maybe_create_trigger
+    # helper in triggers.py. Numeric value types get a threshold trigger if
+    # trigger_threshold is set; string/log/text types get a pattern-match trigger if
+    # trigger_pattern is set; otherwise falls back to a "no data" trigger.
+    create_trigger: bool = False
+    trigger_operator: str = ">"
+    trigger_threshold: float | None = None
+    trigger_pattern: str = ""
+    trigger_match_type: str = "like"
+    trigger_priority: int = 3
 
 
 class JmxItemRequest(TeamTaggableRequest):
@@ -356,6 +498,16 @@ class JmxItemRequest(TeamTaggableRequest):
     trends: str = "365d"
     description: str = ""
     status: int = 0
+    # Optionally auto-create a trigger for this item via the maybe_create_trigger
+    # helper in triggers.py. Numeric value types get a threshold trigger if
+    # trigger_threshold is set; string/log/text types get a pattern-match trigger if
+    # trigger_pattern is set; otherwise falls back to a "no data" trigger.
+    create_trigger: bool = False
+    trigger_operator: str = ">"
+    trigger_threshold: float | None = None
+    trigger_pattern: str = ""
+    trigger_match_type: str = "like"
+    trigger_priority: int = 3
 
 
 class CalculatedItemRequest(TeamTaggableRequest):
@@ -370,6 +522,16 @@ class CalculatedItemRequest(TeamTaggableRequest):
     trends: str = "365d"
     description: str = ""
     status: int = 0
+    # Optionally auto-create a trigger for this item via the maybe_create_trigger
+    # helper in triggers.py. Numeric value types get a threshold trigger if
+    # trigger_threshold is set; string/log/text types get a pattern-match trigger if
+    # trigger_pattern is set; otherwise falls back to a "no data" trigger.
+    create_trigger: bool = False
+    trigger_operator: str = ">"
+    trigger_threshold: float | None = None
+    trigger_pattern: str = ""
+    trigger_match_type: str = "like"
+    trigger_priority: int = 3
 
 
 class DependentItemRequest(TeamTaggableRequest):
@@ -382,6 +544,16 @@ class DependentItemRequest(TeamTaggableRequest):
     trends: str = "365d"
     description: str = ""
     status: int = 0
+    # Optionally auto-create a trigger for this item via the maybe_create_trigger
+    # helper in triggers.py. Numeric value types get a threshold trigger if
+    # trigger_threshold is set; string/log/text types get a pattern-match trigger if
+    # trigger_pattern is set; otherwise falls back to a "no data" trigger.
+    create_trigger: bool = False
+    trigger_operator: str = ">"
+    trigger_threshold: float | None = None
+    trigger_pattern: str = ""
+    trigger_match_type: str = "like"
+    trigger_priority: int = 3
 
 
 class ScriptParamEntry(BaseModel):
@@ -403,6 +575,16 @@ class ZabbixScriptItemRequest(TeamTaggableRequest):
     description: str = ""
     status: int = 0
     timeout: str = ""
+    # Optionally auto-create a trigger for this item via the maybe_create_trigger
+    # helper in triggers.py. Numeric value types get a threshold trigger if
+    # trigger_threshold is set; string/log/text types get a pattern-match trigger if
+    # trigger_pattern is set; otherwise falls back to a "no data" trigger.
+    create_trigger: bool = False
+    trigger_operator: str = ">"
+    trigger_threshold: float | None = None
+    trigger_pattern: str = ""
+    trigger_match_type: str = "like"
+    trigger_priority: int = 3
 
 
 class BrowserItemRequest(TeamTaggableRequest):
@@ -419,13 +601,23 @@ class BrowserItemRequest(TeamTaggableRequest):
     description: str = ""
     status: int = 0
     timeout: str = ""
+    # Optionally auto-create a trigger for this item via the maybe_create_trigger
+    # helper in triggers.py. Numeric value types get a threshold trigger if
+    # trigger_threshold is set; string/log/text types get a pattern-match trigger if
+    # trigger_pattern is set; otherwise falls back to a "no data" trigger.
+    create_trigger: bool = False
+    trigger_operator: str = ">"
+    trigger_threshold: float | None = None
+    trigger_pattern: str = ""
+    trigger_match_type: str = "like"
+    trigger_priority: int = 3
 
 
 class TemplateItemRequest(BaseModel):
     name: str
     key_: str
-    type_: int = 0  # 0=agent, 2=trapper, 3=simple, 5=internal, etc.
-    value_type: int = 3  # 0=float, 1=char, 2=log, 3=uint, 4=text
+    type_: int = 0  # item type: 0 agent, 2 trapper, 3 simple, 5 internal, etc.
+    value_type: int = 3  # value type: 0 float, 1 char, 2 log, 3 uint, 4 text
     delay: str = "1m"
     history: str = "31d"
     trends: str = "365d"

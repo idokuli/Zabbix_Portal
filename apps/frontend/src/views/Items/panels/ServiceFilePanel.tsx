@@ -21,8 +21,23 @@ import {
   HostSelect,
   InlineItemsList,
   type PanelProps,
+  TriggerToggleFields,
   useCommonItemState,
 } from "./shared";
+
+// Mirrors the value_type column of _SERVICE_MAP in Item_Manager/http_service.py, so the
+// trigger toggle shows the right numeric threshold UI for each service type.
+const SERVICE_VALUE_TYPE: Record<string, number> = {
+  icmp_ping: 3,
+  icmp_loss: 0,
+  icmp_time: 0,
+  http: 3,
+  https: 3,
+  ssh: 3,
+  smtp: 3,
+  ftp: 3,
+  tcp_port: 3,
+};
 
 export const ServicePanel = ({ hosts, hostsLoading, showToast, onSuccess }: PanelProps) => {
   const [hostname, setHostname] = useState("");
@@ -76,6 +91,7 @@ export const ServicePanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pane
       history: common.history,
       trends: common.trends,
       description: common.description || undefined,
+      ...common.triggerFields(),
     });
 
   const onSubmit = async () => {
@@ -179,6 +195,24 @@ export const ServicePanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pane
         setDescription={common.setDescription}
         withUnits={false}
       />
+
+      {!isAgentType && (
+        <TriggerToggleFields
+          valueType={SERVICE_VALUE_TYPE[svcType] ?? 3}
+          createTrigger={common.createTrigger}
+          setCreateTrigger={common.setCreateTrigger}
+          triggerOperator={common.triggerOperator}
+          setTriggerOperator={common.setTriggerOperator}
+          triggerThreshold={common.triggerThreshold}
+          setTriggerThreshold={common.setTriggerThreshold}
+          triggerPattern={common.triggerPattern}
+          setTriggerPattern={common.setTriggerPattern}
+          triggerMatchType={common.triggerMatchType}
+          setTriggerMatchType={common.setTriggerMatchType}
+          triggerPriority={common.triggerPriority}
+          setTriggerPriority={common.setTriggerPriority}
+        />
+      )}
 
       <Box>
         <Button variant="contained" color="secondary" onClick={onSubmit} disabled={isDisabled}>

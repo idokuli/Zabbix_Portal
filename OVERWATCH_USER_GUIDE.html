@@ -316,7 +316,11 @@ footer {
       </ul>
     </li>
     <li><a href="#interface">The interface</a></li>
-    <li><a href="#roles">Roles and permissions</a></li>
+    <li><a href="#roles">Roles and permissions</a>
+      <ul>
+        <li><a href="#restrictions">Restrictions</a></li>
+      </ul>
+    </li>
     <li><a href="#sections">Section guide</a>
       <ul>
         <li><a href="#overview">Overview</a></li>
@@ -456,8 +460,8 @@ footer {
   <thead><tr><th>Role</th><th>What they can do</th></tr></thead>
   <tbody>
   <tr><td><strong>Root</strong></td><td>Full access to everything. Can manage all users, teams, and system settings. Can grant any role.</td></tr>
-  <tr><td><strong>Team Lead</strong></td><td>Can manage users within their team, assign hosts, and see all admin sections. Cannot manage other team leads or root users.</td></tr>
-  <tr><td><strong>Operator</strong></td><td>Can view hosts, metrics, and problems and acknowledge alerts. Cannot create or delete users or change system settings. The default role assigned to LDAP users on first login.</td></tr>
+  <tr><td><strong>Team Lead</strong></td><td>Can manage users within their team, assign hosts, see all admin sections, and unacknowledge problems (reopening them). Cannot manage other team leads or root users.</td></tr>
+  <tr><td><strong>Operator</strong></td><td>Can create, edit, and delete hosts and monitoring configuration (items, triggers, host groups) within their team, view metrics and problems, and acknowledge alerts. Cannot create or delete users or change system settings. The default role assigned to LDAP users on first login.</td></tr>
   <tr><td><strong>Member</strong></td><td>Read-only access to the team's hosts and monitoring data. Cannot make changes or acknowledge problems.</td></tr>
   <tr><td><strong>Auditor</strong></td><td>Read-only access across all teams. Can view everything but cannot make changes. Only Root can grant this role.</td></tr>
   </tbody>
@@ -469,6 +473,23 @@ footer {
 <div class="callout info">
   The admin sections (Data Collection, Alerts, Users, Administration) are only visible in the activity rail for <strong>Root</strong> and <strong>Team Lead</strong> roles. The underlying API endpoints are independently gated — a missing nav icon is not the only access control.
 </div>
+
+<h2 id="restrictions">Restrictions</h2>
+
+<p>Independent of roles, a user can also have one or more <strong>restrictions</strong>, set in the same form used to assign their role (see <a href="#users">Users</a>). A restriction removes write access to one specific area even though the user's role would otherwise allow it — read access is never affected.</p>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Restriction</th><th>Section</th><th>Removes</th></tr></thead>
+  <tbody>
+  <tr><td><strong>Host Groups</strong></td><td>Data Collection</td><td>Creating, renaming, deleting host groups, or changing their membership</td></tr>
+  <tr><td><strong>Items</strong></td><td>Monitoring</td><td>Creating, editing, or deleting items on any host</td></tr>
+  <tr><td><strong>Triggers</strong></td><td>Monitoring</td><td>Creating, editing, or deleting triggers on any host</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>For example, an Operator with the <strong>Items</strong> and <strong>Triggers</strong> restrictions can still add hosts and manage host groups, but every "Add Item" / "Add Trigger" action is blocked. Root always bypasses restrictions.</p>
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════════════ -->
@@ -543,12 +564,13 @@ footer {
 </ul>
 
 <div class="callout note">If no graphs appear on a graph widget, the host either has no graph definitions configured in Zabbix or is currently unreachable.</div>
+<p>Each graph widget's time-range dropdown ranges from 1 minute up to <strong>6 months</strong> (1M / 3M / 6M presets after 7d). How far back data actually appears depends on your Zabbix server's own trend retention — see <a href="#troubleshooting">Troubleshooting</a> if an older range comes back empty.</p>
 
 <hr>
 
 <h2 id="monitoring">Monitoring</h2>
 
-<p>The Monitoring section has six tabs.</p>
+<p>The Monitoring section has six tabs (Latest Data through Alert History below), plus two standalone pages reached from the same rail group: Items and Triggers.</p>
 
 <h3>Latest Data</h3>
 <p>Shows the last collected value for every monitored item on a selected host. Use the search box to filter by item name or key, the <strong>Host</strong> dropdown to pick a specific host, and the <strong>Status</strong> dropdown to show only enabled or disabled items.</p>
@@ -565,7 +587,7 @@ footer {
 <div class="callout warning">A yellow banner appears at the top of the table when the host agent is unreachable. All items will show <strong>No data</strong> until the agent comes back online.</div>
 
 <h3>Item Graphs</h3>
-<p>Time-series charts for item values. Select a host and an item, then choose a time range to view historical data. You can zoom in by dragging on the chart.</p>
+<p>Time-series charts for item values. Select a host and an item, then choose a time range to view historical data — from 1 minute up to <strong>6 months</strong> (1M / 3M / 6M presets after 7d). You can zoom in by dragging on the chart.</p>
 
 <h3 id="problems-tab">Problems</h3>
 <p>Shows all currently active Zabbix trigger problems, using Zabbix's own six-level severity scale and colours:</p>
@@ -600,7 +622,17 @@ footer {
   <li>Enter an optional note.</li>
   <li>Click <span class="ui">Acknowledge</span>.</li>
 </ol>
-<div class="callout info">Acknowledging marks the problem in Zabbix and records who did it in Overwatch's audit log. The problem itself <strong>stays open</strong> until its trigger condition clears in Zabbix — acknowledging is a statement that a human is on it, not a fix.</div>
+<div class="callout info">Acknowledging marks the problem in Zabbix and records who did it in Overwatch's audit log. The problem itself <strong>stays open</strong> until its trigger condition clears in Zabbix — acknowledging is a statement that a human is on it, not a fix. It also stops the <a href="#repeat-ring">repeat-ring</a> for that problem.</div>
+
+<h4 id="unacknowledge">Unacknowledging a problem <em>(Team Lead+)</em></h4>
+<p>If a problem was acknowledged too early — the fix didn't hold, or it needs a second look — a <strong>Root</strong> or <strong>Team Lead</strong> can reopen it:</p>
+<ol>
+  <li>Find the acknowledged problem in the Problems tab.</li>
+  <li>Click <span class="ui">Unack</span> next to the green Ack'd chip.</li>
+  <li>Enter an optional reason.</li>
+  <li>Click <span class="ui">Unacknowledge</span>.</li>
+</ol>
+<div class="callout info">Unacknowledging clears the acknowledgement in Zabbix and Overwatch, so the problem re-enters the alert workflow — including the <a href="#repeat-ring">repeat-ring</a>, if it's still unacknowledged 5 minutes later. The reason (if any) is recorded as a note on the problem, alongside who unacknowledged it and when. <span class="ui">Unack</span> only appears for Root and Team Lead accounts — Operator and Member cannot unacknowledge.</div>
 
 <h4 id="hide-acked">Auto-hiding acknowledged problems</h4>
 <p>If your list fills up with problems that are already being handled, use the <strong>Hide acked after</strong> dropdown to make acknowledged problems disappear from your view after a delay: <em>Never</em> (the default), 1 minute, 5, 15, 30 minutes, 1 hour, or 4 hours.</p>
@@ -637,6 +669,23 @@ footer {
 <h3>Alert History</h3>
 <p>A log of all alert-rule events — when each rule fired and when it resolved.</p>
 
+<h3 id="items-page">Items</h3>
+<p>Add a monitoring item to a host by picking an item type (Agent, HTTP, SNMP, Database, Script, and around a dozen others) and filling in its form — each type asks for what it needs (a URL for HTTP checks, an OID for SNMP, a script for Script items, and so on).</p>
+
+<div class="callout note">
+  <span class="panel-title">Auto-create trigger</span>
+  Every item type's form has an <strong>Auto-create trigger</strong> toggle. Turn it on and the portal creates a matching trigger the moment the item is saved, instead of you having to switch to the Triggers page afterward:
+  <ul>
+    <li>For <strong>numeric</strong> items (Float, Integer), set an operator and threshold (e.g. <code>&gt; 90</code>) and the trigger fires when the value crosses it.</li>
+    <li>For <strong>string, log, or text</strong> items, set a match type (contains / does not contain / matches regex / does not match regex) and a pattern, and the trigger fires when the item's value matches it.</li>
+    <li>Leave the threshold or pattern blank on either side and the portal creates a <strong>"no data"</strong> trigger instead — useful for items where there's nothing sensible to compare against (an HTTP check or process-up item that just returns 0 or 1) but you still want to know if it stops reporting.</li>
+  </ul>
+  You also pick a severity for the trigger, same as creating one manually.
+</div>
+
+<h3>Triggers</h3>
+<p>Lists all triggers across your hosts, with severity and current state. Use <span class="ui">Add Trigger</span> to create one manually against an existing item, with the same numeric-threshold or string-pattern choice described above.</p>
+
 <hr>
 
 <h2 id="services">Services &amp; SLA</h2>
@@ -658,13 +707,19 @@ footer {
 <table>
   <thead><tr><th>Sub-page</th><th>What it shows</th></tr></thead>
   <tbody>
-  <tr><td><strong>Availability</strong></td><td>Uptime percentages per host group over a chosen period</td></tr>
+  <tr><td><strong>Availability</strong></td><td>Uptime percentages per host group, over a preset window (1h – 30 days) or a custom From/To month range spanning up to 6 months</td></tr>
   <tr><td><strong>Top Triggers</strong></td><td>The top 100 triggers that fired most frequently, filterable by severity and time range</td></tr>
-  <tr><td><strong>Audit Log</strong></td><td>Who did what and when in Zabbix (logins, config changes, API calls)</td></tr>
+  <tr><td><strong>Audit Log</strong></td><td>Zabbix's own record of config changes and logins, timestamped and categorized by resource type</td></tr>
+  <tr><td><strong>Portal Actions</strong></td><td>Who did what inside Overwatch itself, correctly attributed to the real logged-in portal user</td></tr>
   <tr><td><strong>Action Log</strong></td><td>Records of Zabbix actions (notifications sent, remote commands run)</td></tr>
   <tr><td><strong>Notifications</strong></td><td>History of notifications sent by Zabbix media types (email, webhook, SMS)</td></tr>
   </tbody>
 </table>
+</div>
+
+<div class="callout info">
+  <span class="panel-title">Why two logs?</span>
+  Overwatch talks to Zabbix using one shared service account, so every change made <em>through the portal</em> — by any user — shows up in Zabbix's own <strong>Audit Log</strong> under that same account, never the person who actually clicked the button. Use <strong>Portal Actions</strong> instead when you need to know which real person created, edited, or deleted something.
 </div>
 
 <hr>
@@ -714,6 +769,10 @@ footer {
 <div class="callout note">
   <span class="panel-title">Role assignment rules</span>
   You cannot assign a role higher than your own. Only Root can assign the <strong>Auditor</strong> role. When selecting a higher role, lower roles are automatically selected too.
+</div>
+<div class="callout note">
+  <span class="panel-title">Restrictions</span>
+  Below the role picker, a "Restrictions" section lets you remove a user's write access to Host Groups, Items, or Triggers specifically — even if their role would otherwise allow it. See <a href="#restrictions">Restrictions</a> for what each one removes.
 </div>
 <div class="callout info">
   <span class="panel-title">Deleting an LDAP user</span>
@@ -815,12 +874,21 @@ footer {
 <h1><span class="num">6</span> Notification System</h1>
 
 <h2>In-app popup cards</h2>
-<p>When a new problem fires, a notification card appears in the <strong>bottom-right corner</strong>. Each card shows: severity, how long ago it fired, host name, problem description, and an <span class="ui">Acknowledge</span> button.</p>
+<p>When a new problem fires, a notification card appears in the <strong>bottom-right corner</strong>. Each card shows: severity, how long ago it fired, host name, problem description, and — for real Zabbix problems — a <strong>snooze</strong> icon.</p>
 <ul>
   <li><strong>Not classified</strong>, <strong>Information</strong>, and <strong>Warning</strong> cards auto-dismiss after <strong>8 seconds</strong></li>
   <li><strong>Average</strong>, <strong>High</strong>, and <strong>Disaster</strong> cards stay until you dismiss them</li>
   <li>If more than 3 stack up, a <span class="ui">Dismiss all</span> link appears</li>
 </ul>
+
+<h2 id="repeat-ring">Repeat-ring for unacknowledged problems</h2>
+<p>An alert that nobody acted on is easy to miss with a single beep. Overwatch keeps ringing:</p>
+<div class="callout info">
+  <span class="panel-title">Every 5 minutes, until acknowledged or snoozed</span>
+  As long as a real Zabbix problem stays unacknowledged, its alert sound repeats every 5 minutes — not just once when it first fires. This stops as soon as the problem is <a href="#problems-tab">acknowledged</a>, or the resolved trigger clears in Zabbix.
+</div>
+<p>To silence the repeat-ring for one problem without acknowledging it, click the <strong>snooze</strong> icon on its popup card and pick a duration: <strong>5, 15, or 30 minutes, or 1 hour</strong>. The problem stops repeat-ringing until the snooze expires, then resumes if it's still unacknowledged. Snoozing is per-browser and does not acknowledge the problem — it stays visible and open to everyone else.</p>
+<div class="callout note">Alert-rule events (the custom threshold alerts under <a href="#monitoring">Monitoring → Alert Rules</a>) don't have a Zabbix acknowledgement state, so they don't repeat-ring or offer a snooze — only real Zabbix problems do.</div>
 
 <h2>Notification Center</h2>
 <p>Click the <strong>bell / inbox icon</strong> in the top bar to open the Notification Center. It has two tabs:</p>
@@ -1042,6 +1110,11 @@ footer {
     <td>A Root user must enable it in <strong>Users Management → Authentication → Portal Login</strong>.</td>
   </tr>
   <tr>
+    <td><strong>Audit Log always shows the same user (e.g. "Admin"), regardless of who actually made the change</strong></td>
+    <td>This is expected — Overwatch talks to Zabbix through one shared service account for every write, so Zabbix's own Audit Log can only ever show that account, never the real portal user.</td>
+    <td>Check the <strong>Portal Actions</strong> report tab instead (Reports → Portal Actions) — it records the real logged-in user for every change made through Overwatch.</td>
+  </tr>
+  <tr>
     <td><strong>Desktop notifications toggle is greyed out</strong></td>
     <td>The browser notification permission for this site was previously set to <em>Block</em>. Sites cannot re-prompt after an explicit block.</td>
     <td>In Chrome, click the icon left of the address bar → <strong>Notifications</strong> → <strong>Allow</strong>. Or open <code>chrome://settings/content/notifications</code>, remove the site from <em>Not allowed to send notifications</em>, then reload the page and toggle it on again.</td>
@@ -1057,6 +1130,16 @@ footer {
     <td>Turn it on in the <span class="ui">Alert settings</span> menu. Note that Safari ignores this setting — use Chrome or Edge if you need pinned notifications.</td>
   </tr>
   <tr>
+    <td><strong>The alert sound keeps beeping every few minutes</strong></td>
+    <td>The problem is still unacknowledged. Overwatch repeats the alert sound every 5 minutes until it's acknowledged or snoozed — see <a href="#repeat-ring">Repeat-ring for unacknowledged problems</a>.</td>
+    <td>Acknowledge the problem, or click the snooze icon on its popup card to silence just that problem for a while. Turn off <strong>Alert sound</strong> in the <span class="ui">Alert settings</span> menu to stop all audible alerts.</td>
+  </tr>
+  <tr>
+    <td><strong>"Unack" button is missing on an acknowledged problem</strong></td>
+    <td>Unacknowledging is limited to Root and Team Lead roles.</td>
+    <td>Expected for Operator, Member, and Auditor accounts. Ask a Team Lead or Root user to reopen the problem, or acknowledge/resolve it in Zabbix directly.</td>
+  </tr>
+  <tr>
     <td><strong>An acknowledged problem vanished from the Problems tab</strong></td>
     <td><strong>Hide acked after</strong> is set to a delay, so acknowledged problems drop out of the list once the countdown expires.</td>
     <td>Expected behaviour — the problem is still open in Zabbix. Set <strong>Hide acked after</strong> to <em>Never</em> to keep acknowledged problems visible. See <a href="#hide-acked">Auto-hiding acknowledged problems</a>.</td>
@@ -1065,6 +1148,11 @@ footer {
     <td><strong>Page shows no data / tables are empty</strong></td>
     <td>Backend or Zabbix is unreachable, or the host has no configured items.</td>
     <td>Check both status dots are green. Try a full page reload. Confirm the host has items configured in Zabbix.</td>
+  </tr>
+  <tr>
+    <td><strong>Graph is empty (or only partly filled) when a 1M/3M/6M range is selected</strong></td>
+    <td>Overwatch will query Zabbix as far back as you ask, but Zabbix itself only keeps trend data for as long as its own <strong>Data storage period (trends)</strong> housekeeping setting allows — commonly shorter than 6 months.</td>
+    <td>A Team Lead or Root user can check this under <strong>Administration → Housekeeping</strong>: look at <strong>Data storage period (trends)</strong> (in days) and make sure <strong>Enable internal housekeeping for trends</strong> is on. If it is shorter than the range you selected, older data was already purged by Zabbix and cannot be recovered by the portal.</td>
   </tr>
   <tr>
     <td><strong>"Host agent unreachable" banner</strong></td>

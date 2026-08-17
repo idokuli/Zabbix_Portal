@@ -61,6 +61,27 @@ class SyncPullMixin:
 
         logger.info("ZabbixSync.bootstrap_teams: bootstrapped %d team(s).", len(teams))
 
+    @staticmethod
+    def _first_relevant_group(usrgrps: list[dict]) -> str | None:
+        """First non-empty, non-skipped Zabbix user-group name, in usrgrps order."""
+        for grp in usrgrps:
+            grp_name = grp.get("name", "").strip()
+            if grp_name and grp_name not in SKIP_GROUPS:
+                return grp_name
+        return None
+
+    @staticmethod
+    def _get_or_create_team_id(grp_name: str, portal_teams: dict[str, int]) -> int | None:
+        """Look up grp_name's portal team id, creating the team if it doesn't exist
+        yet. Mutates portal_teams in place when a new team is created."""
+        import User_Management as um
+
+        if grp_name not in portal_teams:
+            team = um.create_team(grp_name)
+            if team:
+                portal_teams[grp_name] = team["id"]
+        return portal_teams.get(grp_name)
+
     def _resolve_role_and_team(
         self, zu: dict, roleid_to_type: dict, portal_teams: dict[str, int]
     ) -> tuple[list[str], int | None]:
@@ -69,30 +90,18 @@ class SyncPullMixin:
         Creates a portal team for any new Zabbix group encountered.
         Mutates portal_teams in place when a new team is created.
         """
-        import User_Management as um
-
         if self._zabbix_major >= 6:
             user_type = roleid_to_type.get(str(zu.get("roleid", "1")), 1)
         else:
             user_type = int(zu.get("type", 1))
         roles = list(TYPE_TO_ROLES.get(user_type, ["member"]))
-        team_id = None
 
-        for grp in zu.get("usrgrps", []):
-            grp_name = grp.get("name", "").strip()
-            if not grp_name or grp_name in SKIP_GROUPS:
-                continue
-            if grp_name in GROUP_ROLE_MAP:
-                roles = [GROUP_ROLE_MAP[grp_name]]
-            else:
-                if grp_name not in portal_teams:
-                    team = um.create_team(grp_name)
-                    if team:
-                        portal_teams[grp_name] = team["id"]
-                team_id = portal_teams.get(grp_name)
-            break
-
-        return roles, team_id
+        grp_name = self._first_relevant_group(zu.get("usrgrps", []))
+        if grp_name is None:
+            return roles, None
+        if grp_name in GROUP_ROLE_MAP:
+            return [GROUP_ROLE_MAP[grp_name]], None
+        return roles, self._get_or_create_team_id(grp_name, portal_teams)
 
     def pull_users(self) -> None:
         """Import Zabbix users and groups into the portal (runs on startup).
@@ -265,34 +274,48 @@ class SyncPullMixin:
             logger.exception("ZabbixSync.full_sync: group sync failed")
 
     @staticmethod
-    def _collect_zabbix_host_assignments(
-        zabbix_hosts: list[dict], host_hg_key: str, portal_team_map: dict[str, int]
+    def _host_group_assignments(
+        hostname: str, zh: dict, host_hg_key: str, portal_team_map: dict[str, int]
     ) -> set[tuple[str, str]]:
-        """Build the set of (hostname, team_name) pairs that Zabbix currently has.
-
-        A host counts as "assigned" to a team via either:
-          a) Zabbix host group membership (group name matches a portal team)
-          b) A "team" tag set by create_host / tag_host
-        """
+        """(hostname, team_name) pairs from zh's Zabbix host-group membership,
+        pushing any missing portal assignment via assign_host() as a side effect."""
         import User_Management as um
 
+        assignments: set[tuple[str, str]] = set()
+        for hg in zh.get(host_hg_key, []):
+            grp_name = hg.get("name", "").strip()
+            if grp_name in portal_team_map:
+                assignments.add((hostname, grp_name))
+                um.assign_host(portal_team_map[grp_name], hostname)
+        return assignments
+
+    @staticmethod
+    def _host_tag_assignments(hostname: str, zh: dict, portal_team_map: dict[str, int]) -> set:
+        """(hostname, team_name) pairs from zh's "team" tag — set by create_host / tag_host."""
+        assignments = set()
+        for tag in zh.get("tags", []):
+            if tag.get("tag") != "team":
+                continue
+            tag_team = tag.get("value", "").strip()
+            if tag_team in portal_team_map:
+                assignments.add((hostname, tag_team))
+        return assignments
+
+    @classmethod
+    def _collect_zabbix_host_assignments(
+        cls, zabbix_hosts: list[dict], host_hg_key: str, portal_team_map: dict[str, int]
+    ) -> set[tuple[str, str]]:
+        """Build the set of (hostname, team_name) pairs that Zabbix currently has,
+        via either host-group membership or a "team" tag."""
         zabbix_assignments: set[tuple[str, str]] = set()
         for zh in zabbix_hosts:
             hostname = zh.get("host", "").strip()
             if not hostname:
                 continue
-            # (a) host group membership
-            for hg in zh.get(host_hg_key, []):
-                grp_name = hg.get("name", "").strip()
-                if grp_name in portal_team_map:
-                    zabbix_assignments.add((hostname, grp_name))
-                    um.assign_host(portal_team_map[grp_name], hostname)
-            # (b) "team" tag — created when a team user adds a host via the portal
-            for tag in zh.get("tags", []):
-                if tag.get("tag") == "team":
-                    tag_team = tag.get("value", "").strip()
-                    if tag_team in portal_team_map:
-                        zabbix_assignments.add((hostname, tag_team))
+            zabbix_assignments |= cls._host_group_assignments(
+                hostname, zh, host_hg_key, portal_team_map
+            )
+            zabbix_assignments |= cls._host_tag_assignments(hostname, zh, portal_team_map)
         return zabbix_assignments
 
     @staticmethod

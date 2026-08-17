@@ -3,7 +3,7 @@
 import logging
 from typing import TYPE_CHECKING
 from collections.abc import Callable
-from api.schemas.items import ScriptItemRequest
+from api.schemas.items import ItemRequest, ScriptItemRequest
 
 if TYPE_CHECKING:
     from zabbix_utils import ZabbixAPI
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class FileScriptItemsMixin:
-    """Mixed into Item_Manager. Calls self.add_item, which lives in CoreItemsMixin
+    """Mixed into ItemManager. Calls self.add_item, which lives in CoreItemsMixin
     — resolved via the final class's MRO at runtime.
     """
 
@@ -62,15 +62,17 @@ class FileScriptItemsMixin:
             if not item_name:
                 item_name = f"Latest modified file in {file_path} on {hostname}"
             return self.add_item(
-                hostname,
-                item_name,
-                item_key,
-                1,
+                ItemRequest(
+                    hostname=hostname,
+                    item_name=item_name,
+                    item_key=item_key,
+                    value_type=1,
+                    delay=delay,
+                    history=history,
+                    trends=trends,
+                    description=description,
+                ),
                 team_name,
-                delay=delay,
-                history=history,
-                trends=trends,
-                description=description,
             )
 
         if check_type not in self._FILE_WATCH_CHECKS:
@@ -80,15 +82,17 @@ class FileScriptItemsMixin:
         if not item_name:
             item_name = f"{default_label} — {file_path} on {hostname}"
         return self.add_item(
-            hostname,
-            item_name,
-            item_key,
-            value_type,
+            ItemRequest(
+                hostname=hostname,
+                item_name=item_name,
+                item_key=item_key,
+                value_type=value_type,
+                delay=delay,
+                history=history,
+                trends=trends,
+                description=description,
+            ),
             team_name,
-            delay=delay,
-            history=history,
-            trends=trends,
-            description=description,
         )
 
     def add_script_item(
@@ -138,16 +142,24 @@ class FileScriptItemsMixin:
             item_name = f"{script_type} {mode_label} check on {hostname}"
 
         return self.add_item(
-            hostname,
-            item_name,
-            item_key,
-            value_type,
+            ItemRequest(
+                hostname=hostname,
+                item_name=item_name,
+                item_key=item_key,
+                value_type=value_type,
+                delay=delay,
+                units=units,
+                history=history,
+                trends=trends,
+                description=description,
+                status=status,
+                timeout=timeout,
+                create_trigger=request.create_trigger,
+                trigger_operator=request.trigger_operator,
+                trigger_threshold=request.trigger_threshold,
+                trigger_pattern=request.trigger_pattern,
+                trigger_match_type=request.trigger_match_type,
+                trigger_priority=request.trigger_priority,
+            ),
             team_name,
-            delay=delay,
-            units=units,
-            history=history,
-            trends=trends,
-            description=description,
-            status=status,
-            timeout=timeout,
         )

@@ -1,12 +1,10 @@
 "use client";
 
-import ClearIcon from "@mui/icons-material/Clear";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import StarIcon from "@mui/icons-material/Star";
 import StarBorderIcon from "@mui/icons-material/StarBorder";
 import WifiOffIcon from "@mui/icons-material/WifiOff";
@@ -19,7 +17,6 @@ import {
   Collapse,
   FormControl,
   IconButton,
-  InputAdornment,
   InputLabel,
   MenuItem,
   Skeleton,
@@ -30,12 +27,12 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
 import type { Host } from "../../app/api";
 import { formatDateTime } from "../../app/datetime";
+import { FilterSearchField, filterLabelSx } from "../../components/FilterBar";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { type AllItem, isItemStale, timeAgo, valueTypes } from "./shared";
 
@@ -473,41 +470,24 @@ export const ItemsBrowseTable = ({
     <Stack spacing={2}>
       {/* ── Toolbar ── */}
       <Stack sx={{ alignItems: "center" }} direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-        <TextField
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchOutlinedIcon sx={{ fontSize: 18, color: "text.disabled" }} />
-                </InputAdornment>
-              ),
-              endAdornment: browseSearch ? (
-                <InputAdornment position="end">
-                  <IconButton size="small" onClick={() => onSearchChange("")}>
-                    <ClearIcon sx={{ fontSize: 16 }} />
-                  </IconButton>
-                </InputAdornment>
-              ) : undefined,
-            },
-          }}
-          size="small"
+        <FilterSearchField
           placeholder="Search by name or key…"
           value={browseSearch}
-          onChange={(e) => onSearchChange(e.target.value)}
-          sx={{ flex: 1 }}
+          onChange={onSearchChange}
         />
         <FormControl size="small" sx={{ minWidth: 200 }}>
-          <InputLabel>Filter by host</InputLabel>
+          <InputLabel sx={filterLabelSx}>Filter by host</InputLabel>
           <SearchableSelect
             label="Filter by host"
             value={browseHostFilter}
             onChange={(e) => onHostFilterChange(e.target.value)}
+            sx={filterLabelSx}
           >
-            <MenuItem value="">
+            <MenuItem value="" sx={filterLabelSx}>
               <em>All hosts</em>
             </MenuItem>
             {hosts.map((h) => (
-              <MenuItem key={h.hostid} value={h.host}>
+              <MenuItem key={h.hostid} value={h.host} sx={filterLabelSx}>
                 {h.host}
               </MenuItem>
             ))}

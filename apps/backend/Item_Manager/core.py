@@ -3,6 +3,7 @@
 import logging
 from typing import TYPE_CHECKING, Any
 from collections.abc import Callable
+from api.schemas.items import ItemRequest
 
 if TYPE_CHECKING:
     from zabbix_utils import ZabbixAPI
@@ -13,38 +14,37 @@ _ZABBIX_NOT_CONNECTED = "Zabbix API not connected."
 
 
 class CoreItemsMixin:
-    """Mixed into Item_Manager. Assumes `self.zapi`/`self._invalidate`/`self._cached` from Zabbix_Base."""
+    """Mixed into ItemManager. Assumes `self.zapi`/`self._invalidate`/`self._cached` from ZabbixBase."""
 
     if TYPE_CHECKING:
         zapi: "ZabbixAPI | None"
         _invalidate: Callable[[str], None]
         _cached: Callable[..., Any]
+        maybe_create_trigger: Callable[..., tuple[str | None, str | None]]
+        _maybe_create_trigger_logged: Callable[..., None]
 
     def _pick_interface(self, interfaces: list[dict], iface_type: str) -> dict:
         """Prefer a host interface of the given Zabbix type (1=agent, 2=SNMP, 3=IPMI,
         4=JMX); fall back to the first interface if the host has none of that type."""
         return next((i for i in interfaces if str(i.get("type")) == iface_type), interfaces[0])
 
-    def add_item(
-        self,
-        hostname,
-        item_name,
-        item_key,
-        value_type=3,
-        team_name: str = "",
-        delay: str = "1m",
-        units: str = "",
-        history: str = "31d",
-        trends: str = "365d",
-        description: str = "",
-        status: int = 0,
-        timeout: str = "",
-    ) -> tuple[str | None, str | None]:
+    def add_item(self, request: ItemRequest, team_name: str = "") -> tuple[str | None, str | None]:
         """
         Adds a new monitoring item to an existing host.
         value_type: 0=float, 1=string, 2=log, 3=integer, 4=text
         Returns (item_id, error_message). item_id is None on failure.
+
+        create_trigger optionally creates a trigger for the new item via
+        maybe_create_trigger() (see triggers.py) — same behavior as add_process_item's
+        and add_windows_service_item's own create_trigger param: creation failures are
+        logged, not surfaced in the return value, so a trigger problem never blocks the
+        item itself from being reported as created.
         """
+        hostname = request.hostname
+        item_name = request.item_name
+        item_key = request.item_key
+        value_type = request.value_type
+
         if not self.zapi:
             return None, _ZABBIX_NOT_CONNECTED
 
@@ -69,17 +69,17 @@ class CoreItemsMixin:
                 interfaceid=interface_id,
                 type=0,  # Zabbix Agent (Passive)
                 value_type=value_type,
-                delay=delay or "1m",
-                history=history or "31d",
-                trends=trends or "365d",
-                status=status,
+                delay=request.delay or "1m",
+                history=request.history or "31d",
+                trends=request.trends or "365d",
+                status=request.status,
             )
-            if units:
-                kwargs["units"] = units
-            if description:
-                kwargs["description"] = description
-            if timeout:
-                kwargs["timeout"] = timeout
+            if request.units:
+                kwargs["units"] = request.units
+            if request.description:
+                kwargs["description"] = request.description
+            if request.timeout:
+                kwargs["timeout"] = request.timeout
             # Only attach tags when non-empty — some older Zabbix versions reject tags=[]
             if team_name:
                 kwargs["tags"] = [{"tag": "team", "value": team_name}]
@@ -94,6 +94,11 @@ class CoreItemsMixin:
                 item_id,
             )
             self._invalidate(f"items_host_{hostname}")
+
+            self._maybe_create_trigger_logged(
+                hostname, item_key, item_name, value_type, request, "add_item"
+            )
+
             return item_id, None
 
         except Exception as e:

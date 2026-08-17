@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class MacrosMixin:
-    """Mixed into ZabbixAdmin_Manager. Assumes `self.zapi` from Zabbix_Base."""
+    """Mixed into ZabbixAdminManager. Assumes `self.zapi` from ZabbixBase."""
 
     if TYPE_CHECKING:
         zapi: "ZabbixAPI | None"

@@ -53,6 +53,24 @@ def test_top_triggers_success():
     assert "triggers" in r.json()
 
 
+def test_top_triggers_team_scoped_filters_other_teams_hosts():
+    mock, app = _bot()
+    mock.get_top_triggers.return_value = [
+        {"description": "High CPU", "hosts": [{"host": "team-a-host"}]},
+        {"description": "Disk full", "hosts": [{"host": "team-b-host"}]},
+    ]
+    with (
+        patch("api.routes.reports.report_bot", mock),
+        patch("api.routes.reports.team_hostname_filter", return_value={"team-a-host"}),
+        TestClient(app) as c,
+    ):
+        r = c.get("/reports/top-triggers")
+    assert r.status_code == 200
+    triggers = r.json()["triggers"]
+    assert len(triggers) == 1
+    assert triggers[0]["description"] == "High CPU"
+
+
 def test_top_triggers_zabbix_error():
     mock, app = _bot()
     mock.get_top_triggers.side_effect = RuntimeError("err")
@@ -104,12 +122,62 @@ def test_availability_success():
     assert "hosts" in r.json()
 
 
+def test_availability_team_scoped_filters_other_teams_hosts():
+    mock, app = _bot()
+    mock.get_availability.return_value = [
+        {"hostname": "team-a-host", "availability_pct": 99.0},
+        {"hostname": "team-b-host", "availability_pct": 50.0},
+    ]
+    with (
+        patch("api.routes.reports.report_bot", mock),
+        patch("api.routes.reports.team_hostname_filter", return_value={"team-a-host"}),
+        TestClient(app) as c,
+    ):
+        r = c.get("/reports/availability")
+    assert r.status_code == 200
+    hosts = r.json()["hosts"]
+    assert len(hosts) == 1
+    assert hosts[0]["hostname"] == "team-a-host"
+
+
 def test_availability_zabbix_error():
     mock, app = _bot()
     mock.get_availability.side_effect = RuntimeError("err")
     with patch("api.routes.reports.report_bot", mock), TestClient(app) as c:
         r = c.get("/reports/availability")
     assert r.status_code == 502
+
+
+def test_availability_explicit_range_success():
+    mock, app = _bot()
+    mock.get_availability.return_value = []
+    with patch("api.routes.reports.report_bot", mock), TestClient(app) as c:
+        r = c.get("/reports/availability?time_from=1000&time_to=2000")
+    assert r.status_code == 200
+    mock.get_availability.assert_called_once_with(
+        hours=24, groupid=None, time_from=1000, time_to=2000
+    )
+
+
+def test_availability_range_missing_time_to_rejected():
+    mock, app = _bot()
+    with patch("api.routes.reports.report_bot", mock), TestClient(app) as c:
+        r = c.get("/reports/availability?time_from=1000")
+    assert r.status_code == 400
+
+
+def test_availability_range_reversed_rejected():
+    mock, app = _bot()
+    with patch("api.routes.reports.report_bot", mock), TestClient(app) as c:
+        r = c.get("/reports/availability?time_from=2000&time_to=1000")
+    assert r.status_code == 400
+
+
+def test_availability_range_too_wide_rejected():
+    mock, app = _bot()
+    with patch("api.routes.reports.report_bot", mock), TestClient(app) as c:
+        r = c.get("/reports/availability?time_from=0&time_to=20000000")
+    assert r.status_code == 400
 
 
 def test_notifications_success():

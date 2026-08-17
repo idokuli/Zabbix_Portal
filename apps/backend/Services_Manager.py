@@ -3,7 +3,7 @@ import logging
 import re
 import time
 
-from Zabbix_Base import Zabbix_Base
+from Zabbix_Base import ZabbixBase
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ SLA_PERIOD = {
 _ZABBIX_NOT_CONNECTED = "Zabbix not connected"
 
 
-class Services_Manager(Zabbix_Base):
+class ServicesManager(ZabbixBase):
     def __init__(self):
         super().__init__()
         logger.info("Services Manager ready.")

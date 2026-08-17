@@ -40,6 +40,7 @@ import type { TemplateItem } from "../../app/api/types";
 import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { generateId } from "../../app/utils";
+import { FilterSearchField } from "../../components/FilterBar";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { ConfirmDelete, type DcTemplate, type TemplateGroup } from "./shared";
 
@@ -985,16 +986,10 @@ export const TemplatesTab = ({
         loading={loading}
       />
       <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", mb: 1.5 }}>
-        <TextField
-          size="small"
-          placeholder="Search…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          sx={{ flex: 1 }}
-        />
+        <FilterSearchField placeholder="Search…" value={search} onChange={setSearch} />
         <Tooltip title="Refresh">
           <IconButton size="small" onClick={() => void load()} disabled={loading}>
-            <RefreshIcon sx={{ fontSize: 16 }} />
+            <RefreshIcon sx={{ fontSize: 18 }} />
           </IconButton>
         </Tooltip>
         <Button

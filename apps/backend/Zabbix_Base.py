@@ -29,7 +29,7 @@ def zabbix_err(e: Exception) -> str:
     return _INVALID_PARAMS.sub("", msg).strip() or str(e)
 
 
-class Zabbix_Base:
+class ZabbixBase:
     def __init__(self) -> None:
         self._cache: dict[str, tuple[float, Any]] = {}
         self._cache_lock = threading.Lock()

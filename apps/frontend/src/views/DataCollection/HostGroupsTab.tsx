@@ -23,7 +23,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../app/api";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { ConfirmDelete, type HostGroup, MembersDialog, SectionHeader } from "./shared";
@@ -54,6 +54,10 @@ export const HostGroupsTab = ({
   const [hostsLoading, setHostsLoading] = useState(false);
   const [selectedHosts, setSelectedHosts] = useState<HostOption[]>([]);
   const tick = useRefreshTick();
+  // Bumped whenever the dialog is closed so an in-flight openDialog() load can tell it's
+  // stale and skip its setState — updating Autocomplete's options/value after the dialog
+  // closes can hit a null-ref race in MUI's useAutocomplete (see CLAUDE.md for detail).
+  const openRequestRef = useRef(0);
 
   const load = useCallback(
     async (silent = false) => {
@@ -85,7 +89,13 @@ export const HostGroupsTab = ({
     }
   }, [tick]);
 
+  const closeDialog = () => {
+    openRequestRef.current += 1;
+    setAddOpen(false);
+  };
+
   const openDialog = async (target: HostGroup | null) => {
+    const requestId = ++openRequestRef.current;
     setEditTarget(target);
     setNameInput(target?.name ?? "");
     setSelectedHosts([]);
@@ -98,6 +108,9 @@ export const HostGroupsTab = ({
         api.listHosts(),
         target ? api.getHostGroupMembers(target.groupid) : Promise.resolve({ hosts: [] }),
       ]);
+      if (requestId !== openRequestRef.current) {
+        return;
+      }
       const opts: HostOption[] = hostsRes.hosts.map((h) => ({
         hostid: h.hostid,
         host: h.host,
@@ -107,9 +120,13 @@ export const HostGroupsTab = ({
       const memberIds = new Set(membersRes.hosts.map((h) => h.hostid));
       setSelectedHosts(opts.filter((h) => memberIds.has(h.hostid)));
     } catch {
-      setAllHosts([]);
+      if (requestId === openRequestRef.current) {
+        setAllHosts([]);
+      }
     } finally {
-      setHostsLoading(false);
+      if (requestId === openRequestRef.current) {
+        setHostsLoading(false);
+      }
     }
   };
 
@@ -266,7 +283,7 @@ export const HostGroupsTab = ({
         }
       />
 
-      <Dialog open={addOpen} onClose={() => setAddOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={addOpen} onClose={closeDialog} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ fontWeight: 700 }}>
           {editTarget ? "Edit host group" : "Add host group"}
         </DialogTitle>
@@ -284,6 +301,7 @@ export const HostGroupsTab = ({
             />
             <Autocomplete
               multiple
+              disableCloseOnSelect
               size="small"
               loading={hostsLoading}
               options={allHosts}
@@ -326,7 +344,7 @@ export const HostGroupsTab = ({
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAddOpen(false)}>Cancel</Button>
+          <Button onClick={closeDialog}>Cancel</Button>
           <Button
             variant="contained"
             onClick={onSave}

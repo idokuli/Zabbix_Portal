@@ -39,7 +39,7 @@ variables:
   # SONAR_TOKEN is sensitive — set it in GitLab Settings → CI/CD → Variables
   # (masked + protected), never here. Generate it in SonarQube under
   # My Account → Security → Generate Token.
-  SONAR_HOST_URL: "http://158.178.131.158:9000" # SonarQube server URL
+  SONAR_HOST_URL: "httif ip://158.178.131.158:9000" # SonarQube server URL
   SONAR_SCANNER_IMAGE: "<your-sonar-scanner-image>" # e.g. your-registry/sonar-scanner-cli:latest
 
   # ── Build control ────────────────────────────────────────────────────────

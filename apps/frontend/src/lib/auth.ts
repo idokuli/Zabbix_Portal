@@ -5,6 +5,7 @@ export type AuthUser = {
   username: string;
   display_name: string;
   roles: string[];
+  restrictions: string[];
   team_id: number | null;
 };
 

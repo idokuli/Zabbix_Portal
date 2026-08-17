@@ -2,7 +2,7 @@ import logging
 import time
 from typing import Any
 
-from Zabbix_Base import Zabbix_Base
+from Zabbix_Base import ZabbixBase
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +77,7 @@ AUDIT_RESOURCES = {
 }
 
 
-class Report_Manager(Zabbix_Base):
+class ReportManager(ZabbixBase):
     def __init__(self):
         super().__init__()
         logger.info("Report Manager ready.")
@@ -269,17 +269,37 @@ class Report_Manager(Zabbix_Base):
 
     # ── Availability ───────────────────────────────────────────────────
 
-    def get_availability(self, hours: int = 24, groupid: str | None = None) -> list[dict]:
-        """Per-host availability based on problems in the time window."""
+    def get_availability(
+        self,
+        hours: int = 24,
+        groupid: str | None = None,
+        time_from: int | None = None,
+        time_to: int | None = None,
+    ) -> list[dict]:
+        """Per-host availability based on problems in the time window.
+
+        Pass explicit time_from/time_to (epoch seconds) for a specific date range — e.g.
+        the Availability report's month-range picker, which can span up to 6 months and
+        need not end at "now". Without them, the window is the last `hours` hours up to
+        now (the report's preset buttons: 1h/6h/24h/7d/30d)."""
         if not self.zapi:
             return []
         try:
-            since = int(time.time()) - hours * 3600
+            now = int(time.time())
+            since = time_from if time_from is not None else now - hours * 3600
+            until = time_to if time_to is not None else now
+            window = until - since
+            if window <= 0:
+                return []
             params: dict = dict(
                 output=["eventid", "objectid", "clock", "r_clock", "severity", "name"],
                 time_from=since,
                 limit=2000,
             )
+            # Only constrain the upper bound for an explicit past range — the preset
+            # buttons intentionally have no upper bound (they run up to "now").
+            if time_to is not None:
+                params["time_till"] = until
             if groupid:
                 params["groupids"] = [groupid]
             problems = self.zapi.problem.get(**params)
@@ -296,25 +316,7 @@ class Report_Manager(Zabbix_Base):
                 triggerids=triggerids,
             )
             trig_to_hosts = {t["triggerid"]: t.get("hosts", []) for t in triggers}
-
-            # Aggregate downtime per host
-            window = hours * 3600
-            now = int(time.time())
-            host_down: dict[str, dict] = {}
-            for p in problems:
-                for h in trig_to_hosts.get(p["objectid"], []):
-                    hid = h["hostid"]
-                    if hid not in host_down:
-                        host_down[hid] = {
-                            "hostid": hid,
-                            "hostname": h["host"],
-                            "downtime_seconds": 0,
-                            "problem_count": 0,
-                        }
-                    host_down[hid]["problem_count"] += 1
-                    start = int(p["clock"])
-                    end = int(p["r_clock"]) if p.get("r_clock") and int(p["r_clock"]) > 0 else now
-                    host_down[hid]["downtime_seconds"] += max(0, end - max(start, since))
+            host_down = self._aggregate_host_downtime(problems, trig_to_hosts, since, until)
 
             results = [
                 {
@@ -329,3 +331,28 @@ class Report_Manager(Zabbix_Base):
         except Exception as e:
             logger.exception("get_availability failed")
             raise RuntimeError(str(e)) from e
+
+    @staticmethod
+    def _aggregate_host_downtime(
+        problems: list[dict], trig_to_hosts: dict[str, list[dict]], since: int, until: int
+    ) -> dict[str, dict]:
+        """Sum per-host downtime seconds and problem counts, clamping each problem's
+        window to [since, until] (an unresolved problem is clamped to `until`, not
+        "now" — see get_availability's docstring)."""
+        host_down: dict[str, dict] = {}
+        for p in problems:
+            start = int(p["clock"])
+            end = int(p["r_clock"]) if p.get("r_clock") and int(p["r_clock"]) > 0 else until
+            downtime = max(0, min(end, until) - max(start, since))
+            for h in trig_to_hosts.get(p["objectid"], []):
+                hid = h["hostid"]
+                if hid not in host_down:
+                    host_down[hid] = {
+                        "hostid": hid,
+                        "hostname": h["host"],
+                        "downtime_seconds": 0,
+                        "problem_count": 0,
+                    }
+                host_down[hid]["problem_count"] += 1
+                host_down[hid]["downtime_seconds"] += downtime
+        return host_down

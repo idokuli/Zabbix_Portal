@@ -3,19 +3,44 @@
 import logging
 from Zabbix_Base import zabbix_err
 from typing import TYPE_CHECKING
-from api.schemas.items import SnmpItemRequest
+from api.schemas.items import SnmpItemRequest, SnmpTrapRequest
 
 if TYPE_CHECKING:
     from zabbix_utils import ZabbixAPI
+    from Item_Manager.triggers import _TriggerConfigured
 
 logger = logging.getLogger(__name__)
 
 
 class SnmpItemsMixin:
-    """Mixed into Item_Manager. Assumes `self.zapi` from Zabbix_Base."""
+    """Mixed into ItemManager. Assumes `self.zapi` from ZabbixBase."""
 
     if TYPE_CHECKING:
         zapi: "ZabbixAPI | None"
+
+        def maybe_create_trigger(
+            self,
+            hostname: str,
+            item_key: str,
+            item_name: str,
+            value_type: int,
+            create_trigger: bool,
+            trigger_operator: str = ">",
+            trigger_threshold: float | None = None,
+            trigger_pattern: str = "",
+            trigger_match_type: str = "like",
+            trigger_priority: int = 3,
+        ) -> tuple[str | None, str | None]: ...
+
+        def _maybe_create_trigger_logged(
+            self,
+            hostname: str,
+            item_key: str,
+            item_name: str,
+            value_type: int,
+            request: "_TriggerConfigured",
+            log_prefix: str,
+        ) -> None: ...
 
     @staticmethod
     def _snmpv3_kwargs(
@@ -171,24 +196,27 @@ class SnmpItemsMixin:
                 hostname,
                 item_id,
             )
+            self._maybe_create_trigger_logged(
+                hostname, item_key, item_name, value_type, request, "add_snmp_item"
+            )
             return item_id, None
         except Exception as e:
             logger.exception("add_snmp_item(%r) failed", hostname)
             return None, zabbix_err(e)
 
     def add_snmp_trap_item(
-        self,
-        hostname: str,
-        item_name: str,
-        item_key: str = "snmptrap.fallback",
-        value_type: int = 1,
-        team_name: str = "",
-        history: str = "31d",
-        trends: str = "365d",
-        description: str = "",
-        status: int = 0,
+        self, request: SnmpTrapRequest, team_name: str = ""
     ) -> tuple[str | None, str | None]:
         """Add a Zabbix SNMP trap item (type 17). Receives traps pushed by external devices."""
+        hostname = request.hostname
+        item_name = request.item_name
+        item_key = request.item_key
+        value_type = request.value_type
+        history = request.history
+        trends = request.trends
+        description = request.description
+        status = request.status
+
         if not self.zapi:
             return None, "Zabbix API not connected."
         try:
@@ -220,6 +248,9 @@ class SnmpItemsMixin:
             result = self.zapi.item.create(**kwargs)
             item_id = result["itemids"][0]
             logger.info("SNMP trap item %r added to %r (ID: %s).", item_name, hostname, item_id)
+            self._maybe_create_trigger_logged(
+                hostname, item_key, item_name, value_type, request, "add_snmp_trap_item"
+            )
             return item_id, None
         except Exception as e:
             logger.exception("add_snmp_trap_item(%r) failed", hostname)

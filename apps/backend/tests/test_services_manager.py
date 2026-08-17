@@ -16,9 +16,9 @@ import pytest
 @pytest.fixture()
 def mgr():
     with patch("zabbix_utils.ZabbixAPI"):
-        from Services_Manager import Services_Manager
+        from Services_Manager import ServicesManager
 
-        m = Services_Manager()
+        m = ServicesManager()
         m.zapi = MagicMock()
         return m
 

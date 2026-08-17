@@ -2,7 +2,7 @@
 
 import logging
 from Zabbix_Base import zabbix_err
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from zabbix_utils import ZabbixAPI
@@ -12,8 +12,19 @@ logger = logging.getLogger(__name__)
 _ZABBIX_NOT_CONNECTED = "Zabbix API not connected."
 
 
+class _TriggerConfigured(Protocol):
+    """Structural type for the trigger_* fields shared by every item request schema."""
+
+    create_trigger: bool
+    trigger_operator: str
+    trigger_threshold: float | None
+    trigger_pattern: str
+    trigger_match_type: str
+    trigger_priority: int
+
+
 class TriggersMixin:
-    """Mixed into Item_Manager. Assumes `self.zapi`/`self._zabbix_version` from Zabbix_Base."""
+    """Mixed into ItemManager. Assumes `self.zapi`/`self._zabbix_version` from ZabbixBase."""
 
     if TYPE_CHECKING:
         zapi: "ZabbixAPI | None"
@@ -129,6 +140,125 @@ class TriggersMixin:
         except Exception as e:
             logger.exception("add_string_trigger(%r, %r) failed", hostname, trigger_name)
             return None, zabbix_err(e)
+
+    def add_nodata_trigger(
+        self,
+        hostname: str,
+        item_key: str,
+        trigger_name: str,
+        priority: int = 3,
+        minutes: int = 5,
+        event_name: str = "",
+        comments: str = "",
+    ) -> tuple[str | None, str | None]:
+        """Adds a trigger that fires when an item stops reporting data. Universal
+        fallback used by maybe_create_trigger() for items where the caller didn't give
+        a threshold/pattern — e.g. a boolean-like item the user just wants "did this
+        stop reporting" alerting for, without picking a specific value.
+        >=6.2: nodata(/host/key,5m)=1
+        <6.2:  {host:key.nodata(5m)}=1
+        """
+        if not self.zapi:
+            return None, _ZABBIX_NOT_CONNECTED
+        try:
+            host_data = self.zapi.host.get(filter={"host": [hostname]}, output=["hostid"])
+            if not host_data:
+                return None, f"Host '{hostname}' not found in Zabbix."
+            if self._zabbix_version >= (6, 2):
+                expression = f"nodata(/{hostname}/{item_key},{minutes}m)=1"
+            else:
+                expression = f"{{{hostname}:{item_key}.nodata({minutes}m)}}=1"
+
+            create_params: dict = {
+                "description": trigger_name,
+                "expression": expression,
+                "priority": int(priority),
+            }
+            if event_name:
+                create_params["event_name"] = event_name
+            if comments:
+                create_params["comments"] = comments
+            result = self.zapi.trigger.create(**create_params)
+            trigger_id = result["triggerids"][0]
+            logger.info(
+                "No-data trigger %r created on %r (ID: %s).", trigger_name, hostname, trigger_id
+            )
+            return trigger_id, None
+        except Exception as e:
+            msg = str(e)
+            logger.exception("add_nodata_trigger(%r, %r) failed", hostname, trigger_name)
+            return None, msg
+
+    # value_type: 0=Float, 1=String, 2=Log, 3=Unsigned int, 4=Text
+    _STRING_VALUE_TYPES = frozenset({1, 2, 4})
+
+    def maybe_create_trigger(
+        self,
+        hostname: str,
+        item_key: str,
+        item_name: str,
+        value_type: int,
+        create_trigger: bool,
+        trigger_operator: str = ">",
+        trigger_threshold: float | None = None,
+        trigger_pattern: str = "",
+        trigger_match_type: str = "like",
+        trigger_priority: int = 3,
+    ) -> tuple[str | None, str | None]:
+        """Optionally create a trigger for a freshly-created item, called from every
+        add-item function right after the item itself is created. Picks the trigger
+        type from the item's value_type — mirrors the manual Add Trigger form's own
+        numeric-vs-string branching — and falls back to add_nodata_trigger() when the
+        caller didn't supply a threshold/pattern, so the toggle is always meaningful
+        regardless of item type. Returns (triggerid, error) — both None when
+        create_trigger is False."""
+        if not create_trigger:
+            return None, None
+        trigger_name = f"{item_name} problem on {hostname}"
+        if value_type in self._STRING_VALUE_TYPES:
+            if trigger_pattern:
+                return self.add_string_trigger(
+                    hostname,
+                    item_key,
+                    trigger_name,
+                    trigger_pattern,
+                    trigger_match_type,
+                    trigger_priority,
+                )
+            return self.add_nodata_trigger(hostname, item_key, trigger_name, trigger_priority)
+        if trigger_threshold is None:
+            return self.add_nodata_trigger(hostname, item_key, trigger_name, trigger_priority)
+        return self.add_trigger(
+            hostname, item_key, trigger_name, trigger_threshold, trigger_operator, trigger_priority
+        )
+
+    def _maybe_create_trigger_logged(
+        self,
+        hostname: str,
+        item_key: str,
+        item_name: str,
+        value_type: int,
+        request: "_TriggerConfigured",
+        log_prefix: str,
+    ) -> None:
+        """Shared tail-call for every add_*_item function: create the optional
+        trigger from the request's trigger_* fields and log a warning on failure."""
+        if not request.create_trigger:
+            return
+        _, trigger_err = self.maybe_create_trigger(
+            hostname,
+            item_key,
+            item_name,
+            value_type,
+            request.create_trigger,
+            request.trigger_operator,
+            request.trigger_threshold,
+            request.trigger_pattern,
+            request.trigger_match_type,
+            request.trigger_priority,
+        )
+        if trigger_err:
+            logger.warning("%s: trigger creation failed: %s", log_prefix, trigger_err)
 
     def get_trigger_hostname(self, triggerid: str) -> str:
         """Return the host name for a trigger, or '' if not found."""

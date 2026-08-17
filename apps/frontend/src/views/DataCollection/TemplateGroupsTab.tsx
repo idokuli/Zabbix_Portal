@@ -23,7 +23,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../app/api";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { ConfirmDelete, MembersDialog, SectionHeader, type TemplateGroup } from "./shared";
@@ -54,6 +54,10 @@ export const TemplateGroupsTab = ({
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [selectedTemplates, setSelectedTemplates] = useState<TemplateOption[]>([]);
   const tick = useRefreshTick();
+  // Bumped whenever the dialog is closed so an in-flight openDialog() load can tell it's
+  // stale and skip its setState — updating Autocomplete's options/value after the dialog
+  // closes can hit a null-ref race in MUI's useAutocomplete (see CLAUDE.md for detail).
+  const openRequestRef = useRef(0);
 
   const load = useCallback(
     async (silent = false) => {
@@ -85,7 +89,13 @@ export const TemplateGroupsTab = ({
     }
   }, [tick]);
 
+  const closeDialog = () => {
+    openRequestRef.current += 1;
+    setAddOpen(false);
+  };
+
   const openDialog = async (target: TemplateGroup | null) => {
+    const requestId = ++openRequestRef.current;
     setEditTarget(target);
     setNameInput(target?.name ?? "");
     setSelectedTemplates([]);
@@ -97,6 +107,9 @@ export const TemplateGroupsTab = ({
         api.listDcTemplates(),
         target ? api.getTemplateGroupMembers(target.groupid) : Promise.resolve({ templates: [] }),
       ]);
+      if (requestId !== openRequestRef.current) {
+        return;
+      }
       const opts: TemplateOption[] = templatesRes.templates.map((t) => ({
         templateid: t.templateid,
         name: t.name,
@@ -105,9 +118,13 @@ export const TemplateGroupsTab = ({
       const memberIds = new Set(membersRes.templates.map((t) => t.templateid));
       setSelectedTemplates(opts.filter((t) => memberIds.has(t.templateid)));
     } catch {
-      setAllTemplates([]);
+      if (requestId === openRequestRef.current) {
+        setAllTemplates([]);
+      }
     } finally {
-      setTemplatesLoading(false);
+      if (requestId === openRequestRef.current) {
+        setTemplatesLoading(false);
+      }
     }
   };
 
@@ -260,7 +277,7 @@ export const TemplateGroupsTab = ({
         renderSecondary={(t) => (t as { description: string }).description || ""}
       />
 
-      <Dialog open={addOpen} onClose={() => setAddOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog open={addOpen} onClose={closeDialog} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ fontWeight: 700 }}>
           {editTarget ? "Edit template group" : "Add template group"}
         </DialogTitle>
@@ -277,6 +294,7 @@ export const TemplateGroupsTab = ({
             />
             <Autocomplete
               multiple
+              disableCloseOnSelect
               size="small"
               loading={templatesLoading}
               options={allTemplates}
@@ -319,7 +337,7 @@ export const TemplateGroupsTab = ({
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAddOpen(false)}>Cancel</Button>
+          <Button onClick={closeDialog}>Cancel</Button>
           <Button
             variant="contained"
             onClick={onSave}

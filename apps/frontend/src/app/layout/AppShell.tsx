@@ -1012,10 +1012,12 @@ const NotificationStack = ({
   notifications,
   setNotifications,
   dismissNotif,
+  snoozeProblem,
 }: {
   notifications: Problem[];
   setNotifications: (v: Problem[]) => void;
   dismissNotif: (eventid: string) => void;
+  snoozeProblem: (eventid: string, minutes: number) => void;
 }) =>
   notifications.length > 0 && (
     <Box
@@ -1051,7 +1053,15 @@ const NotificationStack = ({
         </Box>
       )}
       {notifications.map((p) => (
-        <NotifCard key={p.eventid} problem={p} onDismiss={() => dismissNotif(p.eventid)} />
+        <NotifCard
+          key={p.eventid}
+          problem={p}
+          onDismiss={() => dismissNotif(p.eventid)}
+          onSnooze={(minutes) => {
+            snoozeProblem(p.eventid, minutes);
+            dismissNotif(p.eventid);
+          }}
+        />
       ))}
     </Box>
   );
@@ -1164,6 +1174,7 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
     notifications,
     setNotifications,
     dismissNotif,
+    snoozeProblem,
   } = useAlertPolling({
     saveToHistory,
     showDesktopNotification,
@@ -1327,6 +1338,7 @@ const AppShellInner = ({ children }: PropsWithChildren) => {
         notifications={notifications}
         setNotifications={setNotifications}
         dismissNotif={dismissNotif}
+        snoozeProblem={snoozeProblem}
       />
 
       {/* Notification center drawer */}

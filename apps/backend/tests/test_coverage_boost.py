@@ -1,5 +1,5 @@
-"""Targeted tests to push coverage over 80% — gaps in Report_Manager,
-ZabbixAdmin_Manager/macros+system, and api/deps."""
+"""Targeted tests to push coverage over 80% — gaps in ReportManager,
+ZabbixAdminManager/macros+system, and api/deps."""
 
 import os
 
@@ -15,16 +15,16 @@ import pytest
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Report_Manager missed paths
+# ReportManager missed paths
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 @pytest.fixture()
 def report():
     with patch("zabbix_utils.ZabbixAPI"):
-        from Report_Manager import Report_Manager
+        from Report_Manager import ReportManager
 
-        m = Report_Manager()
+        m = ReportManager()
         m.zapi = MagicMock()
         m._zabbix_version = (6, 4)
         return m
@@ -198,16 +198,16 @@ def test_get_availability_exception_raises(report):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ZabbixAdmin_Manager/macros.py — error paths and macro formatting
+# ZabbixAdminManager/macros.py — error paths and macro formatting
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 @pytest.fixture()
 def zadmin():
     with patch("zabbix_utils.ZabbixAPI"):
-        from ZabbixAdmin_Manager import ZabbixAdmin_Manager
+        from ZabbixAdmin_Manager import ZabbixAdminManager
 
-        m = ZabbixAdmin_Manager()
+        m = ZabbixAdminManager()
         m.zapi = MagicMock()
         m._zabbix_version = (6, 4)
         return m
@@ -257,7 +257,7 @@ def test_delete_global_macro_exception_raises(zadmin):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ZabbixAdmin_Manager/system.py — queue, settings, housekeeping
+# ZabbixAdminManager/system.py — queue, settings, housekeeping
 # ─────────────────────────────────────────────────────────────────────────────
 
 

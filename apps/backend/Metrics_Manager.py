@@ -1,7 +1,7 @@
 import logging
 import time
 
-from Zabbix_Base import Zabbix_Base
+from Zabbix_Base import ZabbixBase
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ SEVERITY_NAMES = {
 }
 
 
-class Metrics_Manager(Zabbix_Base):
+class MetricsManager(ZabbixBase):
     def __init__(self):
         super().__init__()
         logger.info("Metrics Manager ready.")
@@ -122,6 +122,26 @@ class Metrics_Manager(Zabbix_Base):
             return True
         except Exception:
             logger.exception("acknowledge_problem failed for eventid=%s", eventid)
+            return False
+
+    def unacknowledge_problem(self, eventid: str, username: str = "portal", note: str = "") -> bool:
+        """Unacknowledge a previously-acknowledged Zabbix problem event. Returns True on success."""
+        if not self.zapi:
+            return False
+        try:
+            parts = [f"Unacknowledged by {username} via Zabbix Portal"]
+            if note:
+                parts.append(note)
+            # action bitmask: 16 = unacknowledge, 4 = add message  →  20 = both
+            self.zapi.event.acknowledge(
+                eventids=[eventid],
+                action=20,
+                message=" — ".join(parts),
+            )
+            self._invalidate("problems")
+            return True
+        except Exception:
+            logger.exception("unacknowledge_problem failed for eventid=%s", eventid)
             return False
 
     def add_problem_note(self, eventid: str, username: str, note: str) -> bool:

@@ -1,4 +1,5 @@
 import os
+from collections.abc import Callable
 from datetime import datetime, timedelta, UTC
 from pathlib import Path
 
@@ -26,6 +27,12 @@ _bearer = HTTPBearer(auto_error=False)
 #   auditor    — read-only, cross-team visibility (no writes)
 
 VALID_ROLES = {"root", "team_lead", "operator", "member", "auditor"}
+
+# Per-user write restrictions — independent of roles, so they never leak into the many
+# places that render `roles` as chips (Users list, Team cards, top-bar user menu, ...).
+# Presence of a token removes write access to that resource even if the user's role
+# would otherwise grant it. root always bypasses restrictions.
+RESTRICTION_TOKENS = {"hostgroups", "items", "triggers"}
 
 # Numeric levels for hierarchy comparison (higher = more privilege)
 _ROLE_LEVELS: dict[str, int] = {
@@ -70,6 +77,7 @@ def create_token(
     roles: list[str],
     team_id: int | None,
     display_name: str = "",
+    restrictions: list[str] | None = None,
 ) -> str:
     expire = datetime.now(UTC) + timedelta(hours=_HOURS)
     return jwt.encode(
@@ -78,6 +86,7 @@ def create_token(
             "username": username,
             "display_name": display_name or username,
             "roles": roles,
+            "restrictions": restrictions or [],
             "team_id": team_id,
             "exp": expire,
         },
@@ -93,6 +102,16 @@ def _decode(token: str) -> dict:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token."
         ) from exc
+
+
+def try_decode_token(token: str) -> dict | None:
+    """Like _decode, but returns None instead of raising. For contexts that run outside
+    FastAPI's dependency injection (e.g. the audit-log request middleware) and want
+    best-effort user attribution rather than a hard 401."""
+    try:
+        return jwt.decode(token, _SECRET, algorithms=[_ALG])
+    except JWTError:
+        return None
 
 
 # ── FastAPI dependencies ──────────────────────────────────────────────────────
@@ -131,3 +150,25 @@ def require_operator(user: dict = Depends(get_current_user)) -> dict:
             status_code=status.HTTP_403_FORBIDDEN, detail="Operator access required."
         )
     return user
+
+
+def _restricted(
+    base_check: Callable[..., dict], token: str, resource_label: str
+) -> Callable[..., dict]:
+    """Wraps a role dependency with a per-user write restriction. root always bypasses
+    restrictions regardless of `token`, matching root's full-access guarantee elsewhere."""
+
+    def checker(user: dict = Depends(base_check)) -> dict:
+        if "root" not in user.get("roles", []) and token in user.get("restrictions", []):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"You do not have permission to manage {resource_label}.",
+            )
+        return user
+
+    return checker
+
+
+require_item_write = _restricted(require_operator, "items", "items")
+require_trigger_write = _restricted(require_operator, "triggers", "triggers")
+require_hostgroup_write = _restricted(require_admin, "hostgroups", "host groups")

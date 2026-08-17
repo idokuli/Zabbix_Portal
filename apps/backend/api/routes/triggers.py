@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from Auth import get_current_user, require_operator
+from Auth import get_current_user, require_trigger_write
 from api.deps import team_hostname_filter, zabbix_err
 from api.managers import item_bot
 from api.schemas import BulkTriggerRequest, TriggerRequest, TriggerUpdateRequest
@@ -34,7 +34,7 @@ def list_triggers(hostname: str, current_user: dict = Depends(get_current_user))
 
 
 @router.delete("/triggers/{triggerid}", tags=["Triggers"], summary="Delete trigger by ID")
-def delete_trigger(triggerid: str, current_user: dict = Depends(require_operator)):
+def delete_trigger(triggerid: str, current_user: dict = Depends(require_trigger_write)):
     allowed = team_hostname_filter(current_user)
     if allowed is not None:
         hostname = item_bot.get_trigger_hostname(triggerid)
@@ -53,7 +53,7 @@ def delete_trigger(triggerid: str, current_user: dict = Depends(require_operator
 def update_trigger(
     triggerid: str,
     data: TriggerUpdateRequest,
-    current_user: dict = Depends(require_operator),
+    current_user: dict = Depends(require_trigger_write),
 ):
     allowed = team_hostname_filter(current_user)
     if allowed is not None:
@@ -76,7 +76,7 @@ def update_trigger(
 
 
 @router.post("/triggers", tags=["Triggers"], summary="Add Trigger to Item", status_code=201)
-def add_trigger(data: TriggerRequest, current_user: dict = Depends(require_operator)):
+def add_trigger(data: TriggerRequest, current_user: dict = Depends(require_trigger_write)):
     """Adds a trigger to an existing host item."""
     if data.string_pattern is not None:
         trigger_id, err = item_bot.add_string_trigger(
@@ -115,7 +115,9 @@ def add_trigger(data: TriggerRequest, current_user: dict = Depends(require_opera
     summary="Bulk Add Trigger to Multiple Hosts",
     status_code=201,
 )
-def bulk_add_triggers(data: BulkTriggerRequest, current_user: dict = Depends(require_operator)):
+def bulk_add_triggers(
+    data: BulkTriggerRequest, current_user: dict = Depends(require_trigger_write)
+):
     """Adds the same trigger to multiple hosts in one call."""
     if not data.hostnames:
         raise HTTPException(status_code=400, detail="hostnames list is empty.")

@@ -1,6 +1,6 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
-from Auth import get_current_user, require_operator
+from Auth import get_current_user, require_item_write
 from api.deps import team_hostname_filter, team_tag, zabbix_call
 from api.managers import item_bot
 from api.schemas import (
@@ -77,7 +77,7 @@ def list_template_items(templateid: str, _user: dict = Depends(get_current_user)
 def add_template_item(
     templateid: str,
     data: TemplateItemRequest,
-    _user: dict = Depends(require_operator),
+    _user: dict = Depends(require_item_write),
 ):
     """Add a new item directly to a Zabbix template."""
     with zabbix_call():
@@ -105,7 +105,7 @@ def update_template_item(
     templateid: str,
     itemid: str,
     body: ItemUpdateRequest,
-    _user: dict = Depends(require_operator),
+    _user: dict = Depends(require_item_write),
 ):
     """Update a template item. templateid is validated for consistency but item.update operates by itemid."""
     with zabbix_call():
@@ -123,7 +123,7 @@ def update_template_item(
 def delete_template_item(
     templateid: str,
     itemid: str,
-    _user: dict = Depends(require_operator),
+    _user: dict = Depends(require_item_write),
 ):
     """Delete an item from a template by itemid."""
     if not item_bot.delete_item(itemid):
@@ -156,7 +156,7 @@ def list_items(
 
 
 @router.put("/items/{itemid}", tags=["Items"], summary="Update item")
-def update_item(itemid: str, body: ItemUpdateRequest, _user=Depends(require_operator)):
+def update_item(itemid: str, body: ItemUpdateRequest, _user=Depends(require_item_write)):
     with zabbix_call():
         item_bot.update_item(
             itemid, name=body.name, delay=body.delay, status=body.status, key_=body.key_
@@ -165,7 +165,7 @@ def update_item(itemid: str, body: ItemUpdateRequest, _user=Depends(require_oper
 
 
 @router.delete("/items/{itemid}", tags=["Items"], summary="Delete item by ID")
-def delete_item(itemid: str, current_user: dict = Depends(require_operator)):
+def delete_item(itemid: str, current_user: dict = Depends(require_item_write)):
     allowed = team_hostname_filter(current_user)
     if allowed is not None:
         hostname = item_bot.get_item_hostname(itemid)
@@ -177,28 +177,15 @@ def delete_item(itemid: str, current_user: dict = Depends(require_operator)):
 
 
 @router.post("/items", tags=["Items"], summary="Add Monitoring Item", status_code=201)
-def add_item(data: ItemRequest, current_user: dict = Depends(require_operator)):
+def add_item(data: ItemRequest, current_user: dict = Depends(require_item_write)):
     """Adds a monitoring item (metric) to an existing host."""
     team_name = team_tag(current_user, data.apply_team_tag)
-    item_id, err = item_bot.add_item(
-        data.hostname,
-        data.item_name,
-        data.item_key,
-        data.value_type,
-        team_name,
-        delay=data.delay,
-        units=data.units,
-        history=data.history,
-        trends=data.trends,
-        description=data.description,
-        status=data.status,
-        timeout=data.timeout,
-    )
+    item_id, err = item_bot.add_item(data, team_name)
     return _item_response(item_id, err, "")
 
 
 @router.post("/items/http", tags=["Items"], summary="Add HTTP Agent Item", status_code=201)
-def add_http_item(data: HttpItemRequest, current_user: dict = Depends(require_operator)):
+def add_http_item(data: HttpItemRequest, current_user: dict = Depends(require_item_write)):
     """Adds an HTTP agent item (type 19). Zabbix server fetches the URL and stores the result."""
     team_name = team_tag(current_user, data.apply_team_tag)
     item_id, err = item_bot.add_http_item(data, team_name or data.team_name)
@@ -206,20 +193,10 @@ def add_http_item(data: HttpItemRequest, current_user: dict = Depends(require_op
 
 
 @router.post("/items/service", tags=["Items"], summary="Add Service Check Item", status_code=201)
-def add_service_item(data: ServiceItemRequest, current_user: dict = Depends(require_operator)):
+def add_service_item(data: ServiceItemRequest, current_user: dict = Depends(require_item_write)):
     """Adds a simple-check service item (type 3): ICMP ping, TCP port, HTTP/HTTPS/SSH/SMTP/FTP."""
     team_name = team_tag(current_user, data.apply_team_tag)
-    item_id, err = item_bot.add_service_item(
-        hostname=data.hostname,
-        service_type=data.service_type,
-        port=data.port,
-        item_name=data.item_name,
-        team_name=team_name or data.team_name,
-        delay=data.delay,
-        history=data.history,
-        trends=data.trends,
-        description=data.description,
-    )
+    item_id, err = item_bot.add_service_item(data, team_name or data.team_name)
     return _item_response(item_id, err, "Service")
 
 
@@ -229,7 +206,7 @@ def add_service_item(data: ServiceItemRequest, current_user: dict = Depends(requ
     summary="Add Process Monitor Item",
     status_code=201,
 )
-def add_process_item(data: ProcessItemRequest, current_user: dict = Depends(require_operator)):
+def add_process_item(data: ProcessItemRequest, current_user: dict = Depends(require_item_write)):
     """Adds a proc.num[] agent item to check if a process is running, optionally filtered by
     the OS user running it, process state, or command-line regex.
     Auto-creates a trigger that fires when the process count drops to 0.
@@ -261,7 +238,7 @@ def add_process_item(data: ProcessItemRequest, current_user: dict = Depends(requ
     status_code=201,
 )
 def add_windows_service_item(
-    data: WindowsServiceItemRequest, current_user: dict = Depends(require_operator)
+    data: WindowsServiceItemRequest, current_user: dict = Depends(require_item_write)
 ):
     """Adds a Zabbix agent item using service.info[name,state] to monitor a Windows service.
     Requires the Zabbix agent running on the Windows host.
@@ -284,7 +261,7 @@ def add_windows_service_item(
 
 
 @router.post("/items/filewatch", tags=["Items"], summary="Add File Watch Item", status_code=201)
-def add_file_watch_item(data: FileWatchRequest, current_user: dict = Depends(require_operator)):
+def add_file_watch_item(data: FileWatchRequest, current_user: dict = Depends(require_item_write)):
     """Creates an agent item that monitors a file property.
     Optionally auto-creates a change-detection trigger on the same item.
     """
@@ -346,7 +323,7 @@ def add_file_watch_item(data: FileWatchRequest, current_user: dict = Depends(req
 
 
 @router.post("/items/script", tags=["Items"], summary="Add Script Check Item", status_code=201)
-def add_script_item(data: ScriptItemRequest, current_user: dict = Depends(require_operator)):
+def add_script_item(data: ScriptItemRequest, current_user: dict = Depends(require_item_write)):
     """Adds an agent item that runs a bash or PowerShell script via system.run[].
     Requires EnableRemoteCommands=1 in the Zabbix agent config on the target host.
     """
@@ -361,7 +338,7 @@ def add_script_item(data: ScriptItemRequest, current_user: dict = Depends(requir
     summary="Add ODBC database monitor item",
     status_code=201,
 )
-def add_db_odbc_item(data: DbOdbcRequest, current_user: dict = Depends(require_operator)):
+def add_db_odbc_item(data: DbOdbcRequest, current_user: dict = Depends(require_item_write)):
     """Adds a Zabbix ODBC database monitor item (type 4). Requires an ODBC DSN configured on the Zabbix server."""
     allowed = team_hostname_filter(current_user)
     if allowed is not None and data.hostname not in allowed:
@@ -377,22 +354,13 @@ def add_db_odbc_item(data: DbOdbcRequest, current_user: dict = Depends(require_o
     summary="Add Agent2 database plugin item",
     status_code=201,
 )
-def add_db_agent2_item(data: DbAgent2Request, current_user: dict = Depends(require_operator)):
+def add_db_agent2_item(data: DbAgent2Request, current_user: dict = Depends(require_item_write)):
     """Adds a Zabbix Agent2 database plugin item. Requires Zabbix Agent2 with the relevant DB plugin on the host."""
     allowed = team_hostname_filter(current_user)
     if allowed is not None and data.hostname not in allowed:
         raise HTTPException(status_code=403, detail="Host not in your team.")
     team_name = team_tag(current_user, data.apply_team_tag)
-    item_id, err = item_bot.add_db_agent2_item(
-        hostname=data.hostname,
-        engine=data.engine,
-        conn_string=data.conn_string,
-        metric=data.metric,
-        item_name=data.item_name,
-        extra_param=data.extra_param,
-        value_type=data.value_type,
-        team_name=team_name,
-    )
+    item_id, err = item_bot.add_db_agent2_item(data, team_name)
     return _item_response(item_id, err, "Agent2 DB")
 
 
@@ -402,7 +370,7 @@ def add_db_agent2_item(data: DbAgent2Request, current_user: dict = Depends(requi
     summary="Bulk Add Item to Multiple Hosts",
     status_code=201,
 )
-def bulk_add_items(data: BulkItemRequest, current_user: dict = Depends(require_operator)):
+def bulk_add_items(data: BulkItemRequest, current_user: dict = Depends(require_item_write)):
     """Adds the same item (agent, HTTP agent, or service check) to multiple hosts in one call."""
     if not data.hostnames:
         raise HTTPException(status_code=400, detail="hostnames list is empty.")
@@ -418,7 +386,7 @@ def bulk_add_items(data: BulkItemRequest, current_user: dict = Depends(require_o
 
 
 @router.post("/items/snmp", tags=["Items"], summary="Add SNMP Agent Item", status_code=201)
-def add_snmp_item(data: SnmpItemRequest, current_user: dict = Depends(require_operator)):
+def add_snmp_item(data: SnmpItemRequest, current_user: dict = Depends(require_item_write)):
     """Add an SNMP agent item (type 20). Supports SNMPv1, v2c, and v3."""
     team_name = team_tag(current_user, data.apply_team_tag)
     item_id, err = item_bot.add_snmp_item(data, team_name)
@@ -426,20 +394,10 @@ def add_snmp_item(data: SnmpItemRequest, current_user: dict = Depends(require_op
 
 
 @router.post("/items/snmptrap", tags=["Items"], summary="Add SNMP Trap Item", status_code=201)
-def add_snmp_trap_item(data: SnmpTrapRequest, current_user: dict = Depends(require_operator)):
+def add_snmp_trap_item(data: SnmpTrapRequest, current_user: dict = Depends(require_item_write)):
     """Add an SNMP trap item (type 17). Receives traps pushed by external devices."""
     team_name = team_tag(current_user, data.apply_team_tag)
-    item_id, err = item_bot.add_snmp_trap_item(
-        hostname=data.hostname,
-        item_name=data.item_name,
-        item_key=data.item_key,
-        value_type=data.value_type,
-        team_name=team_name,
-        history=data.history,
-        trends=data.trends,
-        description=data.description,
-        status=data.status,
-    )
+    item_id, err = item_bot.add_snmp_trap_item(data, team_name)
     return _item_response(item_id, err, "SNMP trap")
 
 
@@ -449,41 +407,18 @@ def add_snmp_trap_item(data: SnmpTrapRequest, current_user: dict = Depends(requi
     summary="Add Zabbix Internal Item",
     status_code=201,
 )
-def add_internal_item(data: InternalItemRequest, current_user: dict = Depends(require_operator)):
+def add_internal_item(data: InternalItemRequest, current_user: dict = Depends(require_item_write)):
     """Add a Zabbix internal item (type 5) using built-in zabbix[...] keys."""
     team_name = team_tag(current_user, data.apply_team_tag)
-    item_id, err = item_bot.add_internal_item(
-        hostname=data.hostname,
-        item_name=data.item_name,
-        item_key=data.item_key,
-        value_type=data.value_type,
-        team_name=team_name,
-        delay=data.delay,
-        units=data.units,
-        history=data.history,
-        trends=data.trends,
-        description=data.description,
-        status=data.status,
-    )
+    item_id, err = item_bot.add_internal_item(data, team_name)
     return _item_response(item_id, err, "Internal")
 
 
 @router.post("/items/trapper", tags=["Items"], summary="Add Zabbix Trapper Item", status_code=201)
-def add_trapper_item(data: TrapperItemRequest, current_user: dict = Depends(require_operator)):
+def add_trapper_item(data: TrapperItemRequest, current_user: dict = Depends(require_item_write)):
     """Add a Zabbix trapper item (type 2). Accepts data pushed via zabbix_sender."""
     team_name = team_tag(current_user, data.apply_team_tag)
-    item_id, err = item_bot.add_trapper_item(
-        hostname=data.hostname,
-        item_name=data.item_name,
-        item_key=data.item_key,
-        value_type=data.value_type,
-        allow_traps=data.allow_traps,
-        team_name=team_name,
-        history=data.history,
-        trends=data.trends,
-        description=data.description,
-        status=data.status,
-    )
+    item_id, err = item_bot.add_trapper_item(data, team_name)
     return _item_response(item_id, err, "Trapper")
 
 
@@ -493,48 +428,23 @@ def add_trapper_item(data: TrapperItemRequest, current_user: dict = Depends(requ
     summary="Add External Check Item",
     status_code=201,
 )
-def add_external_item(data: ExternalItemRequest, current_user: dict = Depends(require_operator)):
+def add_external_item(data: ExternalItemRequest, current_user: dict = Depends(require_item_write)):
     """Add an external check item (type 10). Script must exist in ExternalScripts dir on Zabbix server."""
     team_name = team_tag(current_user, data.apply_team_tag)
-    item_id, err = item_bot.add_external_item(
-        hostname=data.hostname,
-        item_name=data.item_name,
-        item_key=data.item_key,
-        value_type=data.value_type,
-        team_name=team_name,
-        delay=data.delay,
-        units=data.units,
-        history=data.history,
-        trends=data.trends,
-        description=data.description,
-        status=data.status,
-    )
+    item_id, err = item_bot.add_external_item(data, team_name)
     return _item_response(item_id, err, "External check")
 
 
 @router.post("/items/ipmi", tags=["Items"], summary="Add IPMI Agent Item", status_code=201)
-def add_ipmi_item(data: IpmiItemRequest, current_user: dict = Depends(require_operator)):
+def add_ipmi_item(data: IpmiItemRequest, current_user: dict = Depends(require_item_write)):
     """Add an IPMI agent item (type 12). Requires an IPMI interface on the host."""
     team_name = team_tag(current_user, data.apply_team_tag)
-    item_id, err = item_bot.add_ipmi_item(
-        hostname=data.hostname,
-        item_name=data.item_name,
-        ipmi_sensor=data.ipmi_sensor,
-        item_key=data.item_key,
-        value_type=data.value_type,
-        team_name=team_name,
-        delay=data.delay,
-        units=data.units,
-        history=data.history,
-        trends=data.trends,
-        description=data.description,
-        status=data.status,
-    )
+    item_id, err = item_bot.add_ipmi_item(data, team_name)
     return _item_response(item_id, err, "IPMI")
 
 
 @router.post("/items/ssh", tags=["Items"], summary="Add SSH Agent Item", status_code=201)
-def add_ssh_item(data: SshItemRequest, current_user: dict = Depends(require_operator)):
+def add_ssh_item(data: SshItemRequest, current_user: dict = Depends(require_item_write)):
     """Add an SSH agent item (type 13). Zabbix server SSHes into the host and runs the script."""
     team_name = team_tag(current_user, data.apply_team_tag)
     item_id, err = item_bot.add_ssh_item(data, team_name)
@@ -542,7 +452,7 @@ def add_ssh_item(data: SshItemRequest, current_user: dict = Depends(require_oper
 
 
 @router.post("/items/telnet", tags=["Items"], summary="Add Telnet Agent Item", status_code=201)
-def add_telnet_item(data: TelnetItemRequest, current_user: dict = Depends(require_operator)):
+def add_telnet_item(data: TelnetItemRequest, current_user: dict = Depends(require_item_write)):
     """Add a Telnet agent item (type 14). Zabbix server connects via Telnet and runs the script."""
     team_name = team_tag(current_user, data.apply_team_tag)
     item_id, err = item_bot.add_telnet_item(data, team_name)
@@ -550,7 +460,7 @@ def add_telnet_item(data: TelnetItemRequest, current_user: dict = Depends(requir
 
 
 @router.post("/items/jmx", tags=["Items"], summary="Add JMX Agent Item", status_code=201)
-def add_jmx_item(data: JmxItemRequest, current_user: dict = Depends(require_operator)):
+def add_jmx_item(data: JmxItemRequest, current_user: dict = Depends(require_item_write)):
     """Add a JMX agent item (type 16). Requires Zabbix Java Gateway and a JMX interface."""
     team_name = team_tag(current_user, data.apply_team_tag)
     item_id, err = item_bot.add_jmx_item(data, team_name)
@@ -559,43 +469,21 @@ def add_jmx_item(data: JmxItemRequest, current_user: dict = Depends(require_oper
 
 @router.post("/items/calculated", tags=["Items"], summary="Add Calculated Item", status_code=201)
 def add_calculated_item(
-    data: CalculatedItemRequest, current_user: dict = Depends(require_operator)
+    data: CalculatedItemRequest, current_user: dict = Depends(require_item_write)
 ):
     """Add a calculated item (type 15). Derives its value from a formula on other items."""
     team_name = team_tag(current_user, data.apply_team_tag)
-    item_id, err = item_bot.add_calculated_item(
-        hostname=data.hostname,
-        item_name=data.item_name,
-        item_key=data.item_key,
-        formula=data.formula,
-        value_type=data.value_type,
-        team_name=team_name,
-        delay=data.delay,
-        units=data.units,
-        history=data.history,
-        trends=data.trends,
-        description=data.description,
-        status=data.status,
-    )
+    item_id, err = item_bot.add_calculated_item(data, team_name)
     return _item_response(item_id, err, "Calculated")
 
 
 @router.post("/items/dependent", tags=["Items"], summary="Add Dependent Item", status_code=201)
-def add_dependent_item(data: DependentItemRequest, current_user: dict = Depends(require_operator)):
+def add_dependent_item(
+    data: DependentItemRequest, current_user: dict = Depends(require_item_write)
+):
     """Add a dependent item (type 18). Preprocesses output from a master item."""
     team_name = team_tag(current_user, data.apply_team_tag)
-    item_id, err = item_bot.add_dependent_item(
-        hostname=data.hostname,
-        item_name=data.item_name,
-        item_key=data.item_key,
-        master_itemid=data.master_itemid,
-        value_type=data.value_type,
-        team_name=team_name,
-        history=data.history,
-        trends=data.trends,
-        description=data.description,
-        status=data.status,
-    )
+    item_id, err = item_bot.add_dependent_item(data, team_name)
     return _item_response(item_id, err, "Dependent")
 
 
@@ -606,7 +494,7 @@ def add_dependent_item(data: DependentItemRequest, current_user: dict = Depends(
     status_code=201,
 )
 def add_zabbix_script_item(
-    data: ZabbixScriptItemRequest, current_user: dict = Depends(require_operator)
+    data: ZabbixScriptItemRequest, current_user: dict = Depends(require_item_write)
 ):
     """Add a Zabbix Script item (type 21). JavaScript code runs on the Zabbix server/proxy."""
     team_name = team_tag(current_user, data.apply_team_tag)
@@ -615,7 +503,7 @@ def add_zabbix_script_item(
 
 
 @router.post("/items/browser", tags=["Items"], summary="Add Browser Item", status_code=201)
-def add_browser_item(data: BrowserItemRequest, current_user: dict = Depends(require_operator)):
+def add_browser_item(data: BrowserItemRequest, current_user: dict = Depends(require_item_write)):
     """Add a Browser item (type 26). JavaScript browser automation on Zabbix 7.x+ server."""
     team_name = team_tag(current_user, data.apply_team_tag)
     item_id, err = item_bot.add_browser_item(data, team_name)

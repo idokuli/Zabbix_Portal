@@ -1,6 +1,6 @@
 import logging
 
-from Zabbix_Base import Zabbix_Base
+from Zabbix_Base import ZabbixBase
 
 from ZabbixSync.background import SyncBackgroundMixin
 from ZabbixSync.helpers import SyncHelpersMixin
@@ -15,7 +15,7 @@ class ZabbixSync(
     SyncPullMixin,
     SyncBackgroundMixin,
     SyncHelpersMixin,
-    Zabbix_Base,
+    ZabbixBase,
 ):
     """Bidirectional sync: portal users/teams/hosts ↔ Zabbix users/groups/host-groups."""
 

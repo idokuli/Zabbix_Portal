@@ -100,6 +100,27 @@ const eventsToHistoryEntries = (newEvents: AlertEvent[]): StoredNotif[] =>
     acknowledged: false,
   }));
 
+// Snoozing lets a user silence the repeat-ring for one problem without acknowledging it.
+// Persisted per-browser (localStorage), keyed by eventid → snooze-until epoch ms.
+const SNOOZE_STORAGE_KEY = "problemSnoozeUntil";
+const REPEAT_RING_INTERVAL_MS = 5 * 60_000;
+
+const readSnoozeMap = (): Record<string, number> => {
+  try {
+    return JSON.parse(localStorage.getItem(SNOOZE_STORAGE_KEY) ?? "{}") as Record<string, number>;
+  } catch {
+    return {};
+  }
+};
+
+const writeSnoozeMap = (map: Record<string, number>) => {
+  localStorage.setItem(SNOOZE_STORAGE_KEY, JSON.stringify(map));
+};
+
+// Alert-rule events (synthetic "rule-" ids) have no Zabbix acknowledgement state, so
+// only real Zabbix problems participate in the repeat-ring / snooze workflow.
+const isRealProblem = (p: Problem) => !p.eventid.startsWith("rule-");
+
 const readRuleSoundsMap = (): Record<string, string> => {
   try {
     return JSON.parse(localStorage.getItem("alertRuleSounds") ?? "{}") as Record<string, string>;
@@ -166,6 +187,56 @@ export const useAlertPolling = ({
   const firstPoll = useRef(true);
   const firstEventPoll = useRef(true);
   const polledSince = useRef(0);
+
+  // Kept in sync every render (same pattern as soundRef in useSoundSettings) so the
+  // 5-minute repeat-ring interval below always reads the latest problems without
+  // having to tear down and recreate the interval on every poll.
+  const activeProblemsRef = useRef<Problem[]>(activeProblems);
+  activeProblemsRef.current = activeProblems;
+
+  const snoozeMapRef = useRef<Record<string, number>>(
+    typeof window === "undefined" ? {} : readSnoozeMap(),
+  );
+
+  const snoozeProblem = useCallback((eventid: string, minutes: number) => {
+    const map = { ...snoozeMapRef.current, [eventid]: Date.now() + minutes * 60_000 };
+    snoozeMapRef.current = map;
+    writeSnoozeMap(map);
+  }, []);
+
+  // Repeat-ring: as long as a real Zabbix problem stays unacknowledged and unsnoozed,
+  // re-play the alert sound every 5 minutes so it can't be missed after the initial ping.
+  useEffect(() => {
+    const ring = () => {
+      const map = snoozeMapRef.current;
+      const now = Date.now();
+      let pruned = false;
+      for (const [id, until] of Object.entries(map)) {
+        if (until <= now) {
+          delete map[id];
+          pruned = true;
+        }
+      }
+      if (pruned) {
+        writeSnoozeMap(map);
+      }
+      const stillRinging = activeProblemsRef.current.filter(
+        (p) => isRealProblem(p) && !p.acknowledged && !(map[p.eventid] > now),
+      );
+      if (stillRinging.length > 0) {
+        playProblemSound(stillRinging, soundRef, soundPresetRef);
+        // Re-surface the toast too — sound alone leaves no clue which problem rang,
+        // especially for ones that predate this page load and never toasted at all.
+        setNotifications((prev) => {
+          const ringingIds = new Set(stillRinging.map((p) => p.eventid));
+          const rest = prev.filter((p) => !ringingIds.has(p.eventid));
+          return [...stillRinging, ...rest].slice(0, 8);
+        });
+      }
+    };
+    const t = window.setInterval(ring, REPEAT_RING_INTERVAL_MS);
+    return () => window.clearInterval(t);
+  }, [soundRef, soundPresetRef]);
 
   const dismissNotif = useCallback((eventid: string) => {
     setNotifications((prev) => prev.filter((p) => p.eventid !== eventid));
@@ -287,5 +358,6 @@ export const useAlertPolling = ({
     notifications,
     setNotifications,
     dismissNotif,
+    snoozeProblem,
   };
 };

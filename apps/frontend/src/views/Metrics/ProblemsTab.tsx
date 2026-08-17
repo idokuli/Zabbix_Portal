@@ -122,12 +122,18 @@ const AckCell = ({
   onAckRequest,
   hideAckedAfterMinutes,
   nowTick,
+  canUnacknowledge,
+  unacknowledging,
+  onUnackRequest,
 }: {
   p: Problem;
   acknowledging: Set<string>;
   onAckRequest: (p: Problem) => void;
   hideAckedAfterMinutes: number | null;
   nowTick: number;
+  canUnacknowledge: boolean;
+  unacknowledging: Set<string>;
+  onUnackRequest: (p: Problem) => void;
 }) =>
   p.acknowledged ? (
     <Stack sx={{ alignItems: "center" }} direction="row" spacing={0.5}>
@@ -182,6 +188,25 @@ const AckCell = ({
           </Tooltip>
         ) : null;
       })()}
+      {canUnacknowledge && (
+        <Tooltip title="Unacknowledge this problem (Team Lead+)">
+          <span>
+            <Button
+              size="small"
+              variant="text"
+              color="warning"
+              onClick={(e) => {
+                e.stopPropagation();
+                onUnackRequest(p);
+              }}
+              disabled={unacknowledging.has(p.eventid)}
+              sx={{ fontSize: "0.68rem", height: 20, minWidth: 40, px: 0.75 }}
+            >
+              {unacknowledging.has(p.eventid) ? "…" : "Unack"}
+            </Button>
+          </span>
+        </Tooltip>
+      )}
     </Stack>
   ) : (
     <Tooltip title="Acknowledge this problem">
@@ -391,6 +416,9 @@ const ProblemRow = ({
   onNoteRequest,
   hideAckedAfterMinutes,
   nowTick,
+  canUnacknowledge,
+  unacknowledging,
+  onUnackRequest,
 }: {
   p: Problem;
   isExpanded: boolean;
@@ -400,6 +428,9 @@ const ProblemRow = ({
   onNoteRequest: (p: Problem) => void;
   hideAckedAfterMinutes: number | null;
   nowTick: number;
+  canUnacknowledge: boolean;
+  unacknowledging: Set<string>;
+  onUnackRequest: (p: Problem) => void;
 }) => {
   const sev = SEVERITY_CONFIG.find((s) => s.severity === p.severity) ?? SEVERITY_CONFIG[0];
   return (
@@ -494,6 +525,9 @@ const ProblemRow = ({
             onAckRequest={onAckRequest}
             hideAckedAfterMinutes={hideAckedAfterMinutes}
             nowTick={nowTick}
+            canUnacknowledge={canUnacknowledge}
+            unacknowledging={unacknowledging}
+            onUnackRequest={onUnackRequest}
           />
         </Stack>
       </Box>
@@ -503,25 +537,39 @@ const ProblemRow = ({
   );
 };
 
-const AcknowledgeDialog = ({
+// Shared shape behind Acknowledge / Add note / Unacknowledge — all three are a small
+// dialog confirming an action against one problem with an optional or required note.
+const ProblemActionDialog = ({
   target,
+  title,
+  description,
   note,
   setNote,
+  noteLabel,
+  notePlaceholder,
   onClose,
   onSubmit,
   busy,
-  username,
+  submitLabel,
+  submitColor = "primary",
+  noteRequired = false,
 }: {
   target: Problem | null;
+  title: string;
+  description: ReactNode;
   note: string;
   setNote: (v: string) => void;
+  noteLabel: string;
+  notePlaceholder: string;
   onClose: () => void;
   onSubmit: () => void;
   busy: boolean;
-  username: string;
+  submitLabel: string;
+  submitColor?: "primary" | "success" | "warning";
+  noteRequired?: boolean;
 }) => (
   <Dialog open={target !== null} onClose={onClose} maxWidth="sm" fullWidth>
-    <DialogTitle sx={{ fontWeight: 700 }}>Acknowledge problem</DialogTitle>
+    <DialogTitle sx={{ fontWeight: 700 }}>{title}</DialogTitle>
     <DialogContent>
       <Stack spacing={2} sx={{ pt: 0.5 }}>
         {target && (
@@ -535,16 +583,15 @@ const AcknowledgeDialog = ({
           </Box>
         )}
         <Typography variant="body2" color="text.secondary">
-          Acknowledging as <strong>{username}</strong>. Add an optional note explaining what was
-          done.
+          {description}
         </Typography>
         <TextField
           size="small"
           multiline
           minRows={2}
           fullWidth
-          label="Note (optional)"
-          placeholder="e.g. Restarted the service, investigating further…"
+          label={noteLabel}
+          placeholder={notePlaceholder}
           value={note}
           onChange={(e) => setNote(e.target.value)}
         />
@@ -552,63 +599,13 @@ const AcknowledgeDialog = ({
     </DialogContent>
     <DialogActions>
       <Button onClick={onClose}>Cancel</Button>
-      <Button variant="contained" color="success" disabled={busy} onClick={onSubmit}>
-        Acknowledge
-      </Button>
-    </DialogActions>
-  </Dialog>
-);
-
-const AddNoteDialog = ({
-  target,
-  note,
-  setNote,
-  onClose,
-  onSubmit,
-  busy,
-  username,
-}: {
-  target: Problem | null;
-  note: string;
-  setNote: (v: string) => void;
-  onClose: () => void;
-  onSubmit: () => void;
-  busy: boolean;
-  username: string;
-}) => (
-  <Dialog open={target !== null} onClose={onClose} maxWidth="sm" fullWidth>
-    <DialogTitle sx={{ fontWeight: 700 }}>Add note</DialogTitle>
-    <DialogContent>
-      <Stack spacing={2} sx={{ pt: 0.5 }}>
-        {target && (
-          <Box sx={{ bgcolor: "action.hover", p: 1.5 }}>
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              {target.name}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {target.hostname} · {target.severity_name}
-            </Typography>
-          </Box>
-        )}
-        <Typography variant="body2" color="text.secondary">
-          Leave a note as <strong>{username}</strong> without changing the acknowledgement status.
-        </Typography>
-        <TextField
-          size="small"
-          multiline
-          minRows={2}
-          fullWidth
-          label="Note"
-          placeholder="e.g. Escalated to network team, waiting on a response…"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-        />
-      </Stack>
-    </DialogContent>
-    <DialogActions>
-      <Button onClick={onClose}>Cancel</Button>
-      <Button variant="contained" disabled={!note.trim() || busy} onClick={onSubmit}>
-        Add note
+      <Button
+        variant="contained"
+        color={submitColor}
+        disabled={busy || (noteRequired && !note.trim())}
+        onClick={onSubmit}
+      >
+        {submitLabel}
       </Button>
     </DialogActions>
   </Dialog>
@@ -945,6 +942,12 @@ export const ProblemsTab = ({ initialHost = "" }: { initialHost?: string }) => {
   const [noteText, setNoteText] = useState("");
   const [addingNote, setAddingNote] = useState<Set<string>>(new Set());
 
+  // Unacknowledge dialog state — Team Lead+ only, reopens an acknowledged problem
+  const canUnacknowledge = (authUser?.roles ?? []).some((r) => r === "root" || r === "team_lead");
+  const [unackTarget, setUnackTarget] = useState<Problem | null>(null);
+  const [unackNote, setUnackNote] = useState("");
+  const [unacknowledging, setUnacknowledging] = useState<Set<string>>(new Set());
+
   const loadProblems = useCallback((silent = false) => {
     if (!silent) {
       setLoading(true);
@@ -1028,6 +1031,49 @@ export const ProblemsTab = ({ initialHost = "" }: { initialHost?: string }) => {
       });
     }
   }, []);
+
+  const handleUnacknowledge = useCallback(
+    async (problem: Problem, note: string) => {
+      const { eventid } = problem;
+      setUnacknowledging((prev) => new Set([...prev, eventid]));
+      setUnackTarget(null);
+      setUnackNote("");
+      try {
+        await api.unacknowledgeProblem(eventid, { hostname: problem.hostname, note });
+        setProblems((prev) =>
+          prev.map((p) =>
+            p.eventid === eventid
+              ? {
+                  ...p,
+                  acknowledged: false,
+                  ack_user: undefined,
+                  ack_time: undefined,
+                  ack_note: undefined,
+                  notes: [
+                    ...(p.notes ?? []),
+                    {
+                      username: authUser?.username ?? "unknown",
+                      note: note ? `Unacknowledged: ${note}` : "Unacknowledged",
+                      created_at: new Date().toISOString(),
+                    },
+                  ],
+                }
+              : p,
+          ),
+        );
+        window.dispatchEvent(new Event("problemAcknowledged"));
+      } catch {
+        // no-op — button re-enables so user can retry
+      } finally {
+        setUnacknowledging((prev) => {
+          const next = new Set(prev);
+          next.delete(eventid);
+          return next;
+        });
+      }
+    },
+    [authUser?.username],
+  );
 
   useEffect(() => {
     void loadProblems();
@@ -1166,29 +1212,75 @@ export const ProblemsTab = ({ initialHost = "" }: { initialHost?: string }) => {
               }}
               hideAckedAfterMinutes={hideAckedAfterMinutes}
               nowTick={nowTick}
+              canUnacknowledge={canUnacknowledge}
+              unacknowledging={unacknowledging}
+              onUnackRequest={(problem) => {
+                setUnackTarget(problem);
+                setUnackNote("");
+              }}
             />
           ))
         )}
       </Paper>
 
-      <AcknowledgeDialog
+      <ProblemActionDialog
         target={ackTarget}
+        title="Acknowledge problem"
+        description={
+          <>
+            Acknowledging as <strong>{authUser?.username ?? "you"}</strong>. Add an optional note
+            explaining what was done.
+          </>
+        }
         note={ackNote}
         setNote={setAckNote}
+        noteLabel="Note (optional)"
+        notePlaceholder="e.g. Restarted the service, investigating further…"
         onClose={() => setAckTarget(null)}
         onSubmit={() => ackTarget && handleAcknowledge(ackTarget, ackNote)}
         busy={ackTarget ? acknowledging.has(ackTarget.eventid) : false}
-        username={authUser?.username ?? "you"}
+        submitLabel="Acknowledge"
+        submitColor="success"
       />
 
-      <AddNoteDialog
+      <ProblemActionDialog
         target={noteTarget}
+        title="Add note"
+        description={
+          <>
+            Leave a note as <strong>{authUser?.username ?? "you"}</strong> without changing the
+            acknowledgement status.
+          </>
+        }
         note={noteText}
         setNote={setNoteText}
+        noteLabel="Note"
+        notePlaceholder="e.g. Escalated to network team, waiting on a response…"
         onClose={() => setNoteTarget(null)}
         onSubmit={() => noteTarget && handleAddNote(noteTarget, noteText.trim())}
         busy={noteTarget ? addingNote.has(noteTarget.eventid) : false}
-        username={authUser?.username ?? "you"}
+        submitLabel="Add note"
+        noteRequired
+      />
+
+      <ProblemActionDialog
+        target={unackTarget}
+        title="Unacknowledge problem"
+        description={
+          <>
+            Reopening as <strong>{authUser?.username ?? "you"}</strong>. This clears the
+            acknowledgement so the problem re-enters the alert workflow. Add an optional reason.
+          </>
+        }
+        note={unackNote}
+        setNote={setUnackNote}
+        noteLabel="Reason (optional)"
+        notePlaceholder="e.g. Recurred — reopening for investigation…"
+        onClose={() => setUnackTarget(null)}
+        onSubmit={() => unackTarget && handleUnacknowledge(unackTarget, unackNote.trim())}
+        busy={unackTarget ? unacknowledging.has(unackTarget.eventid) : false}
+        submitLabel="Unacknowledge"
+        submitColor="warning"
       />
     </Box>
   );

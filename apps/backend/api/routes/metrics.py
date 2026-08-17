@@ -1,6 +1,6 @@
 import logging
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from Auth import get_current_user
+from Auth import get_current_user, require_admin
 from Database import get_conn
 from api.deps import live_team_id, team_hostname_filter
 from api.managers import metrics_bot
@@ -8,6 +8,10 @@ from api.schemas import AcknowledgeRequest, AddNoteRequest
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Metrics"])
+
+# ~6 calendar months, with slack for month-length variance (28-31 days each) —
+# matches _MAX_AVAILABILITY_RANGE_SECONDS in api/routes/reports.py.
+_MAX_ITEM_HISTORY_MINUTES = 190 * 24 * 60
 
 
 def _require_host_access(current_user: dict, hostname: str, action_verb: str) -> None:
@@ -138,6 +142,49 @@ def acknowledge_problem(
 
 
 @router.post(
+    "/metrics/problems/{eventid}/unacknowledge",
+    tags=["Metrics"],
+    summary="Unacknowledge a Zabbix problem",
+)
+def unacknowledge_problem(
+    eventid: str,
+    body: AcknowledgeRequest = Body(default_factory=AcknowledgeRequest),
+    current_user: dict = Depends(require_admin),
+):
+    """Team Lead+ only — reopens a problem so it re-enters the acknowledgement workflow."""
+    _require_host_access(current_user, body.hostname, "unacknowledge")
+
+    username = current_user.get("username", "unknown")
+    if not metrics_bot.unacknowledge_problem(eventid, username=username, note=body.note):
+        raise HTTPException(status_code=503, detail="Zabbix not connected or unacknowledge failed.")
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO problem_notes (eventid, hostname, username, note)
+                       VALUES (%s, %s, %s, %s)
+                   RETURNING created_at""",
+                (
+                    eventid,
+                    body.hostname,
+                    username,
+                    f"Unacknowledged: {body.note}" if body.note else "Unacknowledged",
+                ),
+            )
+            created_at = cur.fetchone()["created_at"]
+            conn.commit()
+    finally:
+        conn.close()
+    logger.info("Problem %s unacknowledged by %s.", eventid, username)
+    return {
+        "message": "Problem unacknowledged.",
+        "unacknowledged_by": username,
+        "note": f"Unacknowledged: {body.note}" if body.note else "Unacknowledged",
+        "created_at": created_at.isoformat(),
+    }
+
+
+@router.post(
     "/metrics/problems/{eventid}/note",
     tags=["Metrics"],
     summary="Add a note to a problem without acknowledging it",
@@ -261,7 +308,10 @@ def get_item_history(
     minutes: int = 360,
     current_user: dict = Depends(get_current_user),
 ):
-    if minutes < 1 or minutes > 10080:
-        raise HTTPException(status_code=400, detail="minutes must be between 1 and 10080")
+    if minutes < 1 or minutes > _MAX_ITEM_HISTORY_MINUTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"minutes must be between 1 and {_MAX_ITEM_HISTORY_MINUTES}",
+        )
     logger.debug("history request: item=%s minutes=%d", itemid, minutes)
     return metrics_bot.get_item_history(itemid, minutes)

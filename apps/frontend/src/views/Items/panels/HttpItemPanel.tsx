@@ -27,6 +27,7 @@ import {
   MultiHostSelect,
   type PanelProps,
   TeamTagSwitch,
+  TriggerToggleFields,
   useCommonItemState,
 } from "./shared";
 
@@ -244,7 +245,7 @@ export const HttpItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
   const [bulkHosts, setBulkHosts] = useState<Host[]>([]);
   const [bulkResults, setBulkResults] = useState<BulkResult[]>([]);
   const [saving, setSaving] = useState(false);
-  const common = useCommonItemState();
+  const common = useCommonItemState({ defaultTrends: "0d" });
 
   const isDisabled = saving || (bulkMode ? bulkHosts.length === 0 : !hostname) || !itemName || !url;
 
@@ -327,6 +328,7 @@ export const HttpItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
       trends: common.trends,
       description: common.description || undefined,
       apply_team_tag: common.applyTeamTag,
+      ...common.triggerFields(),
     });
     showToast("Item added successfully.", "success");
     setItemName("");
@@ -627,6 +629,24 @@ export const HttpItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
         description={common.description}
         setDescription={common.setDescription}
       />
+
+      {!bulkMode && (
+        <TriggerToggleFields
+          valueType={valueType}
+          createTrigger={common.createTrigger}
+          setCreateTrigger={common.setCreateTrigger}
+          triggerOperator={common.triggerOperator}
+          setTriggerOperator={common.setTriggerOperator}
+          triggerThreshold={common.triggerThreshold}
+          setTriggerThreshold={common.setTriggerThreshold}
+          triggerPattern={common.triggerPattern}
+          setTriggerPattern={common.setTriggerPattern}
+          triggerMatchType={common.triggerMatchType}
+          setTriggerMatchType={common.setTriggerMatchType}
+          triggerPriority={common.triggerPriority}
+          setTriggerPriority={common.setTriggerPriority}
+        />
+      )}
 
       {bulkResults.length > 0 && <BulkResults results={bulkResults} label="Bulk item add" />}
 

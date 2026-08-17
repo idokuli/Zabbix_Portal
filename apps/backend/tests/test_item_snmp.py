@@ -1,4 +1,4 @@
-"""Tests for Item_Manager/snmp.py — SNMP agent and trap items."""
+"""Tests for ItemManager/snmp.py — SNMP agent and trap items."""
 
 import os
 
@@ -12,15 +12,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from api.schemas.items import SnmpItemRequest
+from api.schemas.items import SnmpItemRequest, SnmpTrapRequest
 
 
 @pytest.fixture()
 def mgr():
     with patch("zabbix_utils.ZabbixAPI"):
-        from Item_Manager import Item_Manager
+        from Item_Manager import ItemManager
 
-        m = Item_Manager()
+        m = ItemManager()
         m.zapi = MagicMock()
         m._zabbix_version = (6, 4)
         return m
@@ -199,7 +199,8 @@ def test_add_snmp_trap_item_success(mgr):
     _host_ok(mgr)
     mgr.zapi.hostinterface.get.return_value = _iface("2")
     mgr.zapi.item.create.return_value = {"itemids": ["30"]}
-    item_id, err = mgr.add_snmp_trap_item("h1", "SNMP Trap")
+    req = SnmpTrapRequest(hostname="h1", item_name="SNMP Trap")
+    item_id, err = mgr.add_snmp_trap_item(req)
     assert item_id == "30"
     assert err is None
     call_kwargs = mgr.zapi.item.create.call_args[1]
@@ -210,7 +211,8 @@ def test_add_snmp_trap_item_with_description_and_team(mgr):
     _host_ok(mgr)
     mgr.zapi.hostinterface.get.return_value = _iface("2")
     mgr.zapi.item.create.return_value = {"itemids": ["31"]}
-    item_id, err = mgr.add_snmp_trap_item("h1", "Trap", description="Trap desc", team_name="ops")
+    req = SnmpTrapRequest(hostname="h1", item_name="Trap", description="Trap desc")
+    item_id, err = mgr.add_snmp_trap_item(req, team_name="ops")
     assert item_id == "31"
     call_kwargs = mgr.zapi.item.create.call_args[1]
     assert call_kwargs["description"] == "Trap desc"
@@ -219,13 +221,15 @@ def test_add_snmp_trap_item_with_description_and_team(mgr):
 
 def test_add_snmp_trap_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_snmp_trap_item("h1", "Trap")
+    req = SnmpTrapRequest(hostname="h1", item_name="Trap")
+    item_id, err = mgr.add_snmp_trap_item(req)
     assert item_id is None
 
 
 def test_add_snmp_trap_item_host_not_found(mgr):
     mgr.zapi.host.get.return_value = []
-    item_id, err = mgr.add_snmp_trap_item("ghost", "Trap")
+    req = SnmpTrapRequest(hostname="ghost", item_name="Trap")
+    item_id, err = mgr.add_snmp_trap_item(req)
     assert item_id is None
     assert "not found" in err
 
@@ -233,7 +237,8 @@ def test_add_snmp_trap_item_host_not_found(mgr):
 def test_add_snmp_trap_item_no_interface(mgr):
     _host_ok(mgr)
     mgr.zapi.hostinterface.get.return_value = []
-    item_id, err = mgr.add_snmp_trap_item("h1", "Trap")
+    req = SnmpTrapRequest(hostname="h1", item_name="Trap")
+    item_id, err = mgr.add_snmp_trap_item(req)
     assert item_id is None
     assert "interface" in err.lower()
 
@@ -242,6 +247,7 @@ def test_add_snmp_trap_item_exception(mgr):
     _host_ok(mgr)
     mgr.zapi.hostinterface.get.return_value = _iface("2")
     mgr.zapi.item.create.side_effect = Exception("zabbix error")
-    item_id, err = mgr.add_snmp_trap_item("h1", "Trap")
+    req = SnmpTrapRequest(hostname="h1", item_name="Trap")
+    item_id, err = mgr.add_snmp_trap_item(req)
     assert item_id is None
     assert err is not None

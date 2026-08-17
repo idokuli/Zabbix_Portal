@@ -63,6 +63,18 @@ export const metricsApi = {
         body: JSON.stringify(meta),
       },
     ),
+  unacknowledgeProblem: (
+    eventid: string,
+    meta: { problem_name?: string; hostname: string; severity?: number; note?: string },
+  ) =>
+    apiFetch<{ message: string; unacknowledged_by: string }>(
+      `/metrics/problems/${encodeURIComponent(eventid)}/unacknowledge`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(meta),
+      },
+    ),
   addProblemNote: (eventid: string, meta: { hostname: string; note: string }) =>
     apiFetch<{ message: string } & ProblemNote>(
       `/metrics/problems/${encodeURIComponent(eventid)}/note`,

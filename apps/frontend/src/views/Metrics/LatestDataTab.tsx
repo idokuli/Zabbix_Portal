@@ -1,8 +1,6 @@
 "use client";
 
-import CloseIcon from "@mui/icons-material/Close";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import ShowChartOutlinedIcon from "@mui/icons-material/ShowChartOutlined";
 import WifiOffIcon from "@mui/icons-material/WifiOff";
 import {
   Alert,
@@ -12,7 +10,6 @@ import {
   CircularProgress,
   FormControl,
   IconButton,
-  InputAdornment,
   InputLabel,
   MenuItem,
   Paper,
@@ -25,7 +22,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -34,6 +30,7 @@ import { api, type Host } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { formatDateTime, formatTime } from "../../app/datetime";
+import { FilterSearchField, filterLabelSx } from "../../components/FilterBar";
 import { SearchableSelect } from "../../components/SearchableSelect";
 import { parseDelaySecs } from "../Items/shared";
 
@@ -341,40 +338,23 @@ const LatestDataControls = ({
   lastRefreshed: Date | null;
 }) => (
   <Stack sx={{ alignItems: "center" }} direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-    <TextField
-      slotProps={{
-        input: {
-          startAdornment: (
-            <InputAdornment position="start">
-              <ShowChartOutlinedIcon sx={{ fontSize: 16, color: "text.disabled" }} />
-            </InputAdornment>
-          ),
-          endAdornment: search ? (
-            <InputAdornment position="end">
-              <IconButton size="small" onClick={() => setSearch("")}>
-                <CloseIcon sx={{ fontSize: 14 }} />
-              </IconButton>
-            </InputAdornment>
-          ) : undefined,
-        },
-      }}
-      size="small"
+    <FilterSearchField
       placeholder="Search name, key, or value…"
       value={search}
-      onChange={(e) => setSearch(e.target.value)}
-      sx={{ flex: 1, minWidth: 200 }}
+      onChange={setSearch}
     />
 
     <FormControl size="small" sx={{ minWidth: 240 }}>
-      <InputLabel>Host</InputLabel>
+      <InputLabel sx={filterLabelSx}>Host</InputLabel>
       <SearchableSelect
         label="Host"
         value={selectedHost}
         onChange={(e) => setSelectedHost(e.target.value)}
         disabled={hostsLoading}
+        sx={filterLabelSx}
       >
         {hosts.map((h) => (
-          <MenuItem key={h.hostid} value={h.host}>
+          <MenuItem key={h.hostid} value={h.host} sx={filterLabelSx}>
             {h.host}
           </MenuItem>
         ))}
@@ -382,15 +362,22 @@ const LatestDataControls = ({
     </FormControl>
 
     <FormControl size="small" sx={{ minWidth: 130 }}>
-      <InputLabel>Status</InputLabel>
+      <InputLabel sx={filterLabelSx}>Status</InputLabel>
       <Select
         label="Status"
         value={statusFilter}
         onChange={(e) => setStatusFilter(e.target.value as StatusFilterValue)}
+        sx={filterLabelSx}
       >
-        <MenuItem value="all">All</MenuItem>
-        <MenuItem value="enabled">Enabled</MenuItem>
-        <MenuItem value="disabled">Disabled</MenuItem>
+        <MenuItem value="all" sx={filterLabelSx}>
+          All
+        </MenuItem>
+        <MenuItem value="enabled" sx={filterLabelSx}>
+          Enabled
+        </MenuItem>
+        <MenuItem value="disabled" sx={filterLabelSx}>
+          Disabled
+        </MenuItem>
       </Select>
     </FormControl>
 
@@ -400,7 +387,7 @@ const LatestDataControls = ({
         color={autoRefresh ? "primary" : "default"}
         onClick={() => setAutoRefresh((v) => !v)}
       >
-        <RefreshIcon sx={{ fontSize: 20 }} />
+        <RefreshIcon sx={{ fontSize: 18 }} />
       </IconButton>
     </Tooltip>
 

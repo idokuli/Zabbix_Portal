@@ -40,6 +40,7 @@ import { api, type Host } from "../../app/api";
 import { hostsApi } from "../../app/api/hosts";
 import type { TemplateItem } from "../../app/api/types";
 import { ConfirmDelete } from "../../app/components/ConfirmDelete";
+import { FilterSearchField, filterLabelSx } from "../../components/FilterBar";
 import { useFavorites } from "../../lib/favorites";
 import { ItemsBrowseTable } from "./ItemsBrowseTable";
 import { AgentItemPanel } from "./panels/AgentItemPanel";
@@ -409,15 +410,13 @@ const TemplateItemsTab = ({
     <CardContent>
       <Stack spacing={2}>
         <Stack sx={{ alignItems: "center" }} direction="row" spacing={1.5}>
-          <TextField
-            size="small"
+          <FilterSearchField
             placeholder="Search items…"
             value={templateItemSearch}
-            onChange={(e) => onTemplateItemSearchChange(e.target.value)}
-            sx={{ flex: 1 }}
+            onChange={onTemplateItemSearchChange}
           />
           <FormControl size="small" sx={{ minWidth: 300 }}>
-            <InputLabel id="tpl-select-label">
+            <InputLabel id="tpl-select-label" sx={filterLabelSx}>
               {templatesLoading ? "Loading templates…" : "Template"}
             </InputLabel>
             <Select
@@ -425,17 +424,18 @@ const TemplateItemsTab = ({
               label={templatesLoading ? "Loading templates…" : "Template"}
               value={selectedTemplateId}
               onChange={(e) => onSelectedTemplateIdChange(e.target.value)}
+              sx={filterLabelSx}
             >
               {allTemplates.map((t) => (
-                <MenuItem key={t.templateid} value={t.templateid}>
+                <MenuItem key={t.templateid} value={t.templateid} sx={filterLabelSx}>
                   {t.name}
                 </MenuItem>
               ))}
             </Select>
           </FormControl>
           <Tooltip title="Reload">
-            <IconButton onClick={onReload} disabled={!selectedTemplateId}>
-              <RouterIcon fontSize="small" />
+            <IconButton size="small" onClick={onReload} disabled={!selectedTemplateId}>
+              <RouterIcon sx={{ fontSize: 18 }} />
             </IconButton>
           </Tooltip>
         </Stack>

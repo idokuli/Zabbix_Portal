@@ -36,6 +36,7 @@
     "availability": "זמינות",
     "topTriggers": "טריגרים מובילים",
     "auditLog": "יומן ביקורת",
+    "portalActions": "פעולות פורטל",
     "actionLog": "יומן פעולות",
     "alertHistory": "היסטוריית התראות",
     "usersGroup": "משתמשים",
@@ -249,6 +250,7 @@
     "title": "דוחות",
     "topTriggers": "טריגרים מובילים",
     "auditLog": "יומן ביקורת",
+    "portalActions": "פעולות פורטל",
     "actionLog": "יומן פעולות",
     "availability": "זמינות",
     "notifications": "התראות"

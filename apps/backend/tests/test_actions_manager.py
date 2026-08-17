@@ -16,9 +16,9 @@ import pytest
 @pytest.fixture()
 def mgr():
     with patch("zabbix_utils.ZabbixAPI"):
-        from Actions_Manager import Actions_Manager
+        from Actions_Manager import ActionsManager
 
-        m = Actions_Manager()
+        m = ActionsManager()
         m.zapi = MagicMock()
         return m
 

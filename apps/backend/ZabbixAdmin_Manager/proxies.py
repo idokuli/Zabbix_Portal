@@ -24,8 +24,8 @@ PROXY_TIMEOUT_FIELDS = [
 
 
 class ProxiesMixin:
-    """Mixed into ZabbixAdmin_Manager. Assumes `self.zapi`/`self._cached`/`self._invalidate`
-    from Zabbix_Base.
+    """Mixed into ZabbixAdminManager. Assumes `self.zapi`/`self._cached`/`self._invalidate`
+    from ZabbixBase.
     """
 
     if TYPE_CHECKING:

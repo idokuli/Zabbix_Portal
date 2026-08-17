@@ -16,9 +16,9 @@ import pytest
 @pytest.fixture()
 def mgr():
     with patch("zabbix_utils.ZabbixAPI"):
-        from DataCollection_Manager import DataCollection_Manager
+        from DataCollection_Manager import DataCollectionManager
 
-        m = DataCollection_Manager()
+        m = DataCollectionManager()
         m.zapi = MagicMock()
         m._cache = {}
         return m

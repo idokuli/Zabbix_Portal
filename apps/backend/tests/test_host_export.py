@@ -1,4 +1,4 @@
-"""Tests for Host_Manager/export.py."""
+"""Tests for HostManager/export.py."""
 
 import os
 
@@ -17,9 +17,9 @@ import pytest
 @pytest.fixture()
 def mgr():
     with patch("zabbix_utils.ZabbixAPI"):
-        from Host_Manager import Host_Manager
+        from Host_Manager import HostManager
 
-        m = Host_Manager()
+        m = HostManager()
         m.zapi = MagicMock()
         return m
 

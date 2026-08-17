@@ -3,11 +3,20 @@
 import logging
 from Zabbix_Base import zabbix_err
 import re
-from typing import TYPE_CHECKING
-from api.schemas.items import JmxItemRequest, SshItemRequest, TelnetItemRequest
+from typing import TYPE_CHECKING, Protocol
+from api.schemas.items import IpmiItemRequest, JmxItemRequest, SshItemRequest, TelnetItemRequest
 
 if TYPE_CHECKING:
     from zabbix_utils import ZabbixAPI
+    from Item_Manager.triggers import _TriggerConfigured
+
+
+class _UnitsDescribed(Protocol):
+    """Structural type for the units/description fields shared by several item requests."""
+
+    units: str
+    description: str
+
 
 logger = logging.getLogger(__name__)
 
@@ -15,27 +24,69 @@ _ZABBIX_NOT_CONNECTED = "Zabbix API not connected."
 
 
 class RemoteItemsMixin:
-    """Mixed into Item_Manager. Assumes `self.zapi` from Zabbix_Base."""
+    """Mixed into ItemManager. Assumes `self.zapi` from ZabbixBase."""
 
     if TYPE_CHECKING:
         zapi: "ZabbixAPI | None"
 
+        def maybe_create_trigger(
+            self,
+            hostname: str,
+            item_key: str,
+            item_name: str,
+            value_type: int,
+            create_trigger: bool,
+            trigger_operator: str = ">",
+            trigger_threshold: float | None = None,
+            trigger_pattern: str = "",
+            trigger_match_type: str = "like",
+            trigger_priority: int = 3,
+        ) -> tuple[str | None, str | None]: ...
+
+        def _maybe_create_trigger_logged(
+            self,
+            hostname: str,
+            item_key: str,
+            item_name: str,
+            value_type: int,
+            request: "_TriggerConfigured",
+            log_prefix: str,
+        ) -> None: ...
+
+    @staticmethod
+    def _pick_ipmi_interface(interfaces: list[dict]) -> dict | None:
+        """Prefer a host's IPMI interface (Zabbix type 3); fall back to the first."""
+        return next((i for i in interfaces if str(i.get("type")) == "3"), None) or (
+            interfaces[0] if interfaces else None
+        )
+
+    @staticmethod
+    def _ipmi_item_identity(request: IpmiItemRequest, hostname: str) -> tuple[str, str]:
+        """Resolve the effective item_key/item_name, auto-generating either when blank."""
+        item_key = request.item_key
+        if not item_key:
+            safe = request.ipmi_sensor.replace(" ", "_")[:40]
+            item_key = f"ipmi.sensor[{safe}]"
+        item_name = request.item_name or f"IPMI: {request.ipmi_sensor} on {hostname}"
+        return item_key, item_name
+
+    @staticmethod
+    def _units_description_kwargs(request: "_UnitsDescribed", team_name: str) -> dict:
+        """Build the units/description/team-tag fields shared by several item types."""
+        kwargs: dict = {}
+        if request.units:
+            kwargs["units"] = request.units
+        if request.description:
+            kwargs["description"] = request.description
+        if team_name:
+            kwargs["tags"] = [{"tag": "team", "value": team_name}]
+        return kwargs
+
     def add_ipmi_item(
-        self,
-        hostname: str,
-        item_name: str,
-        ipmi_sensor: str,
-        item_key: str = "",
-        value_type: int = 0,
-        team_name: str = "",
-        delay: str = "1m",
-        units: str = "",
-        history: str = "31d",
-        trends: str = "365d",
-        description: str = "",
-        status: int = 0,
+        self, request: IpmiItemRequest, team_name: str = ""
     ) -> tuple[str | None, str | None]:
         """Add an IPMI agent item (type 12). Requires an IPMI interface on the host."""
+        hostname = request.hostname
         if not self.zapi:
             return None, _ZABBIX_NOT_CONNECTED
         try:
@@ -44,44 +95,35 @@ class RemoteItemsMixin:
                 return None, f"Host '{hostname}' not found."
             host_id = host_data[0]["hostid"]
             interfaces = self.zapi.hostinterface.get(hostids=host_id)
-            # Prefer IPMI interface (type 3), fall back to first
-            ipmi_iface = next((i for i in interfaces if str(i.get("type")) == "3"), None) or (
-                interfaces[0] if interfaces else None
-            )
+            ipmi_iface = self._pick_ipmi_interface(interfaces)
             if not ipmi_iface:
                 return None, f"No interface found for host '{hostname}'."
-            if not item_key:
-                safe = ipmi_sensor.replace(" ", "_")[:40]
-                item_key = f"ipmi.sensor[{safe}]"
-            if not item_name:
-                item_name = f"IPMI: {ipmi_sensor} on {hostname}"
+            item_key, item_name = self._ipmi_item_identity(request, hostname)
             kwargs: dict = dict(
                 name=item_name,
                 key_=item_key,
                 hostid=host_id,
                 interfaceid=ipmi_iface["interfaceid"],
                 type=12,
-                value_type=value_type,
-                ipmi_sensor=ipmi_sensor,
-                delay=delay or "1m",
-                history=history or "31d",
-                trends=trends or "365d",
-                status=status,
+                value_type=request.value_type,
+                ipmi_sensor=request.ipmi_sensor,
+                delay=request.delay or "1m",
+                history=request.history or "31d",
+                trends=request.trends or "365d",
+                status=request.status,
             )
-            if units:
-                kwargs["units"] = units
-            if description:
-                kwargs["description"] = description
-            if team_name:
-                kwargs["tags"] = [{"tag": "team", "value": team_name}]
+            kwargs.update(self._units_description_kwargs(request, team_name))
             result = self.zapi.item.create(**kwargs)
             item_id = result["itemids"][0]
             logger.info(
                 "IPMI item %r (%s) added to %r (ID: %s).",
                 item_name,
-                ipmi_sensor,
+                request.ipmi_sensor,
                 hostname,
                 item_id,
+            )
+            self._maybe_create_trigger_logged(
+                hostname, item_key, item_name, request.value_type, request, "add_ipmi_item"
             )
             return item_id, None
         except Exception as e:
@@ -158,6 +200,9 @@ class RemoteItemsMixin:
             result = self.zapi.item.create(**kwargs)
             item_id = result["itemids"][0]
             logger.info("SSH item %r added to %r (ID: %s).", item_name, hostname, item_id)
+            self._maybe_create_trigger_logged(
+                hostname, item_key, item_name, value_type, request, "add_ssh_item"
+            )
             return item_id, None
         except Exception as e:
             logger.exception("add_ssh_item(%r) failed", hostname)
@@ -171,15 +216,7 @@ class RemoteItemsMixin:
         item_name = request.item_name
         params = request.params
         item_key = request.item_key
-        username = request.username
-        password = request.password
         value_type = request.value_type
-        delay = request.delay
-        units = request.units
-        history = request.history
-        trends = request.trends
-        description = request.description
-        status = request.status
 
         if not self.zapi:
             return None, _ZABBIX_NOT_CONNECTED
@@ -205,26 +242,47 @@ class RemoteItemsMixin:
                 type=14,
                 value_type=value_type,
                 params=params,
-                username=username or "",
-                password=password or "",
-                delay=delay or "1m",
-                history=history or "31d",
-                trends=trends or "365d",
-                status=status,
+                username=request.username or "",
+                password=request.password or "",
+                delay=request.delay or "1m",
+                history=request.history or "31d",
+                trends=request.trends or "365d",
+                status=request.status,
             )
-            if units:
-                kwargs["units"] = units
-            if description:
-                kwargs["description"] = description
-            if team_name:
-                kwargs["tags"] = [{"tag": "team", "value": team_name}]
+            kwargs.update(self._units_description_kwargs(request, team_name))
             result = self.zapi.item.create(**kwargs)
             item_id = result["itemids"][0]
             logger.info("Telnet item %r added to %r (ID: %s).", item_name, hostname, item_id)
+            self._maybe_create_trigger_logged(
+                hostname, item_key, item_name, value_type, request, "add_telnet_item"
+            )
             return item_id, None
         except Exception as e:
             logger.exception("add_telnet_item(%r) failed", hostname)
             return None, zabbix_err(e)
+
+    @staticmethod
+    def _pick_jmx_interface(interfaces: list[dict]) -> dict | None:
+        """Prefer a host's JMX interface (Zabbix type 4); fall back to the first."""
+        return next((i for i in interfaces if str(i.get("type")) == "4"), None) or (
+            interfaces[0] if interfaces else None
+        )
+
+    @staticmethod
+    def _jmx_extra_kwargs(request: JmxItemRequest, team_name: str) -> dict:
+        kwargs: dict = {}
+        if request.jmx_endpoint:
+            kwargs["jmx_endpoint"] = request.jmx_endpoint
+        if request.username:
+            kwargs["username"] = request.username
+            kwargs["password"] = request.password
+        if request.units:
+            kwargs["units"] = request.units
+        if request.description:
+            kwargs["description"] = request.description
+        if team_name:
+            kwargs["tags"] = [{"tag": "team", "value": team_name}]
+        return kwargs
 
     def add_jmx_item(
         self, request: JmxItemRequest, team_name: str = ""
@@ -233,16 +291,7 @@ class RemoteItemsMixin:
         hostname = request.hostname
         item_name = request.item_name
         item_key = request.item_key
-        jmx_endpoint = request.jmx_endpoint
-        username = request.username
-        password = request.password
         value_type = request.value_type
-        delay = request.delay
-        units = request.units
-        history = request.history
-        trends = request.trends
-        description = request.description
-        status = request.status
 
         if not self.zapi:
             return None, _ZABBIX_NOT_CONNECTED
@@ -257,10 +306,7 @@ class RemoteItemsMixin:
                 return None, f"Host '{hostname}' not found."
             host_id = host_data[0]["hostid"]
             interfaces = self.zapi.hostinterface.get(hostids=host_id)
-            # Prefer JMX interface (type 4)
-            jmx_iface = next((i for i in interfaces if str(i.get("type")) == "4"), None) or (
-                interfaces[0] if interfaces else None
-            )
+            jmx_iface = self._pick_jmx_interface(interfaces)
             if not jmx_iface:
                 return None, f"No interface found for host '{hostname}'."
             kwargs: dict = dict(
@@ -270,22 +316,12 @@ class RemoteItemsMixin:
                 interfaceid=jmx_iface["interfaceid"],
                 type=16,
                 value_type=value_type,
-                delay=delay or "1m",
-                history=history or "31d",
-                trends=trends or "365d",
-                status=status,
+                delay=request.delay or "1m",
+                history=request.history or "31d",
+                trends=request.trends or "365d",
+                status=request.status,
             )
-            if jmx_endpoint:
-                kwargs["jmx_endpoint"] = jmx_endpoint
-            if username:
-                kwargs["username"] = username
-                kwargs["password"] = password
-            if units:
-                kwargs["units"] = units
-            if description:
-                kwargs["description"] = description
-            if team_name:
-                kwargs["tags"] = [{"tag": "team", "value": team_name}]
+            kwargs.update(self._jmx_extra_kwargs(request, team_name))
             result = self.zapi.item.create(**kwargs)
             item_id = result["itemids"][0]
             logger.info(
@@ -294,6 +330,9 @@ class RemoteItemsMixin:
                 item_key,
                 hostname,
                 item_id,
+            )
+            self._maybe_create_trigger_logged(
+                hostname, item_key, item_name, value_type, request, "add_jmx_item"
             )
             return item_id, None
         except Exception as e:

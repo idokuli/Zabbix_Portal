@@ -9,6 +9,7 @@ import {
   HostSelect,
   InlineItemsList,
   type PanelProps,
+  TriggerToggleFields,
   useCommonItemState,
 } from "./shared";
 
@@ -193,6 +194,7 @@ export const SnmpPanel = ({ hosts, hostsLoading, showToast, onSuccess }: PanelPr
         trends: common.trends,
         description: common.description || undefined,
         status: common.enabled ? 0 : 1,
+        ...common.triggerFields(),
       });
       showToast("Item added successfully.", "success");
       setItemName("");
@@ -303,6 +305,21 @@ export const SnmpPanel = ({ hosts, hostsLoading, showToast, onSuccess }: PanelPr
         setDescription={common.setDescription}
       />
       <EnabledSwitch value={common.enabled} onChange={common.setEnabled} />
+      <TriggerToggleFields
+        valueType={valueType}
+        createTrigger={common.createTrigger}
+        setCreateTrigger={common.setCreateTrigger}
+        triggerOperator={common.triggerOperator}
+        setTriggerOperator={common.setTriggerOperator}
+        triggerThreshold={common.triggerThreshold}
+        setTriggerThreshold={common.setTriggerThreshold}
+        triggerPattern={common.triggerPattern}
+        setTriggerPattern={common.setTriggerPattern}
+        triggerMatchType={common.triggerMatchType}
+        setTriggerMatchType={common.setTriggerMatchType}
+        triggerPriority={common.triggerPriority}
+        setTriggerPriority={common.setTriggerPriority}
+      />
       <Box>
         <Button variant="contained" color="secondary" onClick={onSubmit} disabled={isDisabled}>
           {saving ? (
@@ -340,6 +357,7 @@ export const SnmpTrapPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
         trends: common.trends,
         description: common.description || undefined,
         status: common.enabled ? 0 : 1,
+        ...common.triggerFields(),
       });
       showToast("Item added successfully.", "success");
       setItemName("");
@@ -416,6 +434,21 @@ export const SnmpTrapPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
         minRows={2}
       />
       <EnabledSwitch value={common.enabled} onChange={common.setEnabled} />
+      <TriggerToggleFields
+        valueType={valueType}
+        createTrigger={common.createTrigger}
+        setCreateTrigger={common.setCreateTrigger}
+        triggerOperator={common.triggerOperator}
+        setTriggerOperator={common.setTriggerOperator}
+        triggerThreshold={common.triggerThreshold}
+        setTriggerThreshold={common.setTriggerThreshold}
+        triggerPattern={common.triggerPattern}
+        setTriggerPattern={common.setTriggerPattern}
+        triggerMatchType={common.triggerMatchType}
+        setTriggerMatchType={common.setTriggerMatchType}
+        triggerPriority={common.triggerPriority}
+        setTriggerPriority={common.setTriggerPriority}
+      />
       <Box>
         <Button
           variant="contained"

@@ -22,6 +22,18 @@ import type { Host } from "../../../app/api";
 import { api } from "../../../app/api";
 import { generateId } from "../../../app/utils";
 import { SearchableSelect } from "../../../components/SearchableSelect";
+import { operators } from "../../Triggers/shared";
+import { severities } from "../shared";
+
+// value_type: 0=Float, 1=String, 2=Log, 3=Integer, 4=Text
+const NUMERIC_VALUE_TYPES = new Set([0, 3]);
+
+const MATCH_TYPES = [
+  { value: "like", label: "contains" },
+  { value: "notlike", label: "does not contain" },
+  { value: "regexp", label: "matches regex" },
+  { value: "notregexp", label: "does not match regex" },
+];
 
 export type CustomInterval = {
   _key: string;
@@ -85,6 +97,7 @@ export const MultiHostSelect = ({
 }) => (
   <Autocomplete
     multiple
+    disableCloseOnSelect
     size="small"
     options={hosts}
     value={value}
@@ -326,6 +339,130 @@ export const CommonFields = ({
   </>
 );
 
+// Auto-create-trigger toggle, shared across every item panel. The condition it builds
+// adapts to the item's value_type: numeric items (Float/Integer) get a real threshold
+// trigger; string/log/text items get a pattern-match trigger. Leaving the
+// threshold/pattern blank falls back to a nodata() "stopped reporting" trigger on the
+// backend (see Item_Manager/triggers.py maybe_create_trigger()) — useful for
+// boolean-like items (e.g. an HTTP check or process-up item) where there's nothing
+// meaningful to threshold against, but you still want to know if it goes quiet.
+export const TriggerToggleFields = ({
+  valueType,
+  createTrigger,
+  setCreateTrigger,
+  triggerOperator,
+  setTriggerOperator,
+  triggerThreshold,
+  setTriggerThreshold,
+  triggerPattern,
+  setTriggerPattern,
+  triggerMatchType,
+  setTriggerMatchType,
+  triggerPriority,
+  setTriggerPriority,
+}: {
+  valueType: number;
+  createTrigger: boolean;
+  setCreateTrigger: (v: boolean) => void;
+  triggerOperator: string;
+  setTriggerOperator: (v: string) => void;
+  triggerThreshold: string;
+  setTriggerThreshold: (v: string) => void;
+  triggerPattern: string;
+  setTriggerPattern: (v: string) => void;
+  triggerMatchType: string;
+  setTriggerMatchType: (v: string) => void;
+  triggerPriority: number;
+  setTriggerPriority: (v: number) => void;
+}) => {
+  const isNumeric = NUMERIC_VALUE_TYPES.has(valueType);
+  return (
+    <>
+      <FormControlLabel
+        control={
+          <Switch
+            checked={createTrigger}
+            onChange={(e) => setCreateTrigger(e.target.checked)}
+            size="small"
+          />
+        }
+        label="Auto-create trigger"
+      />
+      {createTrigger && (
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+          {isNumeric ? (
+            <>
+              <TextField
+                select
+                size="small"
+                label="Operator"
+                value={triggerOperator}
+                onChange={(e) => setTriggerOperator(e.target.value)}
+                sx={{ minWidth: 90 }}
+              >
+                {operators.map((o) => (
+                  <MenuItem key={o.value} value={o.value}>
+                    {o.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                size="small"
+                label="Threshold"
+                value={triggerThreshold}
+                onChange={(e) => setTriggerThreshold(e.target.value)}
+                placeholder="e.g. 90"
+                helperText="Leave blank to alert on no data instead"
+                fullWidth
+              />
+            </>
+          ) : (
+            <>
+              <TextField
+                select
+                size="small"
+                label="Match type"
+                value={triggerMatchType}
+                onChange={(e) => setTriggerMatchType(e.target.value)}
+                sx={{ minWidth: 170 }}
+              >
+                {MATCH_TYPES.map((m) => (
+                  <MenuItem key={m.value} value={m.value}>
+                    {m.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                size="small"
+                label="Pattern"
+                value={triggerPattern}
+                onChange={(e) => setTriggerPattern(e.target.value)}
+                placeholder="e.g. ERROR"
+                helperText="Leave blank to alert on no data instead"
+                fullWidth
+              />
+            </>
+          )}
+          <TextField
+            select
+            size="small"
+            label="Severity"
+            value={triggerPriority}
+            onChange={(e) => setTriggerPriority(Number(e.target.value))}
+            sx={{ minWidth: 130 }}
+          >
+            {severities.map((s) => (
+              <MenuItem key={s.value} value={s.value}>
+                {s.label}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Stack>
+      )}
+    </>
+  );
+};
+
 export const EnabledSwitch = ({
   value,
   onChange,
@@ -352,17 +489,24 @@ export const TeamTagSwitch = ({
   />
 );
 
-export const useCommonItemState = () => {
+export const useCommonItemState = (options?: { defaultTrends?: string }) => {
+  const defaultTrends = options?.defaultTrends ?? "365d";
   const [delay, setDelay] = useState("1m");
   const [units, setUnits] = useState("");
   const [history, setHistory] = useState("31d");
-  const [trends, setTrends] = useState("365d");
+  const [trends, setTrends] = useState(defaultTrends);
   const [description, setDescription] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [applyTeamTag, setApplyTeamTag] = useState(true);
   const [timeoutMode, setTimeoutMode] = useState<"global" | "override">("global");
   const [timeout, setTimeout] = useState("3s");
   const [customIntervals, setCustomIntervals] = useState<CustomInterval[]>([]);
+  const [createTrigger, setCreateTrigger] = useState(false);
+  const [triggerOperator, setTriggerOperator] = useState(">");
+  const [triggerThreshold, setTriggerThreshold] = useState("");
+  const [triggerPattern, setTriggerPattern] = useState("");
+  const [triggerMatchType, setTriggerMatchType] = useState("like");
+  const [triggerPriority, setTriggerPriority] = useState(3);
 
   const assembleDelay = () => {
     const parts = customIntervals
@@ -371,17 +515,34 @@ export const useCommonItemState = () => {
     return parts.length > 0 ? `${delay};${parts.join(";")}` : delay;
   };
 
+  // Backend fields for POST /items/*: create_trigger, trigger_operator, trigger_threshold
+  // (number|undefined), trigger_pattern, trigger_match_type, trigger_priority.
+  const triggerFields = () => ({
+    create_trigger: createTrigger,
+    trigger_operator: triggerOperator,
+    trigger_threshold: triggerThreshold.trim() ? Number(triggerThreshold) : undefined,
+    trigger_pattern: triggerPattern,
+    trigger_match_type: triggerMatchType,
+    trigger_priority: triggerPriority,
+  });
+
   const reset = () => {
     setDelay("1m");
     setUnits("");
     setHistory("31d");
-    setTrends("365d");
+    setTrends(defaultTrends);
     setDescription("");
     setEnabled(true);
     setApplyTeamTag(true);
     setTimeoutMode("global");
     setTimeout("3s");
     setCustomIntervals([]);
+    setCreateTrigger(false);
+    setTriggerOperator(">");
+    setTriggerThreshold("");
+    setTriggerPattern("");
+    setTriggerMatchType("like");
+    setTriggerPriority(3);
   };
 
   return {
@@ -405,6 +566,19 @@ export const useCommonItemState = () => {
     setTimeout,
     customIntervals,
     setCustomIntervals,
+    createTrigger,
+    setCreateTrigger,
+    triggerOperator,
+    setTriggerOperator,
+    triggerThreshold,
+    setTriggerThreshold,
+    triggerPattern,
+    setTriggerPattern,
+    triggerMatchType,
+    setTriggerMatchType,
+    triggerPriority,
+    setTriggerPriority,
+    triggerFields,
     assembleDelay,
     reset,
   };

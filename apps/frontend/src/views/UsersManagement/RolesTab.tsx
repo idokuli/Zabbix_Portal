@@ -49,7 +49,17 @@ type Role = {
   rule_count: number;
 };
 
-const UI_SECTIONS = [
+// Zabbix restricts individual UI elements to a minimum role "type" — User (1),
+// Admin (2), or Super admin (3) — independent of which section they live under.
+// `minType` defaults to 1 (available to every type) when omitted. Sending a ui
+// rule for an element the role's type doesn't support is rejected by Zabbix with
+// `UI element "X" is not available for user role "Y"`, so both the checkbox list
+// AND the submitted payload must be filtered by the currently selected type —
+// see `visibleItemNames()`, used by both the dialog render and `onAdd()`.
+type UiItem = { name: string; label: string; minType?: number };
+type UiSection = { label: string; minType?: number; items: UiItem[] };
+
+const UI_SECTIONS: UiSection[] = [
   {
     label: "Dashboards",
     items: [{ name: "monitoring.dashboard", label: "Dashboards" }],
@@ -61,7 +71,7 @@ const UI_SECTIONS = [
       { name: "monitoring.hosts", label: "Hosts" },
       { name: "monitoring.latest_data", label: "Latest data" },
       { name: "monitoring.maps", label: "Maps" },
-      { name: "monitoring.discovery", label: "Discovery" },
+      { name: "monitoring.discovery", label: "Discovery", minType: 2 },
     ],
   },
   {
@@ -82,18 +92,18 @@ const UI_SECTIONS = [
   {
     label: "Reports",
     items: [
-      { name: "reports.system_info", label: "System information" },
-      { name: "reports.scheduled_reports", label: "Scheduled reports" },
       { name: "reports.availability_report", label: "Availability report" },
       { name: "reports.top_triggers", label: "Top 100 triggers" },
-      { name: "reports.notifications", label: "Notifications" },
-      { name: "reports.audit_log", label: "Audit log" },
-      { name: "reports.action_log", label: "Action log" },
+      { name: "reports.notifications", label: "Notifications", minType: 2 },
+      { name: "reports.system_info", label: "System information", minType: 3 },
+      { name: "reports.scheduled_reports", label: "Scheduled reports", minType: 3 },
+      { name: "reports.audit_log", label: "Audit log", minType: 3 },
+      { name: "reports.action_log", label: "Action log", minType: 3 },
     ],
   },
   {
     label: "Data collection",
-    adminOnly: true,
+    minType: 2,
     items: [
       { name: "data_collection.template_groups", label: "Template groups" },
       { name: "data_collection.host_groups", label: "Host groups" },
@@ -106,7 +116,7 @@ const UI_SECTIONS = [
   },
   {
     label: "Alerts",
-    adminOnly: true,
+    minType: 2,
     items: [
       { name: "alerts.trigger_actions", label: "Trigger actions" },
       { name: "alerts.service_actions", label: "Service actions" },
@@ -119,7 +129,9 @@ const UI_SECTIONS = [
   },
   {
     label: "Users",
-    adminOnly: true,
+    // Only Super admins manage other users/roles/auth settings in Zabbix — Admin-type
+    // roles cannot, so this (like Administration below) needs type 3, not just 2.
+    minType: 3,
     items: [
       { name: "users.user_groups", label: "User groups" },
       { name: "users.users", label: "Users" },
@@ -130,7 +142,7 @@ const UI_SECTIONS = [
   },
   {
     label: "Administration",
-    adminOnly: true,
+    minType: 3,
     items: [
       { name: "administration.general", label: "General" },
       { name: "administration.audit_log", label: "Audit log" },
@@ -142,6 +154,25 @@ const UI_SECTIONS = [
     ],
   },
 ];
+
+const isMinTypeMet = (minType: number | undefined, roleType: number) => roleType >= (minType ?? 1);
+
+// Every UI element name available to a given role type, across all sections — the
+// single source of truth for both what the dialog renders and what gets submitted.
+const visibleItemNames = (roleType: number): Set<string> => {
+  const names = new Set<string>();
+  for (const section of UI_SECTIONS) {
+    if (!isMinTypeMet(section.minType, roleType)) {
+      continue;
+    }
+    for (const item of section.items) {
+      if (isMinTypeMet(item.minType, roleType)) {
+        names.add(item.name);
+      }
+    }
+  }
+  return names;
+};
 
 const makeDefaultUiAccess = (): Record<string, boolean> => {
   const acc: Record<string, boolean> = {};
@@ -209,10 +240,17 @@ export const RolesTab = ({
   const onAdd = async () => {
     setSaving(true);
     try {
+      // Only send ui rules for elements Zabbix actually allows at this role type —
+      // form.ui_access can hold stale `true` values left over from a higher type
+      // that was since switched away from, and Zabbix rejects those outright.
+      const allowedNames = visibleItemNames(form.type);
+      const ui_access = Object.fromEntries(
+        Object.entries(form.ui_access).filter(([name]) => allowedNames.has(name)),
+      );
       await api.createRole({
         name: form.name,
         type: form.type,
-        ui_access: form.ui_access,
+        ui_access,
         ui_default_access: form.ui_default_access,
         services_read_mode: form.services_read_mode,
         services_write_mode: form.services_write_mode,
@@ -261,7 +299,7 @@ export const RolesTab = ({
 
   const toggleUi = (name: string, val: boolean) =>
     setForm((f) => ({ ...f, ui_access: { ...f.ui_access, [name]: val } }));
-  const toggleSection = (items: Array<{ name: string }>, val: boolean) =>
+  const toggleSection = (items: UiItem[], val: boolean) =>
     setForm((f) => {
       const updated = { ...f.ui_access };
       for (const item of items) {
@@ -269,10 +307,15 @@ export const RolesTab = ({
       }
       return { ...f, ui_access: updated };
     });
-  const sectionAllChecked = (items: Array<{ name: string }>) =>
-    items.every((it) => form.ui_access[it.name]);
+  const sectionAllChecked = (items: UiItem[]) => items.every((it) => form.ui_access[it.name]);
 
-  const visibleSections = UI_SECTIONS.filter((s) => !s.adminOnly || form.type >= 2);
+  // A section renders as long as at least one of its items is available at the
+  // selected role type; items individually restricted above that type (e.g. Reports'
+  // Audit log, which needs Super admin) are filtered out per-section below.
+  const visibleSections = UI_SECTIONS.map((section) => ({
+    ...section,
+    visibleItems: section.items.filter((item) => isMinTypeMet(item.minType, form.type)),
+  })).filter((section) => section.visibleItems.length > 0);
 
   return (
     <>
@@ -433,8 +476,8 @@ export const RolesTab = ({
                     control={
                       <Switch
                         size="small"
-                        checked={sectionAllChecked(section.items)}
-                        onChange={(e) => toggleSection(section.items, e.target.checked)}
+                        checked={sectionAllChecked(section.visibleItems)}
+                        onChange={(e) => toggleSection(section.visibleItems, e.target.checked)}
                       />
                     }
                     label={
@@ -445,7 +488,7 @@ export const RolesTab = ({
                     sx={{ mb: 0.5 }}
                   />
                   <Box sx={{ pl: 1 }}>
-                    {section.items.map((item) => (
+                    {section.visibleItems.map((item) => (
                       <FormControlLabel
                         key={item.name}
                         control={

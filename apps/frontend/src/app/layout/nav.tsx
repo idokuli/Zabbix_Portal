@@ -5,6 +5,7 @@ import CodeOutlinedIcon from "@mui/icons-material/CodeOutlined";
 import ComputerOutlinedIcon from "@mui/icons-material/ComputerOutlined";
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
+import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import KeyOutlinedIcon from "@mui/icons-material/KeyOutlined";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
@@ -182,6 +183,11 @@ export const navGroups: NavGroup[] = [
         href: "/reports?tab=audit-log",
         labelKey: "nav.auditLog",
         icon: <StorageOutlinedIcon sx={{ fontSize: 18 }} />,
+      },
+      {
+        href: "/reports?tab=portal-actions",
+        labelKey: "nav.portalActions",
+        icon: <HistoryOutlinedIcon sx={{ fontSize: 18 }} />,
       },
       {
         href: "/reports?tab=action-log",

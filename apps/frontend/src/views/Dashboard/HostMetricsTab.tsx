@@ -16,7 +16,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -37,6 +36,7 @@ import { api, type HostMetrics } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { formatTime } from "../../app/datetime";
+import { FILTER_BAR_SX, FilterSearchField } from "../../components/FilterBar";
 
 ChartJS.register(
   CategoryScale,
@@ -131,14 +131,11 @@ export const HostMetricsTab = () => {
         title="Host Metrics"
         description="Live CPU, memory, disk, and network metrics for all monitored hosts."
       />
-      <Box sx={{ display: "flex", gap: 2, mb: 2, alignItems: "center" }}>
-        <TextField
-          size="small"
-          placeholder="Filter hosts…"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          sx={{ flex: 1 }}
-        />
+      <Box sx={FILTER_BAR_SX}>
+        {!loading && (
+          <Chip label={`${filtered.length} host${filtered.length !== 1 ? "s" : ""}`} size="small" />
+        )}
+        <FilterSearchField placeholder="Filter hosts…" value={filter} onChange={setFilter} />
         <Tooltip title="Refresh now">
           <IconButton size="small" onClick={() => load(false)} disabled={loading}>
             <RefreshIcon sx={{ fontSize: 18 }} />
@@ -148,13 +145,6 @@ export const HostMetricsTab = () => {
           <Typography variant="caption" color="text.disabled" sx={{ fontSize: "0.7rem" }}>
             Updated {formatTime(lastUpdated)}
           </Typography>
-        )}
-        {!loading && (
-          <Chip
-            label={`${filtered.length} host${filtered.length !== 1 ? "s" : ""}`}
-            size="small"
-            sx={{ fontSize: "0.72rem" }}
-          />
         )}
       </Box>
 

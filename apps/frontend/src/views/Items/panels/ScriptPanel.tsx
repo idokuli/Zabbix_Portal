@@ -25,6 +25,7 @@ import {
   type PanelProps,
   TeamTagSwitch,
   TimeoutSelector,
+  TriggerToggleFields,
   useCommonItemState,
 } from "./shared";
 
@@ -77,6 +78,7 @@ export const ScriptPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Panel
       status: common.enabled ? 0 : 1,
       timeout: common.timeoutMode === "override" ? common.timeout : undefined,
       apply_team_tag: common.applyTeamTag,
+      ...common.triggerFields(),
     });
     showToast("Item added successfully.", "success");
     setScriptContent("");
@@ -253,6 +255,24 @@ export const ScriptPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Panel
       />
       <EnabledSwitch value={common.enabled} onChange={common.setEnabled} />
       <TeamTagSwitch value={common.applyTeamTag} onChange={common.setApplyTeamTag} />
+
+      {!bulkMode && (
+        <TriggerToggleFields
+          valueType={scriptValueType}
+          createTrigger={common.createTrigger}
+          setCreateTrigger={common.setCreateTrigger}
+          triggerOperator={common.triggerOperator}
+          setTriggerOperator={common.setTriggerOperator}
+          triggerThreshold={common.triggerThreshold}
+          setTriggerThreshold={common.setTriggerThreshold}
+          triggerPattern={common.triggerPattern}
+          setTriggerPattern={common.setTriggerPattern}
+          triggerMatchType={common.triggerMatchType}
+          setTriggerMatchType={common.setTriggerMatchType}
+          triggerPriority={common.triggerPriority}
+          setTriggerPriority={common.setTriggerPriority}
+        />
+      )}
 
       {bulkResults.length > 0 && <BulkResults results={bulkResults} label="Bulk item add" />}
       <Box>

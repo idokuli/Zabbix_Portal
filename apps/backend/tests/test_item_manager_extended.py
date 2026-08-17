@@ -1,4 +1,4 @@
-"""Tests for Item_Manager/triggers.py, remote.py, http_service.py extended paths."""
+"""Tests for ItemManager/triggers.py, remote.py, http_service.py extended paths."""
 
 import os
 
@@ -12,15 +12,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from api.schemas.items import TelnetItemRequest
+from api.schemas.items import IpmiItemRequest, TelnetItemRequest
 
 
 @pytest.fixture()
 def mgr():
     with patch("zabbix_utils.ZabbixAPI"):
-        from Item_Manager import Item_Manager
+        from Item_Manager import ItemManager
 
-        m = Item_Manager()
+        m = ItemManager()
         m.zapi = MagicMock()
         m._zabbix_version = (6, 4)
         return m
@@ -105,20 +105,25 @@ def test_add_ipmi_item_success(mgr):
     _mock_host_iface(mgr)
     mgr.zapi.hostinterface.get.return_value = [{"interfaceid": "5", "type": "3"}]
     mgr.zapi.item.create.return_value = {"itemids": ["40"]}
-    item_id, err = mgr.add_ipmi_item("h1", "Fan speed", "ipmi.fan", "0x23")
+    req = IpmiItemRequest(
+        hostname="h1", item_name="Fan speed", item_key="ipmi.fan", ipmi_sensor="0x23"
+    )
+    item_id, err = mgr.add_ipmi_item(req)
     assert item_id == "40"
     assert err is None
 
 
 def test_add_ipmi_item_host_not_found(mgr):
     mgr.zapi.host.get.return_value = []
-    item_id, err = mgr.add_ipmi_item("ghost", "x", "k", "0x01")
+    req = IpmiItemRequest(hostname="ghost", item_name="x", item_key="k", ipmi_sensor="0x01")
+    item_id, err = mgr.add_ipmi_item(req)
     assert item_id is None
 
 
 def test_add_ipmi_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_ipmi_item("h1", "x", "k", "0x01")
+    req = IpmiItemRequest(hostname="h1", item_name="x", item_key="k", ipmi_sensor="0x01")
+    item_id, err = mgr.add_ipmi_item(req)
     assert item_id is None
 
 

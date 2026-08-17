@@ -24,6 +24,9 @@ export const PERIOD_OPTIONS = [
   { label: "12 h", minutes: 720 },
   { label: "24 h", minutes: 1440 },
   { label: "7 d", minutes: 10080 },
+  { label: "1 M", minutes: 43200 },
+  { label: "3 M", minutes: 129600 },
+  { label: "6 M", minutes: 273600 },
 ] as const;
 
 export const SEVERITY_CONFIG = [...SEVERITIES]

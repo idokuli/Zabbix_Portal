@@ -8,6 +8,8 @@ class UserRequest(BaseModel):
     password: str
     email: str | None = ""
     roles: list[str] = Field(default_factory=lambda: ["member"])
+    # Write restrictions independent of roles: 'hostgroups', 'items', 'triggers'.
+    restrictions: list[str] = Field(default_factory=list)
     team_id: int | None = None
 
 
@@ -17,4 +19,5 @@ class PasswordChangeRequest(BaseModel):
 
 class UserUpdateRequest(BaseModel):
     roles: list[str]
+    restrictions: list[str] = Field(default_factory=list)
     team_id: int | None = None

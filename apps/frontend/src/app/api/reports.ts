@@ -49,6 +49,28 @@ export const reportsApi = {
       }>;
     }>(`/reports/audit-log${q.toString() ? `?${q}` : ""}`);
   },
+  getPortalActions: (params?: { limit?: number; hours?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.limit != null) {
+      q.set("limit", String(params.limit));
+    }
+    if (params?.hours != null) {
+      q.set("hours", String(params.hours));
+    }
+    return apiFetch<{
+      entries: Array<{
+        id: number;
+        user_id: number | null;
+        username: string;
+        method: string;
+        path: string;
+        action: string;
+        status_code: number;
+        ip: string;
+        clock: number;
+      }>;
+    }>(`/reports/portal-actions${q.toString() ? `?${q}` : ""}`);
+  },
   getActionLog: (params?: { limit?: number; hours?: number }) => {
     const q = new URLSearchParams();
     if (params?.limit) {
@@ -75,13 +97,24 @@ export const reportsApi = {
       }>;
     }>(`/reports/action-log${q.toString() ? `?${q}` : ""}`);
   },
-  getAvailability: (params?: { hours?: number; groupid?: string }) => {
+  getAvailability: (params?: {
+    hours?: number;
+    groupid?: string;
+    time_from?: number;
+    time_to?: number;
+  }) => {
     const q = new URLSearchParams();
     if (params?.hours) {
       q.set("hours", String(params.hours));
     }
     if (params?.groupid) {
       q.set("groupid", params.groupid);
+    }
+    if (params?.time_from != null) {
+      q.set("time_from", String(params.time_from));
+    }
+    if (params?.time_to != null) {
+      q.set("time_to", String(params.time_to));
     }
     return apiFetch<{
       hosts: Array<{

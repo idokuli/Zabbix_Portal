@@ -11,6 +11,7 @@ import {
   InlineItemsList,
   type PanelProps,
   TimeoutSelector,
+  TriggerToggleFields,
   useCommonItemState,
 } from "./shared";
 
@@ -260,6 +261,7 @@ export const DatabasePanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
       trends: common.trends,
       status: common.enabled ? 0 : 1,
       timeout: common.timeoutMode === "override" ? common.timeout : undefined,
+      ...common.triggerFields(),
     });
 
   const submitAgent2Item = () =>
@@ -270,6 +272,7 @@ export const DatabasePanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
       metric,
       extra_param: metaDef?.hasExtra ? extraParam : undefined,
       item_name: agent2ItemName || undefined,
+      ...common.triggerFields(),
     });
 
   const onSubmit = async () => {
@@ -366,6 +369,22 @@ export const DatabasePanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
           common={common}
         />
       )}
+
+      <TriggerToggleFields
+        valueType={mode === "odbc" ? odbcValueType : (metaDef?.vtype ?? 3)}
+        createTrigger={common.createTrigger}
+        setCreateTrigger={common.setCreateTrigger}
+        triggerOperator={common.triggerOperator}
+        setTriggerOperator={common.setTriggerOperator}
+        triggerThreshold={common.triggerThreshold}
+        setTriggerThreshold={common.setTriggerThreshold}
+        triggerPattern={common.triggerPattern}
+        setTriggerPattern={common.setTriggerPattern}
+        triggerMatchType={common.triggerMatchType}
+        setTriggerMatchType={common.setTriggerMatchType}
+        triggerPriority={common.triggerPriority}
+        setTriggerPriority={common.setTriggerPriority}
+      />
 
       <Box>
         <Button variant="contained" color="secondary" onClick={onSubmit} disabled={isDisabled}>

@@ -1,6 +1,6 @@
 import logging
 
-from Zabbix_Base import Zabbix_Base
+from Zabbix_Base import ZabbixBase
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ SCRIPT_SCOPE = {1: "Action operation", 2: "Manual host", 4: "Manual event"}
 _ZABBIX_NOT_CONNECTED = "Zabbix not connected"
 
 
-class Actions_Manager(Zabbix_Base):
+class ActionsManager(ZabbixBase):
     def __init__(self):
         super().__init__()
         logger.info("Actions Manager ready.")

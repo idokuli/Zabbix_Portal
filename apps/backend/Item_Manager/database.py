@@ -4,7 +4,7 @@ import logging
 from Zabbix_Base import zabbix_err
 from typing import TYPE_CHECKING
 from collections.abc import Callable
-from api.schemas.items import DbOdbcRequest
+from api.schemas.items import DbAgent2Request, DbOdbcRequest, ItemRequest
 
 if TYPE_CHECKING:
     from zabbix_utils import ZabbixAPI
@@ -16,11 +16,13 @@ _LABEL_VERSION = "Server version"
 
 
 class DatabaseItemsMixin:
-    """Mixed into Item_Manager. Calls self.add_item (CoreItemsMixin) via MRO."""
+    """Mixed into ItemManager. Calls self.add_item (CoreItemsMixin) via MRO."""
 
     if TYPE_CHECKING:
         zapi: "ZabbixAPI | None"
         add_item: Callable[..., tuple[str | None, str | None]]
+        maybe_create_trigger: Callable[..., tuple[str | None, str | None]]
+        _maybe_create_trigger_logged: Callable[..., None]
 
     _DB_AGENT2_METRICS: dict = {
         "postgresql": [
@@ -178,23 +180,26 @@ class DatabaseItemsMixin:
             result = self.zapi.item.create(**kwargs)
             item_id = result["itemids"][0]
             logger.info("ODBC item %r added to %r (ID: %s).", item_name, hostname, item_id)
+            self._maybe_create_trigger_logged(
+                hostname, item_key, item_name, request.value_type, request, "add_db_odbc_item"
+            )
             return item_id, None
         except Exception as e:
             logger.exception("add_db_odbc_item(%r) failed", hostname)
             return None, zabbix_err(e)
 
     def add_db_agent2_item(
-        self,
-        hostname: str,
-        engine: str,
-        conn_string: str,
-        metric: str,
-        item_name: str = "",
-        extra_param: str = "",
-        value_type: int | None = None,
-        team_name: str = "",
+        self, request: DbAgent2Request, team_name: str = ""
     ) -> tuple[str | None, str | None]:
         """Add an Agent2 database plugin item (type 0) using engine-specific keys."""
+        hostname = request.hostname
+        engine = request.engine
+        conn_string = request.conn_string
+        metric = request.metric
+        item_name = request.item_name
+        extra_param = request.extra_param
+        value_type = request.value_type
+
         if not self.zapi:
             return None, "Zabbix API not connected."
         engine_metrics = self._DB_AGENT2_METRICS.get(engine)
@@ -220,4 +225,18 @@ class DatabaseItemsMixin:
         vtype = value_type if value_type is not None else meta["vtype"]
         if not item_name:
             item_name = f"{engine} {meta['label']} on {hostname}"
-        return self.add_item(hostname, item_name, item_key, vtype, team_name)
+        return self.add_item(
+            ItemRequest(
+                hostname=hostname,
+                item_name=item_name,
+                item_key=item_key,
+                value_type=vtype,
+                create_trigger=request.create_trigger,
+                trigger_operator=request.trigger_operator,
+                trigger_threshold=request.trigger_threshold,
+                trigger_pattern=request.trigger_pattern,
+                trigger_match_type=request.trigger_match_type,
+                trigger_priority=request.trigger_priority,
+            ),
+            team_name,
+        )

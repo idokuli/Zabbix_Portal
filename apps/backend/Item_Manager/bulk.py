@@ -3,7 +3,7 @@
 import logging
 from typing import TYPE_CHECKING
 from collections.abc import Callable
-from api.schemas.items import HttpItemRequest, ScriptItemRequest
+from api.schemas.items import HttpItemRequest, ItemRequest, ScriptItemRequest, ServiceItemRequest
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +11,7 @@ _AddResult = Callable[..., tuple[str | None, str | None]]
 
 
 class BulkItemsMixin:
-    """Mixed into Item_Manager. Calls self.add_script_item/add_http_item/add_service_item/add_item,
+    """Mixed into ItemManager. Calls self.add_script_item/add_http_item/add_service_item/add_item,
     which live in other mixins — resolved via the final class's MRO at runtime.
     """
 
@@ -30,7 +30,7 @@ class BulkItemsMixin:
                 delay=item_config.get("delay", "1m"),
                 units=item_config.get("units", ""),
                 history=item_config.get("history", "31d"),
-                trends=item_config.get("trends", "365d"),
+                trends=item_config.get("trends", "0d" if item_type == "http" else "365d"),
                 description=item_config.get("description", ""),
             )
             if item_type == "script":
@@ -71,27 +71,25 @@ class BulkItemsMixin:
                 )
                 item_id, err = self.add_http_item(http_request, item_config.get("team_name", ""))
             elif item_type == "service":
-                item_id, err = self.add_service_item(
+                service_request = ServiceItemRequest(
                     hostname=hostname,
                     service_type=item_config.get("service_type", ""),
                     port=item_config.get("port"),
                     item_name=item_config.get("item_name", ""),
-                    team_name=item_config.get("team_name", ""),
                     **{k: v for k, v in common.items() if k != "units"},
                 )
+                item_id, err = self.add_service_item(
+                    service_request, item_config.get("team_name", "")
+                )
             else:
-                item_id, err = self.add_item(
+                item_request = ItemRequest(
                     hostname=hostname,
                     item_name=item_config.get("item_name", ""),
                     item_key=item_config.get("item_key", ""),
                     value_type=item_config.get("value_type", 3),
-                    team_name=item_config.get("team_name", ""),
-                    delay=item_config.get("delay", "1m"),
-                    units=item_config.get("units", ""),
-                    history=item_config.get("history", "31d"),
-                    trends=item_config.get("trends", "365d"),
-                    description=item_config.get("description", ""),
+                    **common,
                 )
+                item_id, err = self.add_item(item_request, item_config.get("team_name", ""))
             results.append({"hostname": hostname, "item_id": item_id, "error": err})
 
         ok = sum(1 for r in results if not r["error"])

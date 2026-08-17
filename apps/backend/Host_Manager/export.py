@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class HostExportMixin:
-    """Mixed into Host_Manager. Assumes `self.zapi` from Zabbix_Base."""
+    """Mixed into HostManager. Assumes `self.zapi` from ZabbixBase."""
 
     _AVAIL_LABEL = {"0": "Unknown", "1": "Available", "2": "Unavailable"}
     _EXPORT_HEADERS = [

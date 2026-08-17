@@ -1,6 +1,6 @@
 import logging
 
-from Zabbix_Base import Zabbix_Base
+from Zabbix_Base import ZabbixBase
 
 from ZabbixAdmin_Manager.auth import AuthMixin
 from ZabbixAdmin_Manager.macros import MacrosMixin
@@ -13,7 +13,7 @@ from ZabbixAdmin_Manager.user_groups import UserGroupsMixin
 logger = logging.getLogger(__name__)
 
 
-class ZabbixAdmin_Manager(
+class ZabbixAdminManager(
     UserGroupsMixin,
     ProxiesMixin,
     RolesMixin,
@@ -21,7 +21,7 @@ class ZabbixAdmin_Manager(
     MacrosMixin,
     AuthMixin,
     SystemMixin,
-    Zabbix_Base,
+    ZabbixBase,
 ):
     def __init__(self):
         super().__init__()

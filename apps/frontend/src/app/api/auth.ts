@@ -21,6 +21,7 @@ export const authApi = {
       username: string;
       display_name: string;
       roles: string[];
+      restrictions: string[];
       team_id: number | null;
     }>("/auth/me", undefined, opts),
   ldapStatus: () =>

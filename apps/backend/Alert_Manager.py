@@ -1,12 +1,12 @@
 import logging
 import time
 from Database import get_conn
-from Zabbix_Base import Zabbix_Base
+from Zabbix_Base import ZabbixBase
 
 logger = logging.getLogger(__name__)
 
 
-class Alert_Manager(Zabbix_Base):
+class AlertManager(ZabbixBase):
     def __init__(self):
         super().__init__()
         logger.info("Alert Manager ready.")

@@ -256,6 +256,41 @@ def test_add_item_fail(client):
     assert r.status_code == 400
 
 
+def test_add_item_forwards_trigger_fields(client):
+    c, bot = client
+    bot.add_item.return_value = ("55", None)
+    r = c.post(
+        "/items",
+        json={
+            "hostname": "h1",
+            "item_name": "CPU",
+            "item_key": "system.cpu.load",
+            "value_type": 3,
+            "create_trigger": True,
+            "trigger_operator": ">",
+            "trigger_threshold": 90,
+            "trigger_priority": 4,
+        },
+    )
+    assert r.status_code == 201
+    request_arg = bot.add_item.call_args.args[0]
+    assert request_arg.create_trigger is True
+    assert request_arg.trigger_operator == ">"
+    assert request_arg.trigger_threshold == 90
+    assert request_arg.trigger_priority == 4
+
+
+def test_add_item_trigger_fields_default_off(client):
+    c, bot = client
+    bot.add_item.return_value = ("56", None)
+    r = c.post(
+        "/items",
+        json={"hostname": "h1", "item_name": "CPU", "item_key": "system.cpu.load"},
+    )
+    assert r.status_code == 201
+    assert bot.add_item.call_args.args[0].create_trigger is False
+
+
 # ── add_http_item ─────────────────────────────────────────────────────────────
 
 
@@ -367,6 +402,28 @@ def test_add_trapper_item_ok(client):
         },
     )
     assert r.status_code == 201
+
+
+def test_add_trapper_item_forwards_trigger_fields(client):
+    c, bot = client
+    bot.add_trapper_item.return_value = ("41", None)
+    r = c.post(
+        "/items/trapper",
+        json={
+            "hostname": "h1",
+            "item_name": "Trap",
+            "item_key": "trap.key",
+            "value_type": 2,
+            "create_trigger": True,
+            "trigger_pattern": "ERROR",
+            "trigger_match_type": "regexp",
+        },
+    )
+    assert r.status_code == 201
+    request_arg = bot.add_trapper_item.call_args.args[0]
+    assert request_arg.create_trigger is True
+    assert request_arg.trigger_pattern == "ERROR"
+    assert request_arg.trigger_match_type == "regexp"
 
 
 # ── add_internal_item ─────────────────────────────────────────────────────────

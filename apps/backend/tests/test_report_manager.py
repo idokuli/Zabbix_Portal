@@ -16,9 +16,9 @@ import pytest
 @pytest.fixture()
 def mgr():
     with patch("zabbix_utils.ZabbixAPI"):
-        from Report_Manager import Report_Manager
+        from Report_Manager import ReportManager
 
-        m = Report_Manager()
+        m = ReportManager()
         m.zapi = MagicMock()
         return m
 
@@ -136,4 +136,32 @@ def test_get_availability_returns_list(mgr):
 def test_get_availability_zapi_none(mgr):
     mgr.zapi = None
     result = mgr.get_availability()
+    assert result == []
+
+
+def test_get_availability_explicit_range_passes_time_till(mgr):
+    mgr.zapi.problem.get.return_value = []
+    result = mgr.get_availability(time_from=1000, time_to=2000)
+    assert result == []
+    call_kwargs = mgr.zapi.problem.get.call_args.kwargs
+    assert call_kwargs["time_from"] == 1000
+    assert call_kwargs["time_till"] == 2000
+
+
+def test_get_availability_explicit_range_clamps_ongoing_problem_to_time_to(mgr):
+    # A still-open problem (no r_clock) that started mid-range must be clamped to the
+    # range's end, not "now" — otherwise a past month's report would overstate downtime
+    # for anything still unresolved today.
+    mgr.zapi.problem.get.return_value = [
+        {"eventid": "1", "objectid": "10", "clock": "1500", "r_clock": "0", "severity": "3"}
+    ]
+    mgr.zapi.trigger.get.return_value = [
+        {"triggerid": "10", "hosts": [{"hostid": "1", "host": "srv01"}]}
+    ]
+    result = mgr.get_availability(time_from=1000, time_to=2000)
+    assert result[0]["downtime_seconds"] == 500  # clamped to time_to (2000), not now
+
+
+def test_get_availability_invalid_range_returns_empty(mgr):
+    result = mgr.get_availability(time_from=2000, time_to=1000)
     assert result == []

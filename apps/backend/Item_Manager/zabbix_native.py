@@ -5,10 +5,19 @@ calculated (15), dependent (18), JS script (21), browser (26).
 import logging
 from Zabbix_Base import zabbix_err
 from typing import TYPE_CHECKING
-from api.schemas.items import BrowserItemRequest, ZabbixScriptItemRequest
+from api.schemas.items import (
+    BrowserItemRequest,
+    CalculatedItemRequest,
+    DependentItemRequest,
+    ExternalItemRequest,
+    InternalItemRequest,
+    TrapperItemRequest,
+    ZabbixScriptItemRequest,
+)
 
 if TYPE_CHECKING:
     from zabbix_utils import ZabbixAPI
+    from Item_Manager.triggers import _TriggerConfigured
 
 logger = logging.getLogger(__name__)
 
@@ -16,26 +25,50 @@ _ZABBIX_NOT_CONNECTED = "Zabbix API not connected."
 
 
 class ZabbixNativeItemsMixin:
-    """Mixed into Item_Manager. Assumes `self.zapi` from Zabbix_Base."""
+    """Mixed into ItemManager. Assumes `self.zapi` from ZabbixBase."""
 
     if TYPE_CHECKING:
         zapi: "ZabbixAPI | None"
 
+        def maybe_create_trigger(
+            self,
+            hostname: str,
+            item_key: str,
+            item_name: str,
+            value_type: int,
+            create_trigger: bool,
+            trigger_operator: str = ">",
+            trigger_threshold: float | None = None,
+            trigger_pattern: str = "",
+            trigger_match_type: str = "like",
+            trigger_priority: int = 3,
+        ) -> tuple[str | None, str | None]: ...
+
+        def _maybe_create_trigger_logged(
+            self,
+            hostname: str,
+            item_key: str,
+            item_name: str,
+            value_type: int,
+            request: "_TriggerConfigured",
+            log_prefix: str,
+        ) -> None: ...
+
     def add_internal_item(
-        self,
-        hostname: str,
-        item_name: str,
-        item_key: str,
-        value_type: int = 3,
-        team_name: str = "",
-        delay: str = "1m",
-        units: str = "",
-        history: str = "31d",
-        trends: str = "365d",
-        description: str = "",
-        status: int = 0,
+        self, request: InternalItemRequest, team_name: str = ""
     ) -> tuple[str | None, str | None]:
         """Add a Zabbix internal item (type 5) using built-in zabbix[...] keys."""
+        hostname = request.hostname
+        item_name = request.item_name
+        item_key = request.item_key
+        value_type = request.value_type
+        delay = request.delay
+        units = request.units
+        history = request.history
+        trends = request.trends
+        description = request.description
+        status = request.status
+
         if not self.zapi:
             return None, _ZABBIX_NOT_CONNECTED
         try:
@@ -69,25 +102,28 @@ class ZabbixNativeItemsMixin:
                 hostname,
                 item_id,
             )
+            self._maybe_create_trigger_logged(
+                hostname, item_key, item_name, value_type, request, "add_internal_item"
+            )
             return item_id, None
         except Exception as e:
             logger.exception("add_internal_item(%r) failed", hostname)
             return None, zabbix_err(e)
 
     def add_trapper_item(
-        self,
-        hostname: str,
-        item_name: str,
-        item_key: str,
-        value_type: int = 4,
-        allow_traps: bool = True,
-        team_name: str = "",
-        history: str = "31d",
-        trends: str = "365d",
-        description: str = "",
-        status: int = 0,
+        self, request: TrapperItemRequest, team_name: str = ""
     ) -> tuple[str | None, str | None]:
         """Add a Zabbix trapper item (type 2). Accepts data pushed via zabbix_sender."""
+        hostname = request.hostname
+        item_name = request.item_name
+        item_key = request.item_key
+        value_type = request.value_type
+        allow_traps = request.allow_traps
+        history = request.history
+        trends = request.trends
+        description = request.description
+        status = request.status
+
         if not self.zapi:
             return None, _ZABBIX_NOT_CONNECTED
         try:
@@ -119,26 +155,29 @@ class ZabbixNativeItemsMixin:
                 hostname,
                 item_id,
             )
+            self._maybe_create_trigger_logged(
+                hostname, item_key, item_name, value_type, request, "add_trapper_item"
+            )
             return item_id, None
         except Exception as e:
             logger.exception("add_trapper_item(%r) failed", hostname)
             return None, zabbix_err(e)
 
     def add_external_item(
-        self,
-        hostname: str,
-        item_name: str,
-        item_key: str,
-        value_type: int = 4,
-        team_name: str = "",
-        delay: str = "1m",
-        units: str = "",
-        history: str = "31d",
-        trends: str = "365d",
-        description: str = "",
-        status: int = 0,
+        self, request: ExternalItemRequest, team_name: str = ""
     ) -> tuple[str | None, str | None]:
         """Add an external check item (type 10). Script must exist in ExternalScripts dir on Zabbix server."""
+        hostname = request.hostname
+        item_name = request.item_name
+        item_key = request.item_key
+        value_type = request.value_type
+        delay = request.delay
+        units = request.units
+        history = request.history
+        trends = request.trends
+        description = request.description
+        status = request.status
+
         if not self.zapi:
             return None, _ZABBIX_NOT_CONNECTED
         try:
@@ -177,27 +216,30 @@ class ZabbixNativeItemsMixin:
                 hostname,
                 item_id,
             )
+            self._maybe_create_trigger_logged(
+                hostname, item_key, item_name, value_type, request, "add_external_item"
+            )
             return item_id, None
         except Exception as e:
             logger.exception("add_external_item(%r) failed", hostname)
             return None, zabbix_err(e)
 
     def add_calculated_item(
-        self,
-        hostname: str,
-        item_name: str,
-        item_key: str,
-        formula: str,
-        value_type: int = 0,
-        team_name: str = "",
-        delay: str = "1m",
-        units: str = "",
-        history: str = "31d",
-        trends: str = "365d",
-        description: str = "",
-        status: int = 0,
+        self, request: CalculatedItemRequest, team_name: str = ""
     ) -> tuple[str | None, str | None]:
         """Add a calculated item (type 15). Derives its value from a formula referencing other items."""
+        hostname = request.hostname
+        item_name = request.item_name
+        item_key = request.item_key
+        formula = request.formula
+        value_type = request.value_type
+        delay = request.delay
+        units = request.units
+        history = request.history
+        trends = request.trends
+        description = request.description
+        status = request.status
+
         if not self.zapi:
             return None, _ZABBIX_NOT_CONNECTED
         if not formula.strip():
@@ -234,25 +276,28 @@ class ZabbixNativeItemsMixin:
                 hostname,
                 item_id,
             )
+            self._maybe_create_trigger_logged(
+                hostname, item_key, item_name, value_type, request, "add_calculated_item"
+            )
             return item_id, None
         except Exception as e:
             logger.exception("add_calculated_item(%r) failed", hostname)
             return None, zabbix_err(e)
 
     def add_dependent_item(
-        self,
-        hostname: str,
-        item_name: str,
-        item_key: str,
-        master_itemid: str,
-        value_type: int = 4,
-        team_name: str = "",
-        history: str = "31d",
-        trends: str = "365d",
-        description: str = "",
-        status: int = 0,
+        self, request: DependentItemRequest, team_name: str = ""
     ) -> tuple[str | None, str | None]:
         """Add a dependent item (type 18). Its value is derived from preprocessing a master item."""
+        hostname = request.hostname
+        item_name = request.item_name
+        item_key = request.item_key
+        master_itemid = request.master_itemid
+        value_type = request.value_type
+        history = request.history
+        trends = request.trends
+        description = request.description
+        status = request.status
+
         if not self.zapi:
             return None, _ZABBIX_NOT_CONNECTED
         if not master_itemid:
@@ -285,6 +330,9 @@ class ZabbixNativeItemsMixin:
                 hostname,
                 master_itemid,
                 item_id,
+            )
+            self._maybe_create_trigger_logged(
+                hostname, item_key, item_name, value_type, request, "add_dependent_item"
             )
             return item_id, None
         except Exception as e:
@@ -351,6 +399,9 @@ class ZabbixNativeItemsMixin:
                 hostname,
                 item_id,
             )
+            self._maybe_create_trigger_logged(
+                hostname, item_key, item_name, value_type, request, "add_zabbix_script_item"
+            )
             return item_id, None
         except Exception as e:
             logger.exception("add_zabbix_script_item(%r) failed", hostname)
@@ -415,6 +466,9 @@ class ZabbixNativeItemsMixin:
                 item_key,
                 hostname,
                 item_id,
+            )
+            self._maybe_create_trigger_logged(
+                hostname, item_key, item_name, value_type, request, "add_browser_item"
             )
             return item_id, None
         except Exception as e:

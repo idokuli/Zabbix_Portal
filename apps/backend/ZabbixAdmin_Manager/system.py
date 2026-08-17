@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class SystemMixin:
-    """Mixed into ZabbixAdmin_Manager. Assumes `self.zapi`/`self._zabbix_version` from Zabbix_Base."""
+    """Mixed into ZabbixAdminManager. Assumes `self.zapi`/`self._zabbix_version` from ZabbixBase."""
 
     if TYPE_CHECKING:
         zapi: "ZabbixAPI | None"

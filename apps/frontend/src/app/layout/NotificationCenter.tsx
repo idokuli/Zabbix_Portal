@@ -5,6 +5,7 @@ import DeleteSweepOutlinedIcon from "@mui/icons-material/DeleteSweepOutlined";
 import InboxOutlinedIcon from "@mui/icons-material/InboxOutlined";
 import MarkEmailReadOutlinedIcon from "@mui/icons-material/MarkEmailReadOutlined";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
+import SnoozeOutlinedIcon from "@mui/icons-material/SnoozeOutlined";
 import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
 import {
   Alert,
@@ -15,6 +16,8 @@ import {
   Drawer,
   IconButton,
   List,
+  Menu,
+  MenuItem,
   Paper,
   Skeleton,
   Tab,
@@ -53,8 +56,28 @@ const formatAge = (clock: number) => {
 
 const formatEventTime = (ts: number) => formatDateTimeCompact(ts);
 
-export const NotifCard = ({ problem, onDismiss }: { problem: Problem; onDismiss: () => void }) => {
+// Duration options for the repeat-ring snooze — minutes.
+const SNOOZE_OPTIONS: Array<{ label: string; minutes: number }> = [
+  { label: "5 minutes", minutes: 5 },
+  { label: "15 minutes", minutes: 15 },
+  { label: "30 minutes", minutes: 30 },
+  { label: "1 hour", minutes: 60 },
+];
+
+export const NotifCard = ({
+  problem,
+  onDismiss,
+  onSnooze,
+}: {
+  problem: Problem;
+  onDismiss: () => void;
+  onSnooze?: (minutes: number) => void;
+}) => {
   const sev = getSev(problem.severity);
+  const [snoozeAnchor, setSnoozeAnchor] = useState<null | HTMLElement>(null);
+  // Alert-rule events (synthetic "rule-" ids) never acknowledge, so there's nothing
+  // to snooze — the repeat-ring only tracks real Zabbix problems.
+  const canSnooze = onSnooze && !problem.eventid.startsWith("rule-");
   return (
     <Paper
       sx={{
@@ -95,6 +118,28 @@ export const NotifCard = ({ problem, onDismiss }: { problem: Problem; onDismiss:
         <Typography variant="caption" sx={{ color: "text.disabled", fontSize: "0.6875rem" }}>
           {formatAge(problem.clock)}
         </Typography>
+        {canSnooze && (
+          <Tooltip
+            title="Snooze the repeat-ring for this problem"
+            // Toasts in NotificationStack (AppShell) are pinned above the default
+            // modal layer at zIndex 2000 — see the Menu below — so this tooltip's
+            // popper must be raised above that too, or it renders behind the toast.
+            slotProps={{ popper: { sx: { zIndex: 2100 } } }}
+          >
+            <IconButton
+              size="small"
+              aria-label="Snooze notification"
+              onClick={(e) => setSnoozeAnchor(e.currentTarget)}
+              sx={{
+                p: 0.25,
+                color: "text.disabled",
+                "&:hover": { color: "text.primary" },
+              }}
+            >
+              <SnoozeOutlinedIcon sx={{ fontSize: 15 }} />
+            </IconButton>
+          </Tooltip>
+        )}
         <IconButton
           size="small"
           aria-label="Dismiss notification"
@@ -107,6 +152,30 @@ export const NotifCard = ({ problem, onDismiss }: { problem: Problem; onDismiss:
         >
           <CloseIcon sx={{ fontSize: 14 }} />
         </IconButton>
+        {canSnooze && (
+          <Menu
+            anchorEl={snoozeAnchor}
+            open={snoozeAnchor !== null}
+            onClose={() => setSnoozeAnchor(null)}
+            // Toasts in NotificationStack (AppShell) are pinned above the
+            // default modal layer at zIndex 2000, so this menu's Popover
+            // root must be raised above that or it renders behind the toast.
+            sx={{ zIndex: 2100 }}
+          >
+            {SNOOZE_OPTIONS.map((opt) => (
+              <MenuItem
+                key={opt.minutes}
+                onClick={() => {
+                  onSnooze?.(opt.minutes);
+                  setSnoozeAnchor(null);
+                }}
+                sx={{ fontSize: "0.8rem" }}
+              >
+                Snooze {opt.label}
+              </MenuItem>
+            ))}
+          </Menu>
+        )}
       </Box>
 
       <Box sx={{ px: 1.5, py: 1 }}>

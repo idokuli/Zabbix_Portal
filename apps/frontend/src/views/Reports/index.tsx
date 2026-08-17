@@ -6,9 +6,17 @@ import { NotificationsTab } from "../Metrics/NotificationsTab";
 import { ActionLogTab } from "./ActionLogTab";
 import { AuditLogTab } from "./AuditLogTab";
 import { AvailabilityTab } from "./AvailabilityTab";
+import { PortalActionsTab } from "./PortalActionsTab";
 import { TopTriggersTab } from "./TopTriggersTab";
 
-const TAB_SLUGS = ["availability", "top-triggers", "audit-log", "action-log", "notifications"];
+const TAB_SLUGS = [
+  "availability",
+  "top-triggers",
+  "audit-log",
+  "portal-actions",
+  "action-log",
+  "notifications",
+];
 
 const ReportsInner = () => {
   const searchParams = useSearchParams();
@@ -21,8 +29,9 @@ const ReportsInner = () => {
           {tab === 0 && <AvailabilityTab />}
           {tab === 1 && <TopTriggersTab />}
           {tab === 2 && <AuditLogTab />}
-          {tab === 3 && <ActionLogTab />}
-          {tab === 4 && <NotificationsTab />}
+          {tab === 3 && <PortalActionsTab />}
+          {tab === 4 && <ActionLogTab />}
+          {tab === 5 && <NotificationsTab />}
         </Box>
       </Card>
     </Stack>

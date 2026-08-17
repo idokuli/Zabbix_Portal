@@ -19,6 +19,10 @@ if not _DATABASE_URL:
 
 _pool: psycopg2.pool.ThreadedConnectionPool | None = None
 
+# Shared by init_db()'s and install_notify_triggers()'s advisory-lock bracketing.
+_SET_LOCK_TIMEOUT_30S = "SET lock_timeout = '30s'"
+_RESET_LOCK_TIMEOUT = "RESET lock_timeout"
+
 
 class _PooledConn:
     """Wraps a psycopg2 connection so close() returns it to the pool."""
@@ -176,6 +180,22 @@ CREATE TABLE IF NOT EXISTS notification_history (
     acknowledged BOOLEAN NOT NULL DEFAULT FALSE,
     PRIMARY KEY (id, user_id)
 );
+
+-- Portal-side write-action log, keyed to the real logged-in portal user. Exists because
+-- every write to Zabbix goes through one shared ZABBIX_USER service account (ZabbixBase),
+-- so Zabbix's own auditlog.get can never attribute an action to the actual portal user —
+-- this table is the only accurate record of who did what.
+CREATE TABLE IF NOT EXISTS portal_audit_log (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER,
+    username    TEXT        NOT NULL,
+    method      VARCHAR(10) NOT NULL,
+    path        VARCHAR(500) NOT NULL,
+    action      VARCHAR(16) NOT NULL,
+    status_code INTEGER     NOT NULL,
+    ip          VARCHAR(64) NOT NULL DEFAULT '',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 """
 
 _MIGRATIONS = """
@@ -272,21 +292,64 @@ ALTER TABLE alert_rules ALTER COLUMN operator TYPE VARCHAR(16);
 ALTER TABLE alert_rules DROP CONSTRAINT IF EXISTS alert_rules_operator_check;
 ALTER TABLE alert_rules ADD CONSTRAINT alert_rules_operator_check
   CHECK (operator IN ('>', '<', '>=', '<=', 'contains', '!contains'));
+
+-- Per-user write restrictions, independent of roles (so restriction tokens never leak
+-- into the many places that render `roles` as chips). Values: 'hostgroups', 'items',
+-- 'triggers'. root always bypasses restrictions regardless of this column's contents.
+ALTER TABLE team_users ADD COLUMN IF NOT EXISTS restrictions TEXT[] DEFAULT '{}';
+
+CREATE INDEX IF NOT EXISTS idx_portal_audit_log_created_at ON portal_audit_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_portal_audit_log_user_id    ON portal_audit_log(user_id);
+
+DELETE FROM portal_audit_log WHERE created_at < NOW() - INTERVAL '90 days';
 """
 
 
+# Advisory lock key for schema creation — distinct from install_notify_triggers()'s
+# 8472910234 so the two don't needlessly block each other.
+_SCHEMA_LOCK_KEY = 8472910233
+
+
 def init_db() -> None:
+    """Create/migrate the schema. Runs on every worker at startup (idempotent by
+    design), so schema creation is serialized with an advisory lock: CREATE TABLE
+    IF NOT EXISTS is not safe under concurrent execution — two workers can both see
+    a table as absent and both attempt the CREATE, and one loses with a
+    DuplicateTable/UniqueViolation race. Mirrors the same pattern in
+    install_notify_triggers(), except failures here stay fatal (raised), since the
+    app can't run without a valid schema.
+    """
     _init_pool()
     conn = get_conn()
+    lock_held = False
     try:
         with conn.cursor() as cur:
+            cur.execute(_SET_LOCK_TIMEOUT_30S)
+            cur.execute("SELECT pg_advisory_lock(%s)", (_SCHEMA_LOCK_KEY,))
+            lock_held = True
             cur.execute(_SCHEMA)
             cur.execute(_MIGRATIONS)
+            cur.execute("SELECT pg_advisory_unlock(%s)", (_SCHEMA_LOCK_KEY,))
+            cur.execute(_RESET_LOCK_TIMEOUT)
         conn.commit()
         logger.info("Database schema ready.")
     except Exception:
         conn.rollback()
         logger.exception("Database init failed")
+        if lock_held:
+            # conn.rollback() clears any aborted-transaction state, so the lock can
+            # still be released safely here even after an unanticipated failure.
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT pg_advisory_unlock(%s)", (_SCHEMA_LOCK_KEY,))
+                    cur.execute(_RESET_LOCK_TIMEOUT)
+                conn.commit()
+            except Exception as unlock_exc:
+                logger.warning(
+                    "init_db: failed to release advisory lock after error — it will "
+                    "remain held until this pooled connection is recycled: %s",
+                    unlock_exc,
+                )
         raise
     finally:
         conn.close()
@@ -343,7 +406,7 @@ def install_notify_triggers() -> None:
             # session (and this lock) alive until TCP keepalive expiry, and an
             # unbounded pg_advisory_lock then wedges every future startup. With a
             # timeout the worst case is a logged warning and startup proceeds.
-            cur.execute("SET lock_timeout = '30s'")
+            cur.execute(_SET_LOCK_TIMEOUT_30S)
             # Make the server reap this session within ~1 min if we die holding
             # the lock, instead of the multi-hour TCP keepalive default.
             cur.execute("SET tcp_keepalives_idle = 30")
@@ -405,7 +468,7 @@ def install_notify_triggers() -> None:
             # Every failure path above is now savepoint-contained, so the transaction is
             # never left aborted here — these two are safe to run unconditionally.
             cur.execute("SELECT pg_advisory_unlock(8472910234)")
-            cur.execute("RESET lock_timeout")
+            cur.execute(_RESET_LOCK_TIMEOUT)
         conn.commit()
         logger.info("ZabbixSync: notify triggers installed on Zabbix tables.")
     except Exception as exc:
@@ -419,7 +482,7 @@ def install_notify_triggers() -> None:
             try:
                 with conn.cursor() as cur:
                     cur.execute("SELECT pg_advisory_unlock(8472910234)")
-                    cur.execute("RESET lock_timeout")
+                    cur.execute(_RESET_LOCK_TIMEOUT)
                 conn.commit()
             except Exception as unlock_exc:
                 logger.warning(

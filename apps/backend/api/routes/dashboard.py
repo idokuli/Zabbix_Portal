@@ -14,6 +14,10 @@ router = APIRouter(tags=["Dashboard"])
 
 _KINDS = ("dashboard", "metrics")
 
+# ~6 calendar months, with slack for month-length variance (28-31 days each) —
+# matches _MAX_AVAILABILITY_RANGE_SECONDS in api/routes/reports.py.
+_MAX_GRAPH_DATA_MINUTES = 190 * 24 * 60
+
 _SCOPE_MUST_BE_USER_OR_TEAM = "scope must be 'user' or 'team'"
 _NOT_IN_A_TEAM = "You are not in a team."
 _KIND_MUST_BE_DASHBOARD_OR_METRICS = "kind must be 'dashboard' or 'metrics'"
@@ -65,8 +69,11 @@ def get_graph_data(
     minutes: int = 360,
     current_user: dict = Depends(get_current_user),
 ):
-    if minutes < 1 or minutes > 10080:
-        raise HTTPException(status_code=400, detail="minutes must be between 1 and 10080")
+    if minutes < 1 or minutes > _MAX_GRAPH_DATA_MINUTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"minutes must be between 1 and {_MAX_GRAPH_DATA_MINUTES}",
+        )
     return dashboard_bot.get_graph_data(graphid, minutes)
 
 

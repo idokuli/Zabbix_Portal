@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 import User_Management as um
-from Auth import can_grant_roles, hash_password, require_admin
+from Auth import RESTRICTION_TOKENS, can_grant_roles, hash_password, require_admin
 from api.deps import live_team_id
 from api.managers import sync_bot
 from api.schemas import PasswordChangeRequest, UserRequest, UserUpdateRequest
@@ -8,6 +8,10 @@ from api.schemas import PasswordChangeRequest, UserRequest, UserUpdateRequest
 router = APIRouter(tags=["Users"])
 
 _USER_NOT_FOUND = "User not found."
+
+
+def _clean_restrictions(restrictions: list[str]) -> list[str]:
+    return [r for r in restrictions if r in RESTRICTION_TOKENS]
 
 
 @router.get("/users", tags=["Users"], summary="List users")
@@ -32,7 +36,8 @@ def update_user(user_id: int, data: UserUpdateRequest, current_user: dict = Depe
         raise HTTPException(status_code=403, detail="You can only edit users in your own team.")
     if not can_grant_roles(current_user.get("roles", []), data.roles):
         raise HTTPException(status_code=403, detail="You cannot assign roles higher than your own.")
-    if not um.update_user_profile(user_id, data.roles, data.team_id):
+    restrictions = _clean_restrictions(data.restrictions)
+    if not um.update_user_profile(user_id, data.roles, data.team_id, restrictions):
         raise HTTPException(status_code=400, detail="Failed to update user.")
     team_name = um.get_team_name(data.team_id) if data.team_id else None
     sync_bot.push_user(target["username"], "", data.roles, team_name)
@@ -59,6 +64,7 @@ def create_user(data: UserRequest, current_user: dict = Depends(require_admin)):
         data.email or "",
         roles,
         data.team_id,
+        restrictions=_clean_restrictions(data.restrictions),
     )
     if not result:
         raise HTTPException(

@@ -1,4 +1,4 @@
-"""Tests for Item_Manager/zabbix_native.py — internal, trapper, external, calculated,
+"""Tests for ItemManager/zabbix_native.py — internal, trapper, external, calculated,
 dependent, script, browser item types."""
 
 import os
@@ -13,15 +13,23 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from api.schemas.items import BrowserItemRequest, ZabbixScriptItemRequest
+from api.schemas.items import (
+    BrowserItemRequest,
+    CalculatedItemRequest,
+    DependentItemRequest,
+    ExternalItemRequest,
+    InternalItemRequest,
+    TrapperItemRequest,
+    ZabbixScriptItemRequest,
+)
 
 
 @pytest.fixture()
 def mgr():
     with patch("zabbix_utils.ZabbixAPI"):
-        from Item_Manager import Item_Manager
+        from Item_Manager import ItemManager
 
-        m = Item_Manager()
+        m = ItemManager()
         m.zapi = MagicMock()
         m._zabbix_version = (6, 4)
         return m
@@ -37,7 +45,8 @@ def _host_ok(mgr, hostid="10"):
 def test_add_internal_item_success(mgr):
     _host_ok(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["1"]}
-    item_id, err = mgr.add_internal_item("h1", "Queue size", "zabbix[queue]")
+    req = InternalItemRequest(hostname="h1", item_name="Queue size", item_key="zabbix[queue]")
+    item_id, err = mgr.add_internal_item(req)
     assert item_id == "1"
     assert err is None
     call_kwargs = mgr.zapi.item.create.call_args[1]
@@ -46,21 +55,24 @@ def test_add_internal_item_success(mgr):
 
 def test_add_internal_item_host_not_found(mgr):
     mgr.zapi.host.get.return_value = []
-    item_id, err = mgr.add_internal_item("ghost", "x", "key")
+    req = InternalItemRequest(hostname="ghost", item_name="x", item_key="key")
+    item_id, err = mgr.add_internal_item(req)
     assert item_id is None
     assert "not found" in err
 
 
 def test_add_internal_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_internal_item("h1", "x", "key")
+    req = InternalItemRequest(hostname="h1", item_name="x", item_key="key")
+    item_id, err = mgr.add_internal_item(req)
     assert item_id is None
 
 
 def test_add_internal_item_with_team_tag(mgr):
     _host_ok(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["2"]}
-    item_id, _ = mgr.add_internal_item("h1", "Q", "zabbix[queue]", team_name="ops")
+    req = InternalItemRequest(hostname="h1", item_name="Q", item_key="zabbix[queue]")
+    item_id, _ = mgr.add_internal_item(req, team_name="ops")
     assert item_id == "2"
     call_kwargs = mgr.zapi.item.create.call_args[1]
     assert call_kwargs["tags"] == [{"tag": "team", "value": "ops"}]
@@ -72,7 +84,10 @@ def test_add_internal_item_with_team_tag(mgr):
 def test_add_trapper_item_success(mgr):
     _host_ok(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["10"]}
-    item_id, err = mgr.add_trapper_item("h1", "My trap", "my.trap.key", value_type=3)
+    req = TrapperItemRequest(
+        hostname="h1", item_name="My trap", item_key="my.trap.key", value_type=3
+    )
+    item_id, err = mgr.add_trapper_item(req)
     assert item_id == "10"
     assert err is None
     call_kwargs = mgr.zapi.item.create.call_args[1]
@@ -81,13 +96,15 @@ def test_add_trapper_item_success(mgr):
 
 def test_add_trapper_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_trapper_item("h1", "x", "k", value_type=3)
+    req = TrapperItemRequest(hostname="h1", item_name="x", item_key="k", value_type=3)
+    item_id, err = mgr.add_trapper_item(req)
     assert item_id is None
 
 
 def test_add_trapper_item_host_not_found(mgr):
     mgr.zapi.host.get.return_value = []
-    item_id, err = mgr.add_trapper_item("ghost", "x", "k", value_type=3)
+    req = TrapperItemRequest(hostname="ghost", item_name="x", item_key="k", value_type=3)
+    item_id, err = mgr.add_trapper_item(req)
     assert item_id is None
 
 
@@ -98,7 +115,10 @@ def test_add_external_item_success(mgr):
     _host_ok(mgr)
     mgr.zapi.hostinterface.get.return_value = [{"interfaceid": "5"}]
     mgr.zapi.item.create.return_value = {"itemids": ["20"]}
-    item_id, err = mgr.add_external_item("h1", "Ext check", "check.sh[arg]", value_type=1)
+    req = ExternalItemRequest(
+        hostname="h1", item_name="Ext check", item_key="check.sh[arg]", value_type=1
+    )
+    item_id, err = mgr.add_external_item(req)
     assert item_id == "20"
     assert err is None
     call_kwargs = mgr.zapi.item.create.call_args[1]
@@ -107,7 +127,8 @@ def test_add_external_item_success(mgr):
 
 def test_add_external_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_external_item("h1", "x", "k", value_type=1)
+    req = ExternalItemRequest(hostname="h1", item_name="x", item_key="k", value_type=1)
+    item_id, err = mgr.add_external_item(req)
     assert item_id is None
 
 
@@ -117,9 +138,14 @@ def test_add_external_item_zapi_none(mgr):
 def test_add_calculated_item_success(mgr):
     _host_ok(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["30"]}
-    item_id, err = mgr.add_calculated_item(
-        "h1", "Avg CPU", "avg.cpu", "avg(//system.cpu.load,1m)", value_type=0
+    req = CalculatedItemRequest(
+        hostname="h1",
+        item_name="Avg CPU",
+        item_key="avg.cpu",
+        formula="avg(//system.cpu.load,1m)",
+        value_type=0,
     )
+    item_id, err = mgr.add_calculated_item(req)
     assert item_id == "30"
     assert err is None
     call_kwargs = mgr.zapi.item.create.call_args[1]
@@ -129,13 +155,19 @@ def test_add_calculated_item_success(mgr):
 
 def test_add_calculated_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_calculated_item("h1", "x", "k", "formula", value_type=0)
+    req = CalculatedItemRequest(
+        hostname="h1", item_name="x", item_key="k", formula="formula", value_type=0
+    )
+    item_id, err = mgr.add_calculated_item(req)
     assert item_id is None
 
 
 def test_add_calculated_item_host_not_found(mgr):
     mgr.zapi.host.get.return_value = []
-    item_id, err = mgr.add_calculated_item("ghost", "x", "k", "f", value_type=0)
+    req = CalculatedItemRequest(
+        hostname="ghost", item_name="x", item_key="k", formula="f", value_type=0
+    )
+    item_id, err = mgr.add_calculated_item(req)
     assert item_id is None
 
 
@@ -145,7 +177,10 @@ def test_add_calculated_item_host_not_found(mgr):
 def test_add_dependent_item_success(mgr):
     _host_ok(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["40"]}
-    item_id, err = mgr.add_dependent_item("h1", "Dep item", "dep.key", "100", value_type=4)
+    req = DependentItemRequest(
+        hostname="h1", item_name="Dep item", item_key="dep.key", master_itemid="100", value_type=4
+    )
+    item_id, err = mgr.add_dependent_item(req)
     assert item_id == "40"
     assert err is None
     call_kwargs = mgr.zapi.item.create.call_args[1]
@@ -155,7 +190,10 @@ def test_add_dependent_item_success(mgr):
 
 def test_add_dependent_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_dependent_item("h1", "x", "k", "1", value_type=4)
+    req = DependentItemRequest(
+        hostname="h1", item_name="x", item_key="k", master_itemid="1", value_type=4
+    )
+    item_id, err = mgr.add_dependent_item(req)
     assert item_id is None
 
 

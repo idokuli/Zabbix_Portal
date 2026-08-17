@@ -7,6 +7,7 @@ export const usersApi = {
     password: string;
     email?: string;
     roles?: string[];
+    restrictions?: string[];
     team_id?: number;
   }) =>
     apiFetch<{ id: number; username: string; roles: string[]; team_id: number | null }>("/users", {
@@ -15,7 +16,10 @@ export const usersApi = {
       body: JSON.stringify(payload),
     }),
   listUsers: () => apiFetch<{ users: UserRow[] }>("/users"),
-  updateUser: (userId: number, payload: { roles: string[]; team_id: number | null }) =>
+  updateUser: (
+    userId: number,
+    payload: { roles: string[]; restrictions?: string[]; team_id: number | null },
+  ) =>
     apiFetch<{ message: string }>(`/users/${userId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },

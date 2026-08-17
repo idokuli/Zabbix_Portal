@@ -1,5 +1,4 @@
 "use client";
-import CloseIcon from "@mui/icons-material/Close";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import {
   Alert,
@@ -8,7 +7,6 @@ import {
   CircularProgress,
   FormControl,
   IconButton,
-  InputAdornment,
   InputLabel,
   MenuItem,
   Paper,
@@ -21,7 +19,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -30,6 +27,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
 import { formatDateTimeCompact } from "../../app/datetime";
+import { FilterSearchField, filterLabelSx } from "../../components/FilterBar";
 import { SeverityChip } from "./shared";
 
 // ── Problem History tab ───────────────────────────────────────────────
@@ -221,42 +219,40 @@ const ProblemHistoryFilters = ({
         </Button>
       ))}
     </Box>
-    <TextField
-      slotProps={{
-        input: {
-          endAdornment: search ? (
-            <InputAdornment position="end">
-              <IconButton size="small" onClick={() => setSearch("")} edge="end">
-                <CloseIcon sx={{ fontSize: 14 }} />
-              </IconButton>
-            </InputAdornment>
-          ) : undefined,
-        },
-      }}
-      size="small"
+    <FilterSearchField
       placeholder="Filter by problem or host…"
       value={search}
-      onChange={(e) => setSearch(e.target.value)}
-      sx={{ flex: 1, minWidth: 220 }}
+      onChange={setSearch}
     />
     <FormControl size="small" sx={{ minWidth: 140 }}>
-      <InputLabel>Min severity</InputLabel>
+      <InputLabel sx={filterLabelSx}>Min severity</InputLabel>
       <Select
         value={severityMin}
         label="Min severity"
         onChange={(e) => setSeverityMin(Number(e.target.value))}
+        sx={filterLabelSx}
       >
-        <MenuItem value={0}>All</MenuItem>
-        <MenuItem value={2}>Warning+</MenuItem>
-        <MenuItem value={3}>Average+</MenuItem>
-        <MenuItem value={4}>High+</MenuItem>
-        <MenuItem value={5}>Disaster only</MenuItem>
+        <MenuItem value={0} sx={filterLabelSx}>
+          All
+        </MenuItem>
+        <MenuItem value={2} sx={filterLabelSx}>
+          Warning+
+        </MenuItem>
+        <MenuItem value={3} sx={filterLabelSx}>
+          Average+
+        </MenuItem>
+        <MenuItem value={4} sx={filterLabelSx}>
+          High+
+        </MenuItem>
+        <MenuItem value={5} sx={filterLabelSx}>
+          Disaster only
+        </MenuItem>
       </Select>
     </FormControl>
     <Tooltip title="Refresh">
       <span>
         <IconButton size="small" onClick={onRefresh} disabled={loading}>
-          <RefreshIcon fontSize="small" />
+          <RefreshIcon sx={{ fontSize: 18 }} />
         </IconButton>
       </span>
     </Tooltip>

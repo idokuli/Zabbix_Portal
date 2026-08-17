@@ -36,6 +36,30 @@ export const ROLE_OPTIONS = [
   },
 ] as const;
 
+// Per-user write restrictions — independent of roles. Checking one removes write
+// access (create/edit/delete) to that resource even though the user's role would
+// otherwise grant it. Grouped to mirror the app's own nav sections.
+export const RESTRICTION_OPTIONS = [
+  {
+    value: "hostgroups",
+    label: "Host Groups",
+    section: "Data Collection",
+    description: "Cannot create, rename, delete, or edit membership of host groups.",
+  },
+  {
+    value: "items",
+    label: "Items",
+    section: "Monitoring",
+    description: "Cannot create, edit, or delete items on any host.",
+  },
+  {
+    value: "triggers",
+    label: "Triggers",
+    section: "Monitoring",
+    description: "Cannot create, edit, or delete triggers on any host.",
+  },
+] as const;
+
 export const roleColor = (r: string): "error" | "primary" | "secondary" | "warning" | "default" =>
   r === "root"
     ? "error"

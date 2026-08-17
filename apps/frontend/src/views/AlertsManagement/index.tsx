@@ -1,7 +1,7 @@
 "use client";
 import { Alert, Box, Card, Snackbar, Stack, Tab, Tabs } from "@mui/material";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { ActionsPanel } from "./ActionsPanel";
 import { MediaTypesTab } from "./MediaTypesTab";
 import { NotificationHistoryTab } from "./NotificationHistoryTab";
@@ -42,8 +42,15 @@ const AlertsManagementInner = () => {
     message: "",
     severity: "success" as "success" | "error",
   });
-  const showToast = (message: string, sev: "success" | "error") =>
-    setToast({ open: true, message, severity: sev });
+  // Stable identity is load-bearing — see Administration/index.tsx's showToast
+  // for why: without useCallback, a failed load() in any tab would recreate
+  // showToast, recreate that tab's load(), and re-fire its fetch effect in an
+  // infinite loop (most visibly when a user lacks permission for the tab, since
+  // every retry then reliably fails too).
+  const showToast = useCallback(
+    (message: string, sev: "success" | "error") => setToast({ open: true, message, severity: sev }),
+    [],
+  );
 
   return (
     <Stack spacing={3}>

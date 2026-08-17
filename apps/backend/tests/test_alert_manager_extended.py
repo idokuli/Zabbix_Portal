@@ -1,4 +1,4 @@
-"""Extended Alert_Manager tests — update_rule and run_checks coverage."""
+"""Extended AlertManager tests — update_rule and run_checks coverage."""
 
 import os
 import time
@@ -29,9 +29,9 @@ def _make_conn(rows=None, rowcount=1, fetchone=None):
 @pytest.fixture()
 def mgr():
     with patch("zabbix_utils.ZabbixAPI"):
-        from Alert_Manager import Alert_Manager
+        from Alert_Manager import AlertManager
 
-        m = Alert_Manager()
+        m = AlertManager()
         m.zapi = MagicMock()
         return m
 

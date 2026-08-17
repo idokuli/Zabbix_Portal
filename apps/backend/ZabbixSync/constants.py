@@ -37,7 +37,7 @@ SYNC_INTERVAL = int(os.getenv("ZABBIX_SYNC_INTERVAL", "60"))
 #
 #   Items and triggers are read directly from Zabbix API on every request —
 #   they are never stored in the portal DB, so they are always up to date.
-#   Writes (create item, create trigger) go directly to Zabbix via Item_Manager.
+#   Writes (create item, create trigger) go directly to Zabbix via ItemManager.
 #   No separate sync is needed for items or triggers.
 
 ROLE_TO_TYPE: dict[str, int] = {

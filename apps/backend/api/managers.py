@@ -1,26 +1,26 @@
 # ── Managers ─────────────────────────────────────────────────────────
 # Instantiated at module level; each manager handles Zabbix connection
 # failures internally (sets self.zapi = None on error).
-from Actions_Manager import Actions_Manager
-from Alert_Manager import Alert_Manager
-from Dashboard_Manager import Dashboard_Manager
-from DataCollection_Manager import DataCollection_Manager
-from Host_Manager import Host_Manager
-from Item_Manager import Item_Manager
-from Metrics_Manager import Metrics_Manager
-from Report_Manager import Report_Manager
-from Services_Manager import Services_Manager
-from ZabbixAdmin_Manager import ZabbixAdmin_Manager
+from Actions_Manager import ActionsManager
+from Alert_Manager import AlertManager
+from Dashboard_Manager import DashboardManager
+from DataCollection_Manager import DataCollectionManager
+from Host_Manager import HostManager
+from Item_Manager import ItemManager
+from Metrics_Manager import MetricsManager
+from Report_Manager import ReportManager
+from Services_Manager import ServicesManager
+from ZabbixAdmin_Manager import ZabbixAdminManager
 from ZabbixSync import ZabbixSync
 
-host_bot = Host_Manager()
-item_bot = Item_Manager()
-metrics_bot = Metrics_Manager()
-dashboard_bot = Dashboard_Manager()
-alert_bot = Alert_Manager()
+host_bot = HostManager()
+item_bot = ItemManager()
+metrics_bot = MetricsManager()
+dashboard_bot = DashboardManager()
+alert_bot = AlertManager()
 sync_bot = ZabbixSync()
-dc_bot = DataCollection_Manager()
-report_bot = Report_Manager()
-actions_bot = Actions_Manager()
-zadmin_bot = ZabbixAdmin_Manager()
-services_bot = Services_Manager()
+dc_bot = DataCollectionManager()
+report_bot = ReportManager()
+actions_bot = ActionsManager()
+zadmin_bot = ZabbixAdminManager()
+services_bot = ServicesManager()

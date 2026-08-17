@@ -91,7 +91,21 @@ def test_get_graph_data_success():
 
 def test_get_graph_data_bad_minutes():
     with patch("api.routes.dashboard.dashboard_bot", MagicMock()), TestClient(make_app()) as c:
-        r = c.get("/dashboard/graphs/1/data?minutes=99999")
+        r = c.get("/dashboard/graphs/1/data?minutes=9999999")
+    assert r.status_code == 400
+
+
+def test_get_graph_data_six_months_ok():
+    mock_bot = MagicMock()
+    mock_bot.get_graph_data.return_value = {"labels": [], "datasets": []}
+    with patch("api.routes.dashboard.dashboard_bot", mock_bot), TestClient(make_app()) as c:
+        r = c.get("/dashboard/graphs/1/data?minutes=273600")
+    assert r.status_code == 200
+
+
+def test_get_graph_data_beyond_six_months_rejected():
+    with patch("api.routes.dashboard.dashboard_bot", MagicMock()), TestClient(make_app()) as c:
+        r = c.get("/dashboard/graphs/1/data?minutes=273601")
     assert r.status_code == 400
 
 

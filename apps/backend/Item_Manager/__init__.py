@@ -1,6 +1,6 @@
 import logging
 
-from Zabbix_Base import Zabbix_Base
+from Zabbix_Base import ZabbixBase
 
 from Item_Manager.bulk import BulkItemsMixin
 from Item_Manager.core import CoreItemsMixin
@@ -15,7 +15,7 @@ from Item_Manager.zabbix_native import ZabbixNativeItemsMixin
 logger = logging.getLogger(__name__)
 
 
-class Item_Manager(
+class ItemManager(
     BulkItemsMixin,
     CoreItemsMixin,
     TriggersMixin,
@@ -25,7 +25,7 @@ class Item_Manager(
     SnmpItemsMixin,
     RemoteItemsMixin,
     ZabbixNativeItemsMixin,
-    Zabbix_Base,
+    ZabbixBase,
 ):
     def __init__(self):
         super().__init__()

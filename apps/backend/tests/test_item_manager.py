@@ -1,4 +1,4 @@
-"""Tests for Item_Manager (core, http, snmp, remote, triggers, bulk)."""
+"""Tests for ItemManager (core, http, snmp, remote, triggers, bulk)."""
 
 import os
 
@@ -14,12 +14,21 @@ import pytest
 
 from api.schemas.items import (
     BrowserItemRequest,
+    CalculatedItemRequest,
+    DbAgent2Request,
     DbOdbcRequest,
+    DependentItemRequest,
+    ExternalItemRequest,
     HttpItemRequest,
+    InternalItemRequest,
+    ItemRequest,
     JmxItemRequest,
     ScriptItemRequest,
+    ServiceItemRequest,
     SnmpItemRequest,
+    SnmpTrapRequest,
     SshItemRequest,
+    TrapperItemRequest,
     ZabbixScriptItemRequest,
 )
 
@@ -27,9 +36,9 @@ from api.schemas.items import (
 @pytest.fixture()
 def mgr():
     with patch("zabbix_utils.ZabbixAPI"):
-        from Item_Manager import Item_Manager
+        from Item_Manager import ItemManager
 
-        m = Item_Manager()
+        m = ItemManager()
         m.zapi = MagicMock()
         m._zabbix_version = (6, 4)
         return m
@@ -46,14 +55,16 @@ def _mock_host_iface(mgr, hostid="10", ifaceid="5"):
 def test_add_item_success(mgr):
     _mock_host_iface(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["42"]}
-    item_id, err = mgr.add_item("h1", "CPU", "system.cpu.load")
+    req = ItemRequest(hostname="h1", item_name="CPU", item_key="system.cpu.load")
+    item_id, err = mgr.add_item(req)
     assert item_id == "42"
     assert err is None
 
 
 def test_add_item_host_not_found(mgr):
     mgr.zapi.host.get.return_value = []
-    item_id, err = mgr.add_item("ghost", "CPU", "key")
+    req = ItemRequest(hostname="ghost", item_name="CPU", item_key="key")
+    item_id, err = mgr.add_item(req)
     assert item_id is None
     assert "not found" in err
 
@@ -61,21 +72,24 @@ def test_add_item_host_not_found(mgr):
 def test_add_item_no_interfaces(mgr):
     mgr.zapi.host.get.return_value = [{"hostid": "10"}]
     mgr.zapi.hostinterface.get.return_value = []
-    item_id, err = mgr.add_item("h1", "CPU", "key")
+    req = ItemRequest(hostname="h1", item_name="CPU", item_key="key")
+    item_id, err = mgr.add_item(req)
     assert item_id is None
     assert "interfaces" in err
 
 
 def test_add_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_item("h1", "CPU", "key")
+    req = ItemRequest(hostname="h1", item_name="CPU", item_key="key")
+    item_id, err = mgr.add_item(req)
     assert item_id is None
 
 
 def test_add_item_with_team_tag(mgr):
     _mock_host_iface(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["55"]}
-    item_id, err = mgr.add_item("h1", "CPU", "key", team_name="ops")
+    req = ItemRequest(hostname="h1", item_name="CPU", item_key="key")
+    item_id, err = mgr.add_item(req, team_name="ops")
     assert item_id == "55"
     call_kwargs = mgr.zapi.item.create.call_args[1]
     assert call_kwargs["tags"] == [{"tag": "team", "value": "ops"}]
@@ -238,7 +252,8 @@ def test_add_http_item_zapi_none(mgr):
 def test_add_service_item_success(mgr):
     _mock_host_iface(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["20"]}
-    item_id, err = mgr.add_service_item("h1", "icmp_ping")
+    req = ServiceItemRequest(hostname="h1", service_type="icmp_ping")
+    item_id, err = mgr.add_service_item(req)
     assert item_id == "20"
 
 
@@ -361,28 +376,32 @@ def test_add_snmp_trap_item_success(mgr):
     mgr.zapi.host.get.return_value = [{"hostid": "10"}]
     mgr.zapi.hostinterface.get.return_value = [{"interfaceid": "5", "type": "2"}]
     mgr.zapi.item.create.return_value = {"itemids": ["35"]}
-    item_id, err = mgr.add_snmp_trap_item("h1", "SNMP Trap")
+    req = SnmpTrapRequest(hostname="h1", item_name="SNMP Trap")
+    item_id, err = mgr.add_snmp_trap_item(req)
     assert item_id == "35"
     assert err is None
 
 
 def test_add_snmp_trap_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_snmp_trap_item("h1", "Trap")
+    req = SnmpTrapRequest(hostname="h1", item_name="Trap")
+    item_id, err = mgr.add_snmp_trap_item(req)
     assert item_id is None
     assert err is not None
 
 
 def test_add_snmp_trap_item_host_not_found(mgr):
     mgr.zapi.host.get.return_value = []
-    item_id, err = mgr.add_snmp_trap_item("ghost", "Trap")
+    req = SnmpTrapRequest(hostname="ghost", item_name="Trap")
+    item_id, err = mgr.add_snmp_trap_item(req)
     assert item_id is None
 
 
 def test_add_snmp_trap_item_no_interface(mgr):
     mgr.zapi.host.get.return_value = [{"hostid": "10"}]
     mgr.zapi.hostinterface.get.return_value = []
-    item_id, err = mgr.add_snmp_trap_item("h1", "Trap")
+    req = SnmpTrapRequest(hostname="h1", item_name="Trap")
+    item_id, err = mgr.add_snmp_trap_item(req)
     assert item_id is None
 
 
@@ -390,7 +409,8 @@ def test_add_snmp_trap_item_with_team(mgr):
     mgr.zapi.host.get.return_value = [{"hostid": "10"}]
     mgr.zapi.hostinterface.get.return_value = [{"interfaceid": "5", "type": "2"}]
     mgr.zapi.item.create.return_value = {"itemids": ["36"]}
-    item_id, err = mgr.add_snmp_trap_item("h1", "Trap", team_name="ops")
+    req = SnmpTrapRequest(hostname="h1", item_name="Trap")
+    item_id, err = mgr.add_snmp_trap_item(req, team_name="ops")
     assert item_id == "36"
     call_kwargs = mgr.zapi.item.create.call_args[1]
     assert call_kwargs["tags"][0]["value"] == "ops"
@@ -447,6 +467,90 @@ def test_add_trigger_zapi_none(mgr):
     mgr.zapi = None
     trigger_id, err = mgr.add_trigger("h1", "k", "High CPU", "90", ">", 4)
     assert trigger_id is None
+
+
+# ── add_nodata_trigger ────────────────────────────────────────────────────────
+
+
+def test_add_nodata_trigger_success_modern_syntax(mgr):
+    mgr.zapi.host.get.return_value = [{"hostid": "10"}]
+    mgr.zapi.trigger.create.return_value = {"triggerids": ["200"]}
+    trigger_id, err = mgr.add_nodata_trigger("h1", "system.cpu.load", "No data")
+    assert trigger_id == "200"
+    assert err is None
+    expression = mgr.zapi.trigger.create.call_args.kwargs["expression"]
+    assert expression == "nodata(/h1/system.cpu.load,5m)=1"
+
+
+def test_add_nodata_trigger_classic_syntax(mgr):
+    mgr._zabbix_version = (5, 0)
+    mgr.zapi.host.get.return_value = [{"hostid": "10"}]
+    mgr.zapi.trigger.create.return_value = {"triggerids": ["201"]}
+    trigger_id, err = mgr.add_nodata_trigger("h1", "system.cpu.load", "No data")
+    assert trigger_id == "201"
+    expression = mgr.zapi.trigger.create.call_args.kwargs["expression"]
+    assert expression == "{h1:system.cpu.load.nodata(5m)}=1"
+
+
+def test_add_nodata_trigger_host_not_found(mgr):
+    mgr.zapi.host.get.return_value = []
+    trigger_id, err = mgr.add_nodata_trigger("ghost", "key", "No data")
+    assert trigger_id is None
+    assert "not found" in err
+
+
+def test_add_nodata_trigger_zapi_none(mgr):
+    mgr.zapi = None
+    trigger_id, err = mgr.add_nodata_trigger("h1", "key", "No data")
+    assert trigger_id is None
+
+
+# ── maybe_create_trigger ──────────────────────────────────────────────────────
+
+
+def test_maybe_create_trigger_disabled_returns_none(mgr):
+    trigger_id, err = mgr.maybe_create_trigger("h1", "key", "Item", 3, False)
+    assert trigger_id is None
+    assert err is None
+    mgr.zapi.trigger.create.assert_not_called()
+
+
+def test_maybe_create_trigger_numeric_with_threshold(mgr):
+    mgr.zapi.host.get.return_value = [{"hostid": "10"}]
+    mgr.zapi.trigger.create.return_value = {"triggerids": ["300"]}
+    trigger_id, err = mgr.maybe_create_trigger(
+        "h1", "cpu.load", "CPU", 3, True, trigger_operator=">", trigger_threshold=90
+    )
+    assert trigger_id == "300"
+    expression = mgr.zapi.trigger.create.call_args.kwargs["expression"]
+    assert expression == "last(/h1/cpu.load)>90"
+
+
+def test_maybe_create_trigger_numeric_without_threshold_falls_back_to_nodata(mgr):
+    mgr.zapi.host.get.return_value = [{"hostid": "10"}]
+    mgr.zapi.trigger.create.return_value = {"triggerids": ["301"]}
+    trigger_id, err = mgr.maybe_create_trigger("h1", "cpu.load", "CPU", 3, True)
+    expression = mgr.zapi.trigger.create.call_args.kwargs["expression"]
+    assert "nodata(" in expression
+
+
+def test_maybe_create_trigger_string_with_pattern(mgr):
+    mgr.zapi.host.get.return_value = [{"hostid": "10"}]
+    mgr.zapi.trigger.create.return_value = {"triggerids": ["302"]}
+    trigger_id, err = mgr.maybe_create_trigger(
+        "h1", "log.file", "Log", 2, True, trigger_pattern="ERROR"
+    )
+    expression = mgr.zapi.trigger.create.call_args.kwargs["expression"]
+    assert "find(" in expression
+    assert "ERROR" in expression
+
+
+def test_maybe_create_trigger_string_without_pattern_falls_back_to_nodata(mgr):
+    mgr.zapi.host.get.return_value = [{"hostid": "10"}]
+    mgr.zapi.trigger.create.return_value = {"triggerids": ["303"]}
+    trigger_id, err = mgr.maybe_create_trigger("h1", "log.file", "Log", 2, True)
+    expression = mgr.zapi.trigger.create.call_args.kwargs["expression"]
+    assert "nodata(" in expression
 
 
 # ── list_triggers ─────────────────────────────────────────────────────────────
@@ -540,6 +644,21 @@ def test_bulk_add_items_success(mgr):
     )
     assert len(results) == 1
     assert results[0]["error"] is None
+
+
+def test_bulk_add_items_service_type(mgr):
+    _mock_host_iface(mgr)
+    mgr.zapi.item.create.return_value = {"itemids": ["2"]}
+    results = mgr.bulk_add_items(
+        ["h1"],
+        {
+            "item_type": "service",
+            "service_type": "icmp_ping",
+        },
+    )
+    assert len(results) == 1
+    assert results[0]["error"] is None
+    assert results[0]["item_id"] == "2"
 
 
 # ── add_string_trigger ────────────────────────────────────────────────────────
@@ -715,101 +834,120 @@ def _mock_host(mgr, hostid="10"):
 def test_add_internal_item_success(mgr):
     _mock_host(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["100"]}
-    item_id, err = mgr.add_internal_item("h1", "Queue size", "zabbix[queue,6,60]")
+    req = InternalItemRequest(hostname="h1", item_name="Queue size", item_key="zabbix[queue,6,60]")
+    item_id, err = mgr.add_internal_item(req)
     assert item_id == "100"
     assert err is None
 
 
 def test_add_internal_item_host_not_found(mgr):
     mgr.zapi.host.get.return_value = []
-    item_id, err = mgr.add_internal_item("ghost", "Queue", "zabbix[queue]")
+    req = InternalItemRequest(hostname="ghost", item_name="Queue", item_key="zabbix[queue]")
+    item_id, err = mgr.add_internal_item(req)
     assert item_id is None
     assert "not found" in err
 
 
 def test_add_internal_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_internal_item("h1", "Queue", "zabbix[queue]")
+    req = InternalItemRequest(hostname="h1", item_name="Queue", item_key="zabbix[queue]")
+    item_id, err = mgr.add_internal_item(req)
     assert item_id is None
 
 
 def test_add_trapper_item_ok(mgr):
     _mock_host(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["101"]}
-    item_id, err = mgr.add_trapper_item("h1", "Trap", "trap.key")
+    req = TrapperItemRequest(hostname="h1", item_name="Trap", item_key="trap.key")
+    item_id, err = mgr.add_trapper_item(req)
     assert item_id == "101"
     assert err is None
 
 
 def test_add_trapper_item_host_not_found(mgr):
     mgr.zapi.host.get.return_value = []
-    item_id, err = mgr.add_trapper_item("ghost", "Trap", "trap.key")
+    req = TrapperItemRequest(hostname="ghost", item_name="Trap", item_key="trap.key")
+    item_id, err = mgr.add_trapper_item(req)
     assert item_id is None
 
 
 def test_add_trapper_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_trapper_item("h1", "Trap", "k")
+    req = TrapperItemRequest(hostname="h1", item_name="Trap", item_key="k")
+    item_id, err = mgr.add_trapper_item(req)
     assert item_id is None
 
 
 def test_add_external_item_ok(mgr):
     _mock_host(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["102"]}
-    item_id, err = mgr.add_external_item("h1", "Ext check", "check.sh[arg]")
+    req = ExternalItemRequest(hostname="h1", item_name="Ext check", item_key="check.sh[arg]")
+    item_id, err = mgr.add_external_item(req)
     assert item_id == "102"
     assert err is None
 
 
 def test_add_external_item_host_not_found(mgr):
     mgr.zapi.host.get.return_value = []
-    item_id, err = mgr.add_external_item("ghost", "Ext", "check.sh")
+    req = ExternalItemRequest(hostname="ghost", item_name="Ext", item_key="check.sh")
+    item_id, err = mgr.add_external_item(req)
     assert item_id is None
 
 
 def test_add_external_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_external_item("h1", "Ext", "k")
+    req = ExternalItemRequest(hostname="h1", item_name="Ext", item_key="k")
+    item_id, err = mgr.add_external_item(req)
     assert item_id is None
 
 
 def test_add_calculated_item_ok(mgr):
     _mock_host(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["103"]}
-    item_id, err = mgr.add_calculated_item("h1", "Calc", "calc.key", "avg(//cpu.load,1m)")
+    req = CalculatedItemRequest(
+        hostname="h1", item_name="Calc", item_key="calc.key", formula="avg(//cpu.load,1m)"
+    )
+    item_id, err = mgr.add_calculated_item(req)
     assert item_id == "103"
     assert err is None
 
 
 def test_add_calculated_item_host_not_found(mgr):
     mgr.zapi.host.get.return_value = []
-    item_id, err = mgr.add_calculated_item("ghost", "Calc", "k", "formula")
+    req = CalculatedItemRequest(hostname="ghost", item_name="Calc", item_key="k", formula="formula")
+    item_id, err = mgr.add_calculated_item(req)
     assert item_id is None
 
 
 def test_add_calculated_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_calculated_item("h1", "Calc", "k", "formula")
+    req = CalculatedItemRequest(hostname="h1", item_name="Calc", item_key="k", formula="formula")
+    item_id, err = mgr.add_calculated_item(req)
     assert item_id is None
 
 
 def test_add_dependent_item_ok(mgr):
     _mock_host(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["104"]}
-    item_id, err = mgr.add_dependent_item("h1", "Dep", "dep.key", "5")
+    req = DependentItemRequest(
+        hostname="h1", item_name="Dep", item_key="dep.key", master_itemid="5"
+    )
+    item_id, err = mgr.add_dependent_item(req)
     assert item_id == "104"
     assert err is None
 
 
 def test_add_dependent_item_host_not_found(mgr):
     mgr.zapi.host.get.return_value = []
-    item_id, err = mgr.add_dependent_item("ghost", "Dep", "k", "5")
+    req = DependentItemRequest(hostname="ghost", item_name="Dep", item_key="k", master_itemid="5")
+    item_id, err = mgr.add_dependent_item(req)
     assert item_id is None
 
 
 def test_add_dependent_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_dependent_item("h1", "Dep", "k", "5")
+    req = DependentItemRequest(hostname="h1", item_name="Dep", item_key="k", master_itemid="5")
+    item_id, err = mgr.add_dependent_item(req)
     assert item_id is None
 
 
@@ -955,25 +1093,30 @@ def test_add_db_odbc_item_zapi_none(mgr):
 def test_add_db_agent2_item_ok(mgr):
     _mock_host_iface(mgr)
     mgr.zapi.item.create.return_value = {"itemids": ["110"]}
-    # signature: hostname, engine, conn_string, metric
-    item_id, err = mgr.add_db_agent2_item("h1", "mysql", "localhost:3306", "ping")
+    req = DbAgent2Request(
+        hostname="h1", engine="mysql", conn_string="localhost:3306", metric="ping"
+    )
+    item_id, err = mgr.add_db_agent2_item(req)
     assert item_id == "110"
     assert err is None
 
 
 def test_add_db_agent2_item_unsupported_engine(mgr):
-    item_id, err = mgr.add_db_agent2_item("h1", "oracle", "conn", "ping")
+    req = DbAgent2Request(hostname="h1", engine="oracle", conn_string="conn", metric="ping")
+    item_id, err = mgr.add_db_agent2_item(req)
     assert item_id is None
     assert "oracle" in err
 
 
 def test_add_db_agent2_item_host_not_found(mgr):
     mgr.zapi.host.get.return_value = []
-    item_id, err = mgr.add_db_agent2_item("ghost", "mysql", "conn", "ping")
+    req = DbAgent2Request(hostname="ghost", engine="mysql", conn_string="conn", metric="ping")
+    item_id, err = mgr.add_db_agent2_item(req)
     assert item_id is None
 
 
 def test_add_db_agent2_item_zapi_none(mgr):
     mgr.zapi = None
-    item_id, err = mgr.add_db_agent2_item("h1", "MySQL", "k", "mysql", "SELECT 1", "localhost")
+    req = DbAgent2Request(hostname="h1", engine="mysql", conn_string="k", metric="ping")
+    item_id, err = mgr.add_db_agent2_item(req)
     assert item_id is None

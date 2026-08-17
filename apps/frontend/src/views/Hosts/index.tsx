@@ -10,7 +10,6 @@ import LocalOfferOutlinedIcon from "@mui/icons-material/LocalOfferOutlined";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import RouterOutlinedIcon from "@mui/icons-material/RouterOutlined";
-import SearchIcon from "@mui/icons-material/Search";
 import {
   Alert,
   Box,
@@ -24,7 +23,6 @@ import {
   DialogTitle,
   FormControl,
   IconButton,
-  InputAdornment,
   InputLabel,
   LinearProgress,
   Menu,
@@ -32,7 +30,6 @@ import {
   Select,
   Snackbar,
   Stack,
-  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -47,6 +44,7 @@ import { StatTicker } from "../../app/components/StatTicker";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { useSync } from "../../app/context/SyncContext";
 import { monoFontFamily } from "../../app/theme";
+import { FilterSearchField, filterLabelSx } from "../../components/FilterBar";
 import { useFavorites } from "../../lib/favorites";
 import { AddHostAccordion } from "./AddHostAccordion";
 import { BulkImportAccordion } from "./BulkImportAccordion";
@@ -258,6 +256,7 @@ export const Hosts = () => {
   const [bulkApplyTeamTag, setBulkApplyTeamTag] = useState(true);
   const [hosts, setHosts] = useState<Host[]>([]);
   const [search, setSearch] = useState("");
+  const [groupFilter, setGroupFilter] = useState("");
   const [loading, setLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Host | null>(null);
   const [editHost, setEditHost] = useState<Host | null>(null);
@@ -578,10 +577,13 @@ export const Hosts = () => {
 
   const filteredHosts = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) {
-      return hosts;
-    }
     return hosts.filter((h) => {
+      if (groupFilter && !(h.groups ?? []).some((g) => g.groupid === groupFilter)) {
+        return false;
+      }
+      if (!q) {
+        return true;
+      }
       if (h.host.toLowerCase().includes(q)) {
         return true;
       }
@@ -590,7 +592,7 @@ export const Hosts = () => {
       }
       return (h.interfaces ?? []).some((i) => i.ip.toLowerCase().includes(q));
     });
-  }, [hosts, search]);
+  }, [hosts, search, groupFilter]);
 
   const totalProblems = hosts.reduce((sum, h) => sum + (h.problem_count ?? 0), 0);
 
@@ -880,25 +882,32 @@ export const Hosts = () => {
           <Typography variant="subtitle2" sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>
             Host inventory
           </Typography>
-          <TextField
-            slotProps={{
-              input: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon sx={{ fontSize: 18, color: "text.disabled" }} />
-                  </InputAdornment>
-                ),
-              },
-            }}
-            size="small"
+          <FilterSearchField
             placeholder="Search by name or IP…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            sx={{ flex: 1 }}
+            onChange={setSearch}
           />
+          <FormControl size="small" sx={{ minWidth: 180 }}>
+            <InputLabel sx={filterLabelSx}>Host group</InputLabel>
+            <Select
+              label="Host group"
+              value={groupFilter}
+              onChange={(e) => setGroupFilter(e.target.value)}
+              sx={filterLabelSx}
+            >
+              <MenuItem value="" sx={filterLabelSx}>
+                All groups
+              </MenuItem>
+              {hostGroups.map((g) => (
+                <MenuItem key={g.groupid} value={g.groupid} sx={filterLabelSx}>
+                  {g.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
           <Tooltip title="Refresh">
             <IconButton size="small" onClick={() => void reload()}>
-              <RefreshIcon sx={{ fontSize: 17 }} />
+              <RefreshIcon sx={{ fontSize: 18 }} />
             </IconButton>
           </Tooltip>
         </Box>

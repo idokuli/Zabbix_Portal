@@ -21,6 +21,7 @@ import {
   EnabledSwitch,
   HostSelect,
   type PanelProps,
+  TriggerToggleFields,
   useCommonItemState,
 } from "./shared";
 
@@ -46,6 +47,7 @@ export const InternalItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }:
         trends: common.trends,
         description: common.description || undefined,
         status: common.enabled ? 0 : 1,
+        ...common.triggerFields(),
       });
       showToast("Item added successfully.", "success");
       setItemName("");
@@ -107,6 +109,21 @@ export const InternalItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }:
         withUnits={false}
       />
       <EnabledSwitch value={common.enabled} onChange={common.setEnabled} />
+      <TriggerToggleFields
+        valueType={valueType}
+        createTrigger={common.createTrigger}
+        setCreateTrigger={common.setCreateTrigger}
+        triggerOperator={common.triggerOperator}
+        setTriggerOperator={common.setTriggerOperator}
+        triggerThreshold={common.triggerThreshold}
+        setTriggerThreshold={common.setTriggerThreshold}
+        triggerPattern={common.triggerPattern}
+        setTriggerPattern={common.setTriggerPattern}
+        triggerMatchType={common.triggerMatchType}
+        setTriggerMatchType={common.setTriggerMatchType}
+        triggerPriority={common.triggerPriority}
+        setTriggerPriority={common.setTriggerPriority}
+      />
       <Box>
         <Button
           variant="contained"
@@ -151,6 +168,7 @@ export const TrapperItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: 
         trends: common.trends,
         description: common.description || undefined,
         status: common.enabled ? 0 : 1,
+        ...common.triggerFields(),
       });
       showToast("Item added successfully.", "success");
       setItemName("");
@@ -224,6 +242,21 @@ export const TrapperItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: 
         minRows={2}
       />
       <EnabledSwitch value={common.enabled} onChange={common.setEnabled} />
+      <TriggerToggleFields
+        valueType={valueType}
+        createTrigger={common.createTrigger}
+        setCreateTrigger={common.setCreateTrigger}
+        triggerOperator={common.triggerOperator}
+        setTriggerOperator={common.setTriggerOperator}
+        triggerThreshold={common.triggerThreshold}
+        setTriggerThreshold={common.setTriggerThreshold}
+        triggerPattern={common.triggerPattern}
+        setTriggerPattern={common.setTriggerPattern}
+        triggerMatchType={common.triggerMatchType}
+        setTriggerMatchType={common.setTriggerMatchType}
+        triggerPriority={common.triggerPriority}
+        setTriggerPriority={common.setTriggerPriority}
+      />
       <Box>
         <Button
           variant="contained"
@@ -267,6 +300,7 @@ export const ExternalItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }:
         trends: common.trends,
         description: common.description || undefined,
         status: common.enabled ? 0 : 1,
+        ...common.triggerFields(),
       });
       showToast("Item added successfully.", "success");
       setItemName("");
@@ -328,6 +362,21 @@ export const ExternalItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }:
         withUnits={false}
       />
       <EnabledSwitch value={common.enabled} onChange={common.setEnabled} />
+      <TriggerToggleFields
+        valueType={valueType}
+        createTrigger={common.createTrigger}
+        setCreateTrigger={common.setCreateTrigger}
+        triggerOperator={common.triggerOperator}
+        setTriggerOperator={common.setTriggerOperator}
+        triggerThreshold={common.triggerThreshold}
+        setTriggerThreshold={common.setTriggerThreshold}
+        triggerPattern={common.triggerPattern}
+        setTriggerPattern={common.setTriggerPattern}
+        triggerMatchType={common.triggerMatchType}
+        setTriggerMatchType={common.setTriggerMatchType}
+        triggerPriority={common.triggerPriority}
+        setTriggerPriority={common.setTriggerPriority}
+      />
       <Box>
         <Button
           variant="contained"
@@ -371,6 +420,7 @@ export const IpmiItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
         trends: common.trends,
         description: common.description || undefined,
         status: common.enabled ? 0 : 1,
+        ...common.triggerFields(),
       });
       showToast("Item added successfully.", "success");
       setItemName("");
@@ -432,6 +482,21 @@ export const IpmiItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pan
         withUnits={false}
       />
       <EnabledSwitch value={common.enabled} onChange={common.setEnabled} />
+      <TriggerToggleFields
+        valueType={valueType}
+        createTrigger={common.createTrigger}
+        setCreateTrigger={common.setCreateTrigger}
+        triggerOperator={common.triggerOperator}
+        setTriggerOperator={common.setTriggerOperator}
+        triggerThreshold={common.triggerThreshold}
+        setTriggerThreshold={common.setTriggerThreshold}
+        triggerPattern={common.triggerPattern}
+        setTriggerPattern={common.setTriggerPattern}
+        triggerMatchType={common.triggerMatchType}
+        setTriggerMatchType={common.setTriggerMatchType}
+        triggerPriority={common.triggerPriority}
+        setTriggerPriority={common.setTriggerPriority}
+      />
       <Box>
         <Button
           variant="contained"
@@ -490,6 +555,7 @@ export const SshItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pane
         trends: common.trends,
         description: common.description || undefined,
         status: common.enabled ? 0 : 1,
+        ...common.triggerFields(),
       });
       showToast("Item added successfully.", "success");
       setItemName("");
@@ -605,6 +671,21 @@ export const SshItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pane
         withUnits={false}
       />
       <EnabledSwitch value={common.enabled} onChange={common.setEnabled} />
+      <TriggerToggleFields
+        valueType={valueType}
+        createTrigger={common.createTrigger}
+        setCreateTrigger={common.setCreateTrigger}
+        triggerOperator={common.triggerOperator}
+        setTriggerOperator={common.setTriggerOperator}
+        triggerThreshold={common.triggerThreshold}
+        setTriggerThreshold={common.setTriggerThreshold}
+        triggerPattern={common.triggerPattern}
+        setTriggerPattern={common.setTriggerPattern}
+        triggerMatchType={common.triggerMatchType}
+        setTriggerMatchType={common.setTriggerMatchType}
+        triggerPriority={common.triggerPriority}
+        setTriggerPriority={common.setTriggerPriority}
+      />
       <Box>
         <Button
           variant="contained"
@@ -652,6 +733,7 @@ export const TelnetItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: P
         trends: common.trends,
         description: common.description || undefined,
         status: common.enabled ? 0 : 1,
+        ...common.triggerFields(),
       });
       showToast("Item added successfully.", "success");
       setItemName("");
@@ -734,6 +816,21 @@ export const TelnetItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: P
         withUnits={false}
       />
       <EnabledSwitch value={common.enabled} onChange={common.setEnabled} />
+      <TriggerToggleFields
+        valueType={valueType}
+        createTrigger={common.createTrigger}
+        setCreateTrigger={common.setCreateTrigger}
+        triggerOperator={common.triggerOperator}
+        setTriggerOperator={common.setTriggerOperator}
+        triggerThreshold={common.triggerThreshold}
+        setTriggerThreshold={common.setTriggerThreshold}
+        triggerPattern={common.triggerPattern}
+        setTriggerPattern={common.setTriggerPattern}
+        triggerMatchType={common.triggerMatchType}
+        setTriggerMatchType={common.setTriggerMatchType}
+        triggerPriority={common.triggerPriority}
+        setTriggerPriority={common.setTriggerPriority}
+      />
       <Box>
         <Button
           variant="contained"
@@ -783,6 +880,7 @@ export const JmxItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pane
         trends: common.trends,
         description: common.description || undefined,
         status: common.enabled ? 0 : 1,
+        ...common.triggerFields(),
       });
       showToast("Item added successfully.", "success");
       setItemName("");
@@ -873,6 +971,21 @@ export const JmxItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: Pane
         withUnits={false}
       />
       <EnabledSwitch value={common.enabled} onChange={common.setEnabled} />
+      <TriggerToggleFields
+        valueType={valueType}
+        createTrigger={common.createTrigger}
+        setCreateTrigger={common.setCreateTrigger}
+        triggerOperator={common.triggerOperator}
+        setTriggerOperator={common.setTriggerOperator}
+        triggerThreshold={common.triggerThreshold}
+        setTriggerThreshold={common.setTriggerThreshold}
+        triggerPattern={common.triggerPattern}
+        setTriggerPattern={common.setTriggerPattern}
+        triggerMatchType={common.triggerMatchType}
+        setTriggerMatchType={common.setTriggerMatchType}
+        triggerPriority={common.triggerPriority}
+        setTriggerPriority={common.setTriggerPriority}
+      />
       <Box>
         <Button
           variant="contained"
@@ -918,6 +1031,7 @@ export const CalculatedItemPanel = ({ hosts, hostsLoading, showToast, onSuccess 
         trends: common.trends,
         description: common.description || undefined,
         status: common.enabled ? 0 : 1,
+        ...common.triggerFields(),
       });
       showToast("Item added successfully.", "success");
       setItemName("");
@@ -989,6 +1103,21 @@ export const CalculatedItemPanel = ({ hosts, hostsLoading, showToast, onSuccess 
         withUnits={false}
       />
       <EnabledSwitch value={common.enabled} onChange={common.setEnabled} />
+      <TriggerToggleFields
+        valueType={valueType}
+        createTrigger={common.createTrigger}
+        setCreateTrigger={common.setCreateTrigger}
+        triggerOperator={common.triggerOperator}
+        setTriggerOperator={common.setTriggerOperator}
+        triggerThreshold={common.triggerThreshold}
+        setTriggerThreshold={common.setTriggerThreshold}
+        triggerPattern={common.triggerPattern}
+        setTriggerPattern={common.setTriggerPattern}
+        triggerMatchType={common.triggerMatchType}
+        setTriggerMatchType={common.setTriggerMatchType}
+        triggerPriority={common.triggerPriority}
+        setTriggerPriority={common.setTriggerPriority}
+      />
       <Box>
         <Button
           variant="contained"
@@ -1045,6 +1174,7 @@ export const DependentItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }
         trends: common.trends,
         description: common.description || undefined,
         status: common.enabled ? 0 : 1,
+        ...common.triggerFields(),
       });
       showToast("Item added successfully.", "success");
       setItemName("");
@@ -1135,6 +1265,21 @@ export const DependentItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }
         minRows={2}
       />
       <EnabledSwitch value={common.enabled} onChange={common.setEnabled} />
+      <TriggerToggleFields
+        valueType={valueType}
+        createTrigger={common.createTrigger}
+        setCreateTrigger={common.setCreateTrigger}
+        triggerOperator={common.triggerOperator}
+        setTriggerOperator={common.setTriggerOperator}
+        triggerThreshold={common.triggerThreshold}
+        setTriggerThreshold={common.setTriggerThreshold}
+        triggerPattern={common.triggerPattern}
+        setTriggerPattern={common.setTriggerPattern}
+        triggerMatchType={common.triggerMatchType}
+        setTriggerMatchType={common.setTriggerMatchType}
+        triggerPriority={common.triggerPriority}
+        setTriggerPriority={common.setTriggerPriority}
+      />
       <Box>
         <Button
           variant="contained"
@@ -1189,6 +1334,7 @@ export const ZabbixScriptItemPanel = ({
         timeout: timeout || undefined,
         description: common.description || undefined,
         status: common.enabled ? 0 : 1,
+        ...common.triggerFields(),
       });
       showToast("Item added successfully.", "success");
       setItemName("");
@@ -1317,6 +1463,21 @@ export const ZabbixScriptItemPanel = ({
         withUnits={false}
       />
       <EnabledSwitch value={common.enabled} onChange={common.setEnabled} />
+      <TriggerToggleFields
+        valueType={valueType}
+        createTrigger={common.createTrigger}
+        setCreateTrigger={common.setCreateTrigger}
+        triggerOperator={common.triggerOperator}
+        setTriggerOperator={common.setTriggerOperator}
+        triggerThreshold={common.triggerThreshold}
+        setTriggerThreshold={common.setTriggerThreshold}
+        triggerPattern={common.triggerPattern}
+        setTriggerPattern={common.setTriggerPattern}
+        triggerMatchType={common.triggerMatchType}
+        setTriggerMatchType={common.setTriggerMatchType}
+        triggerPriority={common.triggerPriority}
+        setTriggerPriority={common.setTriggerPriority}
+      />
       <Box>
         <Button
           variant="contained"
@@ -1366,6 +1527,7 @@ export const BrowserItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: 
         timeout: timeout || undefined,
         description: common.description || undefined,
         status: common.enabled ? 0 : 1,
+        ...common.triggerFields(),
       });
       showToast("Item added successfully.", "success");
       setItemName("");
@@ -1496,6 +1658,21 @@ export const BrowserItemPanel = ({ hosts, hostsLoading, showToast, onSuccess }: 
         withUnits={false}
       />
       <EnabledSwitch value={common.enabled} onChange={common.setEnabled} />
+      <TriggerToggleFields
+        valueType={valueType}
+        createTrigger={common.createTrigger}
+        setCreateTrigger={common.setCreateTrigger}
+        triggerOperator={common.triggerOperator}
+        setTriggerOperator={common.setTriggerOperator}
+        triggerThreshold={common.triggerThreshold}
+        setTriggerThreshold={common.setTriggerThreshold}
+        triggerPattern={common.triggerPattern}
+        setTriggerPattern={common.setTriggerPattern}
+        triggerMatchType={common.triggerMatchType}
+        setTriggerMatchType={common.setTriggerMatchType}
+        triggerPriority={common.triggerPriority}
+        setTriggerPriority={common.setTriggerPriority}
+      />
       <Box>
         <Button
           variant="contained"

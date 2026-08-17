@@ -7,7 +7,7 @@ A full-stack DevOps UI for managing Zabbix hosts, items, triggers, teams, and us
 - **Database** — PostgreSQL (shared / external — not deployed by this repo)
 - **Deployment** — GitOps: CI pushes image tags to the `zabbix-portal-gitops` repo; ArgoCD syncs each cluster from there (Helm charts live in the GitOps repo).
 
-> See [`CLAUDE.md`](./CLAUDE.md) for an architectural reference, [`WORKFLOW.md`](./WORKFLOW.md) for the CI/CD flow, [`RELEASING.md`](./RELEASING.md) for the release process, and [`PRIVATE_NETWORK.md`](./PRIVATE_NETWORK.md) for the air-gapped configuration checklist.
+> See [`CLAUDE.md`](CLAUDE.md) for an architectural reference, [`WORKFLOW.md`](WORKFLOW.md) for the CI/CD flow, [`RELEASING.md`](RELEASING.md) for the release process, and [`PRIVATE_NETWORK.md`](PRIVATE_NETWORK.md) for the air-gapped configuration checklist.
 
 ---
 
@@ -23,15 +23,18 @@ A full-stack DevOps UI for managing Zabbix hosts, items, triggers, teams, and us
 - List, create, and delete Zabbix hosts; tag hosts to teams
 - Bulk-create hosts from `.csv` / `.xlsx`; export inventory to `.xlsx`
 - Add and delete monitoring items (~20 item types — agent, HTTP, SNMP, SNMP trap, internal, trapper, external, IPMI, SSH, telnet, JMX, calculated, dependent, Zabbix script, browser, ODBC/Agent2 DB monitors, file watch, service check) and triggers on hosts
-- **Dashboard** — native Zabbix graphs, per-host last-value metrics, recent items; saveable per-user / per-team widget layouts with multiple named pages
-- **Metrics** — live active-problems table with acknowledgement audit, item-history charts (Item Graphs), historical problem windows, and custom alert rules (threshold conditions with severities and per-rule sounds)
+- **Auto-create trigger** toggle on every item type — numeric items get a real threshold (operator + value), string/log/text items get a pattern match, and either falls back to a "stopped reporting" (no data) trigger if left blank
+- **Dashboard** — native Zabbix graphs (time range from 1 minute up to 6 months), per-host last-value metrics, recent items; saveable per-user / per-team widget layouts with multiple named pages
+- **Metrics** — live active-problems table with acknowledgement audit, item-history charts (Item Graphs, time range from 1 minute up to 6 months), historical problem windows, and custom alert rules (threshold conditions with severities and per-rule sounds)
 - Problems can be sorted by severity (default), newest, or oldest, and acknowledged problems can be auto-hidden after a chosen delay (1 min – 4 h, or never) with a live countdown on each row — a portal-side view filter only, nothing is closed in Zabbix
 - **Data collection** — template groups, host groups, templates, maintenance windows, event correlation, discovery rules
 - **Services** — business services, SLAs with SLA reports, simple URL/host "health monitor" checks
-- **Reports** — top-100 triggers, audit log, action log, availability report, alert history
+- **Reports** — top-100 triggers, Zabbix audit log, portal actions log (accurate per-user attribution — see below), action log, availability report (preset windows up to 30 days, or a custom From/To month range up to 6 months), alert history
 - **Actions & alerting** — trigger/service/discovery/autoregistration/internal actions, media types, scripts, plus per-user threshold alert rules
 - **Administration** — Zabbix user groups & roles, API tokens, proxies & proxy groups (Zabbix 7.x), global macros, the item processing queue, authentication and housekeeping settings
 - Desktop notifications + audible alerts, plus a notification center in the top bar, when new problems fire — with an optional "keep notifications on screen" mode (on by default) that pins the OS toast until it's dismissed instead of letting it auto-fade
+- The alert sound repeats every 5 minutes for any unacknowledged problem until it's acknowledged or snoozed — snooze (5 min – 1 h) from the toast popup to silence just that problem's repeat-ring without acknowledging it
+- Team Lead+ can unacknowledge a problem, reopening it so it re-enters the alert workflow (with an optional reason, recorded as a note)
 - Standalone notes on a problem, independent of acknowledging it — leave a comment without changing ack status, or after it's already been acknowledged
 - Consistent date/time display everywhere — dates as `DD/MM/YYYY`, times as `HH:MM:SS` on a 24-hour clock, identical for every user regardless of browser locale
 - Real-time updates via Server-Sent Events — the UI refreshes when the backend syncs with Zabbix
@@ -108,7 +111,7 @@ BACKEND_URL=http://localhost:6769
 ALLOWED_ORIGINS=http://localhost:42069
 
 # ── Alert checker ─────────────────────────────────────────────
-# How often (seconds) Alert_Manager evaluates threshold rules. Default 15, min 5.
+# How often (seconds) AlertManager evaluates threshold rules. Default 15, min 5.
 ALERT_CHECK_INTERVAL=15
 ```
 
@@ -188,6 +191,18 @@ The frontend proxies `/api/*` to `http://localhost:6769` via the Next.js catch-a
 | `auditor`   | —     | Read-only cross-team visibility (standalone — only root can grant this) |
 
 A user can hold multiple roles. When a higher role is selected in the UI, lower roles in the hierarchy are automatically selected (Windows-style cascade). A user can only grant roles at or below their own level; only root can grant `auditor`.
+
+### Restrictions
+
+Independent of roles, a user can also have one or more **write restrictions**, set in the same Create/Edit User form as roles:
+
+| Restriction  | Section         | Removes |
+| ------------ | --------------- | ------- |
+| `hostgroups` | Data Collection | Create/rename/delete host groups and editing their membership |
+| `items`      | Monitoring      | Create/edit/delete items on any host |
+| `triggers`   | Monitoring      | Create/edit/delete triggers on any host |
+
+Restrictions remove write access even if the user's role would otherwise grant it (e.g. a `team_lead` with the `hostgroups` restriction can still manage users and hosts, but not host groups). Read access is unaffected. `root` always bypasses restrictions.
 
 ---
 
@@ -299,7 +314,7 @@ All paths require a `Bearer` JWT unless noted. "Operator+" = root / team_lead / 
 | PUT    | `/triggers/{triggerid}`  | Operator+ | Update name, severity, status, or expression |
 | DELETE | `/triggers/{triggerid}`  | Operator+ | Delete a trigger |
 
-`POST /items` and its specialized siblings each add a different Zabbix item type — `/items/http`, `/items/service`, `/items/filewatch`, `/items/script`, `/items/db/odbc`, `/items/db/agent2`, `/items/snmp`, `/items/snmptrap`, `/items/internal`, `/items/trapper`, `/items/external`, `/items/ipmi`, `/items/ssh`, `/items/telnet`, `/items/jmx`, `/items/calculated`, `/items/dependent`, `/items/zabbix-script`, `/items/browser` — all `POST`, all Operator+, each with its own request body shape (see `Zabbix_Main.py` for the per-type Pydantic models).
+`POST /items` and its specialized siblings each add a different Zabbix item type — `/items/http`, `/items/service`, `/items/filewatch`, `/items/script`, `/items/db/odbc`, `/items/db/agent2`, `/items/snmp`, `/items/snmptrap`, `/items/internal`, `/items/trapper`, `/items/external`, `/items/ipmi`, `/items/ssh`, `/items/telnet`, `/items/jmx`, `/items/calculated`, `/items/dependent`, `/items/zabbix-script`, `/items/browser` — all `POST`, all Operator+, each with its own request body shape (see `api/schemas/items.py` for the per-type Pydantic models). Every one of these (plus `/items/process` and `/items/winsvc`, but not `/items/filewatch`, which has its own trigger model) accepts an optional `create_trigger` flag that auto-creates a trigger for the new item — see the ItemManager architecture note in `CLAUDE.md` for how the trigger type is chosen.
 
 ### Metrics
 
@@ -307,6 +322,7 @@ All paths require a `Bearer` JWT unless noted. "Operator+" = root / team_lead / 
 | ------ | ----------------------------- | ---- | ----------- |
 | GET    | `/metrics/problems`           | Yes  | Active Zabbix problems |
 | POST   | `/metrics/problems/{eventid}/acknowledge` | Yes | Acknowledge a Zabbix problem |
+| POST   | `/metrics/problems/{eventid}/unacknowledge` | Team Lead+ | Unacknowledge a Zabbix problem, reopening it |
 | POST   | `/metrics/problems/{eventid}/note` | Yes | Add a note to a problem without acknowledging it |
 | GET    | `/metrics/acknowledgements`   | Yes  | Acknowledgement audit log |
 | GET    | `/metrics/problems/history`   | Yes  | Historical problems in a time window |
@@ -341,7 +357,7 @@ All paths require a `Bearer` JWT unless noted. "Operator+" = root / team_lead / 
 | ------ | -------------------------- | ---------- | ----------- |
 | GET    | `/users`                   | Team Lead+ | List users (root sees all; team lead sees their team) |
 | POST   | `/users`                   | Team Lead+ | Create a new user |
-| PUT    | `/users/{user_id}`         | Team Lead+ | Update roles and/or team |
+| PUT    | `/users/{user_id}`         | Team Lead+ | Update roles, restrictions, and/or team |
 | PUT    | `/users/{user_id}/password`| Team Lead+ | Change a user's password |
 | DELETE | `/users/{user_id}`         | Team Lead+ | Delete a user |
 
@@ -376,9 +392,10 @@ All `GET`s require any authenticated user; all `POST`/`PUT`/`DELETE`s require Te
 | Method | Path                     | Auth | Description |
 | ------ | ------------------------ | ---- | ----------- |
 | GET    | `/reports/top-triggers`  | Yes  | Top triggers by problem count (`?limit=&severity_min=&hours=`) |
-| GET    | `/reports/audit-log`     | Yes  | Zabbix audit log (`?limit=&time_from=&userid=`) |
+| GET    | `/reports/audit-log`     | Team Lead+ | Zabbix's own audit log (`?limit=&time_from=&userid=`) — always attributes writes to the shared `ZABBIX_USER` service account, never the real portal user (see `/reports/portal-actions`) |
+| GET    | `/reports/portal-actions` | Team Lead+ | Portal-side write-action log, correctly attributed to the real logged-in user (`?limit=&hours=`) |
 | GET    | `/reports/action-log`    | Yes  | Action execution log (`?limit=&time_from=`) |
-| GET    | `/reports/availability`  | Yes  | Per-host-group availability (`?hours=&groupid=`) |
+| GET    | `/reports/availability`  | Yes  | Per-host-group availability (`?hours=&groupid=`, or an explicit `?time_from=&time_to=` epoch-second range up to 6 months — the two are mutually exclusive; `time_from`/`time_to` must be provided together) |
 | GET    | `/reports/notifications` | Yes  | Notification history (`?hours=&limit=`) |
 
 ### Actions, Media Types & Scripts
@@ -475,7 +492,7 @@ CSV or XLSX with columns:
 
 Deployments are managed by ArgoCD using Helm charts from the `zabbix-portal-gitops` repo. The CI pipeline here builds images and updates image tags in that repo; ArgoCD syncs each environment automatically (staging) or on manual approval (production, DR).
 
-Sensitive credentials (`ZABBIX_PASS`, `SECRET_KEY`, the DB connection string) belong in a Kubernetes Secret referenced via `existingSecret` in Helm values — never baked into images or stored in plain ConfigMaps. See [`RELEASING.md`](./RELEASING.md) for the full release runbook.
+Sensitive credentials (`ZABBIX_PASS`, `SECRET_KEY`, the DB connection string) belong in a Kubernetes Secret referenced via `existingSecret` in Helm values — never baked into images or stored in plain ConfigMaps. See [`RELEASING.md`](RELEASING.md) for the full release runbook.
 
 ---
 
@@ -488,15 +505,15 @@ This project is designed to run in air-gapped or private-registry environments:
 - Both containers run as **non-root** (`USER 1001`, GID 0) — the frontend as a Next.js standalone server (`node server.js`) on port 42069, with no nginx, so they work under OpenShift's `restricted` SCC.
 - The frontend Route has TLS enabled by default (edge termination); OpenShift's router provides the wildcard certificate automatically when using the auto-generated hostname.
 
-See [`PRIVATE_NETWORK.md`](./PRIVATE_NETWORK.md) for the complete line-by-line checklist of every value to change, and [`CLAUDE.md`](./CLAUDE.md) for the architectural rationale.
+See [`PRIVATE_NETWORK.md`](PRIVATE_NETWORK.md) for the complete line-by-line checklist of every value to change, and [`CLAUDE.md`](CLAUDE.md) for the architectural rationale.
 
 ---
 
 ## Documentation
 
-- [`CLAUDE.md`](./CLAUDE.md) — architectural reference and conventions
-- [`WORKFLOW.md`](./WORKFLOW.md) — development + CI/CD pipeline flow
-- [`RELEASING.md`](./RELEASING.md) — release / deployment runbook
-- [`PRIVATE_NETWORK.md`](./PRIVATE_NETWORK.md) — air-gapped configuration checklist
-- [`DEVELOPMENT.md`](./DEVELOPMENT.md) — running the stack with Docker
-- [`OVERWATCH_USER_GUIDE.html`](./OVERWATCH_USER_GUIDE.html) — end-user guide
+- [`CLAUDE.md`](CLAUDE.md) — architectural reference and conventions
+- [`WORKFLOW.md`](WORKFLOW.md) — development + CI/CD pipeline flow
+- [`RELEASING.md`](RELEASING.md) — release / deployment runbook
+- [`PRIVATE_NETWORK.md`](PRIVATE_NETWORK.md) — air-gapped configuration checklist
+- [`DEVELOPMENT.md`](DEVELOPMENT.md) — running the stack with Docker
+- [`OVERWATCH_USER_GUIDE.html`](OVERWATCH_USER_GUIDE.html) — end-user guide

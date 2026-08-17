@@ -2,7 +2,6 @@
 
 import AddIcon from "@mui/icons-material/Add";
 import PersonAddOutlinedIcon from "@mui/icons-material/PersonAddOutlined";
-import SearchIcon from "@mui/icons-material/Search";
 import {
   Alert,
   Box,
@@ -17,7 +16,6 @@ import {
   Divider,
   FormControl,
   Grid,
-  InputAdornment,
   InputLabel,
   MenuItem,
   Select,
@@ -29,7 +27,6 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import type React from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { api, type Host, type Team, type TeamUser, type UserRow } from "../../app/api";
@@ -38,6 +35,7 @@ import { StatTicker } from "../../app/components/StatTicker";
 import { useAuth } from "../../app/context/AuthContext";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { useSync } from "../../app/context/SyncContext";
+import { FilterSearchField } from "../../components/FilterBar";
 import { TeamCard } from "./TeamCard";
 
 type Snack = { msg: string; sev: "success" | "error" };
@@ -403,21 +401,10 @@ const AddMemberDialog = ({
       ) : (
         <>
           <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 1 }}>
-            <TextField
-              slotProps={{
-                input: {
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon sx={{ fontSize: 16, color: "text.disabled" }} />
-                    </InputAdornment>
-                  ),
-                },
-              }}
-              size="small"
+            <FilterSearchField
               placeholder="Search users…"
               value={memberSearch}
-              onChange={(e) => setMemberSearch(e.target.value)}
-              sx={{ flex: 1 }}
+              onChange={setMemberSearch}
             />
             <Button size="small" onClick={() => setSelectedMembers(addableUsers.map((u) => u.id))}>
               All
@@ -573,22 +560,12 @@ const AssignHostsTab = ({
   }
   return (
     <>
-      <TextField
-        size="small"
+      <FilterSearchField
         fullWidth
         placeholder="Search servers…"
         value={hostSearch}
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setHostSearch(e.target.value)}
+        onChange={setHostSearch}
         sx={{ mb: 1 }}
-        slotProps={{
-          input: {
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon sx={{ fontSize: 16, color: "text.disabled" }} />
-              </InputAdornment>
-            ),
-          },
-        }}
       />
       <Box
         sx={{
@@ -658,22 +635,12 @@ const AssignGroupsTab = ({
   }
   return (
     <>
-      <TextField
-        size="small"
+      <FilterSearchField
         fullWidth
         placeholder="Search groups…"
         value={groupSearch}
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGroupSearch(e.target.value)}
+        onChange={setGroupSearch}
         sx={{ mb: 1 }}
-        slotProps={{
-          input: {
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon sx={{ fontSize: 16, color: "text.disabled" }} />
-              </InputAdornment>
-            ),
-          },
-        }}
       />
       <Box
         sx={{

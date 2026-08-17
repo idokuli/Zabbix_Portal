@@ -47,9 +47,7 @@ def _jit_provision_ldap_user(username: str, password: str, client_ip: str) -> tu
     return user, ldap_display_name
 
 
-def _authenticate_existing_user(
-    user: dict, password: str, ldap_on: bool, client_ip: str
-) -> tuple[bool, str]:
+def _authenticate_existing_user(user: dict, password: str, ldap_on: bool) -> tuple[bool, str]:
     """Returns (authenticated, ldap_display_name) for a user already in the portal DB."""
     # root always uses internal auth — prevents LDAP misconfiguration from locking out the admin.
     # Exception: LDAP-sourced users always authenticate via LDAP regardless of their portal role,
@@ -91,9 +89,7 @@ def login(request: Request, data: LoginRequest):
         if not user:
             logger.warning("Failed login attempt for username %r from %s.", username, client_ip)
             raise HTTPException(status_code=401, detail=_INVALID_CREDENTIALS)
-        authenticated, ldap_display_name = _authenticate_existing_user(
-            user, data.password, ldap_on, client_ip
-        )
+        authenticated, ldap_display_name = _authenticate_existing_user(user, data.password, ldap_on)
 
     if not authenticated:
         logger.warning("Failed login attempt for username %r from %s.", username, client_ip)
@@ -111,7 +107,12 @@ def login(request: Request, data: LoginRequest):
         client_ip,
     )
     token = create_token(
-        user["id"], user["username"], effective_roles, user["team_id"], display_name
+        user["id"],
+        user["username"],
+        effective_roles,
+        user["team_id"],
+        display_name,
+        user.get("restrictions", []),
     )
     return {
         "access_token": token,
@@ -121,6 +122,7 @@ def login(request: Request, data: LoginRequest):
             "username": user["username"],
             "display_name": display_name,
             "roles": effective_roles,
+            "restrictions": user.get("restrictions", []),
             "team_id": user["team_id"],
         },
     }

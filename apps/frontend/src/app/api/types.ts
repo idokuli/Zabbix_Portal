@@ -246,6 +246,7 @@ export type UserRow = {
   username: string;
   email: string;
   roles: string[];
+  restrictions?: string[];
   team_id: number | null;
   team_name: string | null;
   display_name?: string;

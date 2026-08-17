@@ -8,7 +8,10 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from starlette.concurrency import run_in_threadpool
 
+import Audit_Log
+from Auth import try_decode_token
 from api.lifespan import lifespan
 from api.limiter import limiter
 from api.routes import register_routes
@@ -58,9 +61,34 @@ app.add_middleware(
 )
 
 
+_MUTATING_ACTIONS = {"POST": "create", "PUT": "update", "PATCH": "update", "DELETE": "delete"}
+
+
+def _record_portal_audit(request: Request, status_code: int, action: str) -> None:
+    """Best-effort write to the portal's own audit log — see Audit_Log.py for why
+    Zabbix's own auditlog.get can't be used for this."""
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.lower().startswith("bearer "):
+        return
+    payload = try_decode_token(auth_header[7:])
+    if not payload:
+        return
+    Audit_Log.record_action(
+        user_id=int(payload["sub"]) if payload.get("sub") else None,
+        username=payload.get("username", "unknown"),
+        method=request.method,
+        path=request.url.path,
+        action=action,
+        status_code=status_code,
+        ip=request.client.host if request.client else "",
+    )
+
+
 @app.middleware("http")
 async def _log_requests(request: Request, call_next):
-    """Log every request with method, path, status code, and duration. Skip /health."""
+    """Log every request with method, path, status code, and duration. Skip /health.
+    Also records mutating requests (POST/PUT/PATCH/DELETE) into the portal's own audit
+    log, keyed to the real logged-in user."""
     if request.url.path == "/health":
         return await call_next(request)
     t0 = time.monotonic()
@@ -73,6 +101,12 @@ async def _log_requests(request: Request, call_next):
         response.status_code,
         ms,
     )
+    action = _MUTATING_ACTIONS.get(request.method)
+    # /auth/login is a POST but the caller isn't authenticated yet — nothing to attribute.
+    if action and request.url.path != "/auth/login":
+        # record_action() is a blocking psycopg2 call — offload it so it doesn't stall
+        # this worker's event loop on every mutating request.
+        await run_in_threadpool(_record_portal_audit, request, response.status_code, action)
     return response
 
 

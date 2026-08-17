@@ -69,6 +69,7 @@ def create_user(
     team_id: int | None = None,
     source: str = "local",
     display_name: str = "",
+    restrictions: list[str] | None = None,
 ) -> dict | None:
     if roles is None:
         roles = ["member"]
@@ -92,10 +93,20 @@ def create_user(
                 )
                 return None
             cur.execute(
-                """INSERT INTO team_users (username, email, roles, team_id, password_hash, source, display_name)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s)
-                   RETURNING id, username, email, roles, team_id, source, display_name""",
-                (username, email, roles, team_id, password_hash, source, display_name),
+                """INSERT INTO team_users
+                       (username, email, roles, team_id, password_hash, source, display_name, restrictions)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                   RETURNING id, username, email, roles, team_id, source, display_name, restrictions""",
+                (
+                    username,
+                    email,
+                    roles,
+                    team_id,
+                    password_hash,
+                    source,
+                    display_name,
+                    restrictions or [],
+                ),
             )
             row = dict(cur.fetchone())
             if team_id is not None:
@@ -140,7 +151,7 @@ def get_user_by_username(username: str) -> dict | None:
             # maps to several accounts is how someone ends up with the wrong roles
             # without anyone finding out, so surface it loudly instead.
             cur.execute(
-                """SELECT id, username, email, roles, team_id, password_hash, source, display_name
+                """SELECT id, username, email, roles, team_id, password_hash, source, display_name, restrictions
                    FROM team_users
                    WHERE LOWER(username) = LOWER(%s)
                    ORDER BY (username = %s) DESC, id ASC
@@ -171,7 +182,7 @@ def get_user_by_id(user_id: int) -> dict | None:
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, username, email, roles, team_id FROM team_users WHERE id = %s",
+                "SELECT id, username, email, roles, team_id, restrictions FROM team_users WHERE id = %s",
                 (user_id,),
             )
             row = cur.fetchone()
@@ -425,7 +436,7 @@ def list_users(team_id: int | None = None) -> list[dict]:
         with conn.cursor() as cur:
             if team_id is not None:
                 cur.execute(
-                    """SELECT u.id, u.username, u.email, u.roles, u.team_id, u.source, u.display_name, t.name AS team_name
+                    """SELECT u.id, u.username, u.email, u.roles, u.restrictions, u.team_id, u.source, u.display_name, t.name AS team_name
                        FROM team_users u
                        LEFT JOIN teams t ON u.team_id = t.id
                        WHERE u.team_id = %s
@@ -434,7 +445,7 @@ def list_users(team_id: int | None = None) -> list[dict]:
                 )
             else:
                 cur.execute(
-                    """SELECT u.id, u.username, u.email, u.roles, u.team_id, u.source, u.display_name, t.name AS team_name
+                    """SELECT u.id, u.username, u.email, u.roles, u.restrictions, u.team_id, u.source, u.display_name, t.name AS team_name
                        FROM team_users u
                        LEFT JOIN teams t ON u.team_id = t.id
                        ORDER BY u.username"""
@@ -447,16 +458,18 @@ def list_users(team_id: int | None = None) -> list[dict]:
         conn.close()
 
 
-def update_user_profile(user_id: int, roles: list[str], team_id: int | None) -> bool:
-    """Update roles and home team. Setting team_id also grants membership in that
-    team — otherwise the user keeps the old team's host visibility even after their
+def update_user_profile(
+    user_id: int, roles: list[str], team_id: int | None, restrictions: list[str] | None = None
+) -> bool:
+    """Update roles, restrictions, and home team. Setting team_id also grants membership in
+    that team — otherwise the user keeps the old team's host visibility even after their
     home team changes, since that's resolved from user_team_memberships, not team_id."""
     conn = get_conn()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE team_users SET roles = %s, team_id = %s WHERE id = %s",
-                (roles, team_id, user_id),
+                "UPDATE team_users SET roles = %s, restrictions = %s, team_id = %s WHERE id = %s",
+                (roles, restrictions or [], team_id, user_id),
             )
             updated = cur.rowcount > 0
             if updated and team_id is not None:

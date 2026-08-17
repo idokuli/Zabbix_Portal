@@ -36,6 +36,7 @@
     "availability": "Availability",
     "topTriggers": "Top triggers",
     "auditLog": "Audit log",
+    "portalActions": "Portal actions",
     "actionLog": "Action log",
     "alertHistory": "Alert history",
     "usersGroup": "Users",
@@ -249,6 +250,7 @@
     "title": "Reports",
     "topTriggers": "Top Triggers",
     "auditLog": "Audit Log",
+    "portalActions": "Portal Actions",
     "actionLog": "Action Log",
     "availability": "Availability",
     "notifications": "Notifications"

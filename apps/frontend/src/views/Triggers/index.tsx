@@ -1,13 +1,11 @@
 "use client";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutlineOutlined";
-import ClearIcon from "@mui/icons-material/Clear";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import WifiOffIcon from "@mui/icons-material/WifiOff";
 import {
   Alert,
@@ -20,11 +18,9 @@ import {
   Divider,
   FormControl,
   IconButton,
-  InputAdornment,
   InputLabel,
   Menu,
   MenuItem,
-  Select,
   Skeleton,
   Snackbar,
   Stack,
@@ -34,7 +30,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -43,6 +38,8 @@ import { api, type Host } from "../../app/api";
 import { ConfirmDelete } from "../../app/components/ConfirmDelete";
 import { formatDateTime } from "../../app/datetime";
 import { monoFontFamily } from "../../app/theme";
+import { FilterSearchField, filterLabelSx } from "../../components/FilterBar";
+import { SearchableSelect } from "../../components/SearchableSelect";
 import { AddTriggerDialog } from "./AddTriggerDialog";
 import { BulkTriggerDialog } from "./BulkTriggerDialog";
 import { EditTriggerDialog } from "./EditTriggerDialog";
@@ -621,46 +618,29 @@ export const Triggers = () => {
               direction={{ xs: "column", sm: "row" }}
               spacing={1.5}
             >
-              <TextField
-                slotProps={{
-                  input: {
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <SearchOutlinedIcon sx={{ fontSize: 18, color: "text.disabled" }} />
-                      </InputAdornment>
-                    ),
-                    endAdornment: search ? (
-                      <InputAdornment position="end">
-                        <IconButton size="small" onClick={() => setSearch("")}>
-                          <ClearIcon sx={{ fontSize: 16 }} />
-                        </IconButton>
-                      </InputAdornment>
-                    ) : null,
-                  },
-                }}
-                size="small"
+              <FilterSearchField
                 placeholder="Search by name or expression…"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={setSearch}
                 disabled={!selectedHost}
-                sx={{ flex: 1 }}
               />
               <FormControl size="small" sx={{ minWidth: 200 }}>
-                <InputLabel>Filter by host</InputLabel>
-                <Select
-                  value={selectedHost}
+                <InputLabel sx={filterLabelSx}>Filter by host</InputLabel>
+                <SearchableSelect
                   label="Filter by host"
+                  value={selectedHost}
                   onChange={(e) => handleHostChange(e.target.value)}
+                  sx={filterLabelSx}
                 >
-                  <MenuItem value="">
+                  <MenuItem value="" sx={filterLabelSx}>
                     <em>All hosts</em>
                   </MenuItem>
                   {hosts.map((h) => (
-                    <MenuItem key={h.hostid} value={h.host}>
+                    <MenuItem key={h.hostid} value={h.host} sx={filterLabelSx}>
                       {h.host}
                     </MenuItem>
                   ))}
-                </Select>
+                </SearchableSelect>
               </FormControl>
               <Tooltip title="Refresh">
                 <span>
@@ -669,7 +649,7 @@ export const Triggers = () => {
                     onClick={() => void loadTriggers(selectedHost)}
                     disabled={loading || !selectedHost}
                   >
-                    <RefreshIcon fontSize="small" />
+                    <RefreshIcon sx={{ fontSize: 18 }} />
                   </IconButton>
                 </span>
               </Tooltip>

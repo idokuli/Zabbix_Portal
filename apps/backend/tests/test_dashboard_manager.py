@@ -16,9 +16,9 @@ import pytest
 @pytest.fixture()
 def mgr():
     with patch("zabbix_utils.ZabbixAPI"):
-        from Dashboard_Manager import Dashboard_Manager
+        from Dashboard_Manager import DashboardManager
 
-        m = Dashboard_Manager()
+        m = DashboardManager()
         m.zapi = MagicMock()
         m._cache = {}
         return m
@@ -202,9 +202,9 @@ def test_resolve_base_web_url():
         import os
 
         os.environ["ZABBIX_URL"] = "http://zabbix.corp/api_jsonrpc.php"
-        from Dashboard_Manager import Dashboard_Manager
+        from Dashboard_Manager import DashboardManager
 
-        m = Dashboard_Manager()
+        m = DashboardManager()
         m.zapi = MagicMock()
     assert m._base_web_url == "http://zabbix.corp"
 

@@ -12,6 +12,9 @@ export const PERIOD_OPTIONS = [
   { label: "12 h", period: 43200, minutes: 720 },
   { label: "24 h", period: 86400, minutes: 1440 },
   { label: "7 d", period: 604800, minutes: 10080 },
+  { label: "1 M", period: 2592000, minutes: 43200 },
+  { label: "3 M", period: 7776000, minutes: 129600 },
+  { label: "6 M", period: 16416000, minutes: 273600 },
 ] as const;
 
 /** Chart-axis label. Delegates to the canonical formatter — see app/datetime.ts. */

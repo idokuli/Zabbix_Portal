@@ -26,6 +26,7 @@ import { useCallback, useState } from "react";
 import { api } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
 import { SEVERITIES } from "../../app/severity";
+import { FILTER_BAR_SX, filterLabelSx } from "../../components/FilterBar";
 import { fmtTs, TimeBar } from "./shared";
 import { useReportLoader } from "./useReportLoader";
 
@@ -72,20 +73,31 @@ export const TopTriggersTab = () => {
         title="Top Triggers"
         description="Most frequently firing triggers ranked by problem count in the selected time window."
       />
-      <Box sx={{ display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
+      <Box sx={FILTER_BAR_SX}>
         <TimeBar hours={hours} onChange={setHours} />
         <FormControl size="small" sx={{ minWidth: 140 }}>
-          <InputLabel>Min severity</InputLabel>
+          <InputLabel sx={filterLabelSx}>Min severity</InputLabel>
           <Select
             label="Min severity"
             value={severityMin}
             onChange={(e) => setSeverityMin(Number(e.target.value))}
+            sx={filterLabelSx}
           >
-            <MenuItem value={0}>All</MenuItem>
-            <MenuItem value={2}>Low+</MenuItem>
-            <MenuItem value={3}>Medium+</MenuItem>
-            <MenuItem value={4}>High+</MenuItem>
-            <MenuItem value={5}>Critical only</MenuItem>
+            <MenuItem value={0} sx={filterLabelSx}>
+              All
+            </MenuItem>
+            <MenuItem value={2} sx={filterLabelSx}>
+              Low+
+            </MenuItem>
+            <MenuItem value={3} sx={filterLabelSx}>
+              Medium+
+            </MenuItem>
+            <MenuItem value={4} sx={filterLabelSx}>
+              High+
+            </MenuItem>
+            <MenuItem value={5} sx={filterLabelSx}>
+              Critical only
+            </MenuItem>
           </Select>
         </FormControl>
         <Button

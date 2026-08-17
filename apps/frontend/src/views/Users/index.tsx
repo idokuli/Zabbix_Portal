@@ -5,7 +5,6 @@ import LockResetOutlinedIcon from "@mui/icons-material/LockResetOutlined";
 import PeopleOutlinedIcon from "@mui/icons-material/PeopleOutlined";
 import PersonAddOutlinedIcon from "@mui/icons-material/PersonAddOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import SearchIcon from "@mui/icons-material/Search";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import {
@@ -43,6 +42,8 @@ import { ConfirmDelete } from "../../app/components/ConfirmDelete";
 import { useAuth } from "../../app/context/AuthContext";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { useSync } from "../../app/context/SyncContext";
+import { FilterSearchField, filterLabelSx } from "../../components/FilterBar";
+import { RestrictionPicker } from "./RestrictionPicker";
 import { RolePicker } from "./RolePicker";
 import { avatarColor, ROLE_OPTIONS, roleColor, roleLabel, userInitials } from "./shared";
 
@@ -254,6 +255,8 @@ const EditUserDialog = ({
   editUser,
   editRoles,
   setEditRoles,
+  editRestrictions,
+  setEditRestrictions,
   isRoot,
   teams,
   editTeamId,
@@ -264,6 +267,8 @@ const EditUserDialog = ({
   editUser: UserRow | null;
   editRoles: string[];
   setEditRoles: Dispatch<SetStateAction<string[]>>;
+  editRestrictions: string[];
+  setEditRestrictions: Dispatch<SetStateAction<string[]>>;
   isRoot: boolean;
   teams: Team[];
   editTeamId: number | "";
@@ -285,6 +290,15 @@ const EditUserDialog = ({
             Roles — select one or more
           </Typography>
           <RolePicker selected={editRoles} onChange={setEditRoles} />
+        </Box>
+        <Box>
+          <Typography
+            variant="caption"
+            sx={{ color: "text.secondary", fontWeight: 500, mb: 1, display: "block" }}
+          >
+            Restrictions — removes write access even if the role above allows it
+          </Typography>
+          <RestrictionPicker selected={editRestrictions} onChange={setEditRestrictions} />
         </Box>
         {isRoot && (
           <FormControl fullWidth size="small">
@@ -388,6 +402,8 @@ const CreateUserDialog = ({
   setNewEmail,
   newRoles,
   setNewRoles,
+  newRestrictions,
+  setNewRestrictions,
   teams,
   newTeamId,
   setNewTeamId,
@@ -405,6 +421,8 @@ const CreateUserDialog = ({
   setNewEmail: (v: string) => void;
   newRoles: string[];
   setNewRoles: Dispatch<SetStateAction<string[]>>;
+  newRestrictions: string[];
+  setNewRestrictions: Dispatch<SetStateAction<string[]>>;
   teams: Team[];
   newTeamId: number | "";
   setNewTeamId: (id: number | "") => void;
@@ -462,6 +480,15 @@ const CreateUserDialog = ({
           </Typography>
           <RolePicker selected={newRoles} onChange={setNewRoles} />
         </Box>
+        <Box>
+          <Typography
+            variant="caption"
+            sx={{ color: "text.secondary", fontWeight: 500, mb: 1, display: "block" }}
+          >
+            Restrictions — removes write access even if the role above allows it
+          </Typography>
+          <RestrictionPicker selected={newRestrictions} onChange={setNewRestrictions} />
+        </Box>
         <FormControl fullWidth size="small">
           <InputLabel>Team (optional)</InputLabel>
           <Select
@@ -510,6 +537,7 @@ export const Users = () => {
   // ── Edit dialog ────────────────────────────────────────────────────────
   const [editUser, setEditUser] = useState<UserRow | null>(null);
   const [editRoles, setEditRoles] = useState<string[]>([]);
+  const [editRestrictions, setEditRestrictions] = useState<string[]>([]);
   const [editTeamId, setEditTeamId] = useState<number | "">("");
 
   // ── Password dialog ────────────────────────────────────────────────────
@@ -522,6 +550,7 @@ export const Users = () => {
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newRoles, setNewRoles] = useState<string[]>([]);
+  const [newRestrictions, setNewRestrictions] = useState<string[]>([]);
   const [newTeamId, setNewTeamId] = useState<number | "">("");
 
   const [expandedUserId, setExpandedUserId] = useState<number | null>(null);
@@ -559,6 +588,7 @@ export const Users = () => {
   const openEdit = (u: UserRow) => {
     setEditUser(u);
     setEditRoles(u.roles ?? []);
+    setEditRestrictions(u.restrictions ?? []);
     setEditTeamId(u.team_id ?? "");
   };
 
@@ -569,6 +599,7 @@ export const Users = () => {
     try {
       await api.updateUser(editUser.id, {
         roles: editRoles,
+        restrictions: editRestrictions,
         team_id: editTeamId !== "" ? editTeamId : null,
       });
       setSnack({ msg: "User updated.", sev: "success" });
@@ -614,6 +645,7 @@ export const Users = () => {
         password: newPassword,
         email: newEmail.trim(),
         roles: newRoles,
+        restrictions: newRestrictions,
         team_id: newTeamId !== "" ? newTeamId : undefined,
       });
       setSnack({ msg: "User created.", sev: "success" });
@@ -622,6 +654,7 @@ export const Users = () => {
       setNewEmail("");
       setNewPassword("");
       setNewRoles([]);
+      setNewRestrictions([]);
       setNewTeamId("");
       void load();
     } catch (e) {
@@ -672,35 +705,27 @@ export const Users = () => {
             direction={{ xs: "column", sm: "row" }}
             spacing={1.5}
           >
-            <TextField
-              slotProps={{
-                input: {
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon sx={{ fontSize: 18, color: "text.disabled" }} />
-                    </InputAdornment>
-                  ),
-                },
-              }}
+            <FilterSearchField
               placeholder="Search by name or email…"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              size="small"
-              sx={{ flex: 1 }}
+              onChange={setSearch}
             />
             {isRoot && (
               <FormControl size="small" sx={{ minWidth: 160 }}>
-                <InputLabel>Team</InputLabel>
+                <InputLabel sx={filterLabelSx}>Team</InputLabel>
                 <Select
                   value={filterTeam}
                   label="Team"
                   onChange={(e: SelectChangeEvent<number | "">) =>
                     setFilterTeam(e.target.value as number | "")
                   }
+                  sx={filterLabelSx}
                 >
-                  <MenuItem value="">All teams</MenuItem>
+                  <MenuItem value="" sx={filterLabelSx}>
+                    All teams
+                  </MenuItem>
                   {teams.map((t) => (
-                    <MenuItem key={t.id} value={t.id}>
+                    <MenuItem key={t.id} value={t.id} sx={filterLabelSx}>
                       {t.name}
                     </MenuItem>
                   ))}
@@ -708,15 +733,18 @@ export const Users = () => {
               </FormControl>
             )}
             <FormControl size="small" sx={{ minWidth: 140 }}>
-              <InputLabel>Role</InputLabel>
+              <InputLabel sx={filterLabelSx}>Role</InputLabel>
               <Select
                 value={filterRole}
                 label="Role"
                 onChange={(e: SelectChangeEvent) => setFilterRole(e.target.value)}
+                sx={filterLabelSx}
               >
-                <MenuItem value="">All roles</MenuItem>
+                <MenuItem value="" sx={filterLabelSx}>
+                  All roles
+                </MenuItem>
                 {ROLE_OPTIONS.map((r) => (
-                  <MenuItem key={r.value} value={r.value}>
+                  <MenuItem key={r.value} value={r.value} sx={filterLabelSx}>
                     {r.label}
                   </MenuItem>
                 ))}
@@ -765,6 +793,8 @@ export const Users = () => {
         editUser={editUser}
         editRoles={editRoles}
         setEditRoles={setEditRoles}
+        editRestrictions={editRestrictions}
+        setEditRestrictions={setEditRestrictions}
         isRoot={isRoot}
         teams={teams}
         editTeamId={editTeamId}
@@ -798,6 +828,8 @@ export const Users = () => {
         setNewEmail={setNewEmail}
         newRoles={newRoles}
         setNewRoles={setNewRoles}
+        newRestrictions={newRestrictions}
+        setNewRestrictions={setNewRestrictions}
         teams={teams}
         newTeamId={newTeamId}
         setNewTeamId={setNewTeamId}

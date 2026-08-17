@@ -1,13 +1,11 @@
 "use client";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import SearchIcon from "@mui/icons-material/Search";
 import {
   Alert,
   Box,
   Chip,
   FormControl,
   IconButton,
-  InputAdornment,
   InputLabel,
   MenuItem,
   Paper,
@@ -19,7 +17,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -28,6 +25,7 @@ import { api } from "../../app/api";
 import type { StoredNotif } from "../../app/api/types";
 import { TabHeader } from "../../app/components/TabHeader";
 import { formatDateTime } from "../../app/datetime";
+import { FILTER_BAR_SX, FilterSearchField, filterLabelSx } from "../../components/FilterBar";
 import { formatAge, SeverityChip } from "../Metrics/shared";
 
 export const NotificationHistoryTab = () => {
@@ -78,51 +76,57 @@ export const NotificationHistoryTab = () => {
         </Alert>
       )}
 
-      <Box sx={{ display: "flex", gap: 1.5, mb: 2, alignItems: "center", flexWrap: "wrap" }}>
-        <TextField
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon sx={{ fontSize: 16 }} />
-                </InputAdornment>
-              ),
-            },
-          }}
-          size="small"
-          placeholder="Search host or name…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          sx={{ flex: 1, minWidth: 180 }}
-        />
+      <Box sx={FILTER_BAR_SX}>
+        {!loading && <Chip label={`${filtered.length} / ${history.length}`} size="small" />}
+        <FilterSearchField placeholder="Search host or name…" value={search} onChange={setSearch} />
         <FormControl size="small" sx={{ minWidth: 130 }}>
-          <InputLabel sx={{ fontSize: "0.78rem" }}>Source</InputLabel>
+          <InputLabel sx={filterLabelSx}>Source</InputLabel>
           <Select
             label="Source"
             value={sourceFilter}
             onChange={(e) => setSourceFilter(e.target.value as "" | "zabbix" | "rule")}
-            sx={{ fontSize: "0.78rem" }}
+            sx={filterLabelSx}
           >
-            <MenuItem value="">All</MenuItem>
-            <MenuItem value="zabbix">Zabbix</MenuItem>
-            <MenuItem value="rule">Alert rule</MenuItem>
+            <MenuItem value="" sx={filterLabelSx}>
+              All
+            </MenuItem>
+            <MenuItem value="zabbix" sx={filterLabelSx}>
+              Zabbix
+            </MenuItem>
+            <MenuItem value="rule" sx={filterLabelSx}>
+              Alert rule
+            </MenuItem>
           </Select>
         </FormControl>
         <FormControl size="small" sx={{ minWidth: 130 }}>
-          <InputLabel sx={{ fontSize: "0.78rem" }}>Severity</InputLabel>
+          <InputLabel sx={filterLabelSx}>Severity</InputLabel>
           <Select
             label="Severity"
             value={severityFilter}
             onChange={(e) => setSeverityFilter(e.target.value as number | "")}
-            sx={{ fontSize: "0.78rem" }}
+            sx={filterLabelSx}
           >
-            <MenuItem value="">All</MenuItem>
-            <MenuItem value={5}>Disaster</MenuItem>
-            <MenuItem value={4}>High</MenuItem>
-            <MenuItem value={3}>Average</MenuItem>
-            <MenuItem value={2}>Warning</MenuItem>
-            <MenuItem value={1}>Information</MenuItem>
-            <MenuItem value={0}>Not classified</MenuItem>
+            <MenuItem value="" sx={filterLabelSx}>
+              All
+            </MenuItem>
+            <MenuItem value={5} sx={filterLabelSx}>
+              Disaster
+            </MenuItem>
+            <MenuItem value={4} sx={filterLabelSx}>
+              High
+            </MenuItem>
+            <MenuItem value={3} sx={filterLabelSx}>
+              Average
+            </MenuItem>
+            <MenuItem value={2} sx={filterLabelSx}>
+              Warning
+            </MenuItem>
+            <MenuItem value={1} sx={filterLabelSx}>
+              Information
+            </MenuItem>
+            <MenuItem value={0} sx={filterLabelSx}>
+              Not classified
+            </MenuItem>
           </Select>
         </FormControl>
         <Tooltip title="Refresh">
@@ -130,13 +134,6 @@ export const NotificationHistoryTab = () => {
             <RefreshIcon sx={{ fontSize: 18 }} />
           </IconButton>
         </Tooltip>
-        {!loading && (
-          <Chip
-            label={`${filtered.length} / ${history.length}`}
-            size="small"
-            sx={{ height: 20, fontSize: "0.68rem" }}
-          />
-        )}
       </Box>
 
       <TableContainer component={Paper} variant="outlined">

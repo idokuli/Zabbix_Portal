@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from Auth import get_current_user, require_admin
+from Auth import get_current_user, require_admin, require_hostgroup_write
 from api.managers import dc_bot
 
 router = APIRouter(tags=["DataCollection"])
@@ -94,7 +94,9 @@ def list_host_groups(current_user: dict = Depends(get_current_user)):
     summary="Create host group",
     status_code=201,
 )
-def create_host_group(body: dict = Body(...), current_user: dict = Depends(require_admin)):
+def create_host_group(
+    body: dict = Body(...), current_user: dict = Depends(require_hostgroup_write)
+):
     name = (body.get("name") or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail=_NAME_REQUIRED)
@@ -106,7 +108,7 @@ def create_host_group(body: dict = Body(...), current_user: dict = Depends(requi
 
 @router.put("/dc/host-groups/{groupid}", tags=["DataCollection"], summary="Rename host group")
 def update_host_group(
-    groupid: str, body: dict = Body(...), current_user: dict = Depends(require_admin)
+    groupid: str, body: dict = Body(...), current_user: dict = Depends(require_hostgroup_write)
 ):
     name = (body.get("name") or "").strip()
     if not name:
@@ -117,7 +119,7 @@ def update_host_group(
 
 
 @router.delete("/dc/host-groups/{groupid}", tags=["DataCollection"], summary="Delete host group")
-def delete_host_group(groupid: str, current_user: dict = Depends(require_admin)):
+def delete_host_group(groupid: str, current_user: dict = Depends(require_hostgroup_write)):
     if not dc_bot.delete_host_group(groupid):
         raise HTTPException(status_code=404, detail="Host group not found or could not be deleted.")
     return {"message": "Host group deleted."}
@@ -138,7 +140,7 @@ def get_host_group_members(groupid: str, current_user: dict = Depends(get_curren
     summary="Set host group members",
 )
 def set_host_group_members(
-    groupid: str, body: dict = Body(...), current_user: dict = Depends(require_admin)
+    groupid: str, body: dict = Body(...), current_user: dict = Depends(require_hostgroup_write)
 ):
     hostids = body.get("hostids", [])
     ok, err = dc_bot.set_host_group_members(groupid, hostids)

@@ -4,7 +4,6 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import NotificationsActiveOutlinedIcon from "@mui/icons-material/NotificationsActiveOutlined";
 import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
-import SearchIcon from "@mui/icons-material/Search";
 import StopOutlinedIcon from "@mui/icons-material/StopOutlined";
 import VolumeOffOutlinedIcon from "@mui/icons-material/VolumeOffOutlined";
 import {
@@ -15,7 +14,6 @@ import {
   Divider,
   FormControl,
   IconButton,
-  InputAdornment,
   InputLabel,
   MenuItem,
   Paper,
@@ -30,7 +28,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -39,6 +36,7 @@ import { type AlertEvent, type AlertRule, api, type Host } from "../../app/api";
 import { ConfirmDelete } from "../../app/components/ConfirmDelete";
 import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
+import { FilterSearchField, filterLabelSx } from "../../components/FilterBar";
 import { type CustomSound, listSounds } from "../../lib/soundLibrary";
 import {
   AddRuleDialog,
@@ -665,24 +663,9 @@ export const AlertRulesTab = () => {
       />
       {/* Toolbar */}
       <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", mb: 2 }}>
-        <TextField
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon sx={{ fontSize: 18, color: "text.disabled" }} />
-                </InputAdornment>
-              ),
-            },
-          }}
-          placeholder="Search host or item…"
-          size="small"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          sx={{ flex: 1 }}
-        />
+        <FilterSearchField placeholder="Search host or item…" value={search} onChange={setSearch} />
         <FormControl size="small" sx={{ minWidth: 160 }}>
-          <InputLabel sx={{ fontSize: "0.82rem" }}>Host group</InputLabel>
+          <InputLabel sx={filterLabelSx}>Host group</InputLabel>
           <Select
             label="Host group"
             value={groupFilter}
@@ -690,27 +673,31 @@ export const AlertRulesTab = () => {
               setGroupFilter(e.target.value);
               setHostFilter("");
             }}
-            sx={{ fontSize: "0.82rem" }}
+            sx={filterLabelSx}
           >
-            <MenuItem value="">All groups</MenuItem>
+            <MenuItem value="" sx={filterLabelSx}>
+              All groups
+            </MenuItem>
             {availableGroups.map((g) => (
-              <MenuItem key={g} value={g} sx={{ fontSize: "0.82rem" }}>
+              <MenuItem key={g} value={g} sx={filterLabelSx}>
                 {g}
               </MenuItem>
             ))}
           </Select>
         </FormControl>
         <FormControl size="small" sx={{ minWidth: 160 }}>
-          <InputLabel sx={{ fontSize: "0.82rem" }}>Host</InputLabel>
+          <InputLabel sx={filterLabelSx}>Host</InputLabel>
           <Select
             label="Host"
             value={hostFilter}
             onChange={(e) => setHostFilter(e.target.value)}
-            sx={{ fontSize: "0.82rem" }}
+            sx={filterLabelSx}
           >
-            <MenuItem value="">All hosts</MenuItem>
+            <MenuItem value="" sx={filterLabelSx}>
+              All hosts
+            </MenuItem>
             {visibleHosts.map((h) => (
-              <MenuItem key={h} value={h} sx={{ fontSize: "0.82rem" }}>
+              <MenuItem key={h} value={h} sx={filterLabelSx}>
                 {h}
               </MenuItem>
             ))}
@@ -720,7 +707,7 @@ export const AlertRulesTab = () => {
           <Chip
             label={`${filteredRules.length}${filteredRules.length !== rules.length ? ` / ${rules.length}` : ""}`}
             size="small"
-            sx={{ height: 20, fontSize: "0.68rem", flexShrink: 0 }}
+            sx={{ flexShrink: 0 }}
           />
         )}
         <Button

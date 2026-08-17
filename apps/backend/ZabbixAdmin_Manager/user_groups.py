@@ -13,7 +13,7 @@ USERS_STATUS = {0: "Enabled", 1: "Disabled"}
 
 
 class UserGroupsMixin:
-    """Mixed into ZabbixAdmin_Manager. Assumes `self.zapi` from Zabbix_Base."""
+    """Mixed into ZabbixAdminManager. Assumes `self.zapi` from ZabbixBase."""
 
     if TYPE_CHECKING:
         zapi: "ZabbixAPI | None"

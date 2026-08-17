@@ -13,7 +13,7 @@ os.environ.setdefault("ZABBIX_USER", "Admin")
 os.environ.setdefault("ZABBIX_PASS", "zabbix")
 
 # Import the module first so patch("api.deps.*") can resolve it via sys.modules.
-# Zabbix_Base connection is attempted lazily; patch it to avoid a real network call.
+# ZabbixBase connection is attempted lazily; patch it to avoid a real network call.
 with patch("zabbix_utils.ZabbixAPI"):
     pass  # noqa: E402
 

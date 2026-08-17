@@ -16,9 +16,9 @@ import pytest
 @pytest.fixture()
 def mgr():
     with patch("zabbix_utils.ZabbixAPI"):
-        from Metrics_Manager import Metrics_Manager
+        from Metrics_Manager import MetricsManager
 
-        m = Metrics_Manager()
+        m = MetricsManager()
         m.zapi = MagicMock()
         m._cache = {}
         return m
@@ -66,6 +66,21 @@ def test_acknowledge_problem(mgr):
 def test_acknowledge_problem_zapi_none(mgr):
     mgr.zapi = None
     result = mgr.acknowledge_problem("1", "msg")
+    assert result is False
+
+
+def test_unacknowledge_problem(mgr):
+    mgr.zapi.event.acknowledge.return_value = {"eventids": ["1"]}
+    result = mgr.unacknowledge_problem("1", "test", "reopening")
+    assert result is True
+    _, kwargs = mgr.zapi.event.acknowledge.call_args
+    assert kwargs["action"] == 20
+    assert "reopening" in kwargs["message"]
+
+
+def test_unacknowledge_problem_zapi_none(mgr):
+    mgr.zapi = None
+    result = mgr.unacknowledge_problem("1", "test")
     assert result is False
 
 

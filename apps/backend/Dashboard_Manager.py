@@ -5,7 +5,7 @@ from typing import Any
 
 import requests as _req
 
-from Zabbix_Base import Zabbix_Base
+from Zabbix_Base import ZabbixBase
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ def _safe_float(val: object) -> float | None:
         return None
 
 
-class Dashboard_Manager(Zabbix_Base):
+class DashboardManager(ZabbixBase):
     def __init__(self) -> None:
         super().__init__()
         self._web_session: _req.Session | None = None

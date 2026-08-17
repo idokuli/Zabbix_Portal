@@ -14,6 +14,12 @@ export const itemsApi = {
     status?: number;
     timeout?: string;
     apply_team_tag?: boolean;
+    create_trigger?: boolean;
+    trigger_operator?: string;
+    trigger_threshold?: number;
+    trigger_pattern?: string;
+    trigger_match_type?: string;
+    trigger_priority?: number;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items", {
       method: "POST",
@@ -200,6 +206,12 @@ export const itemsApi = {
     trends?: string;
     description?: string;
     apply_team_tag?: boolean;
+    create_trigger?: boolean;
+    trigger_operator?: string;
+    trigger_threshold?: number;
+    trigger_pattern?: string;
+    trigger_match_type?: string;
+    trigger_priority?: number;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items/http", {
       method: "POST",
@@ -215,6 +227,12 @@ export const itemsApi = {
     history?: string;
     trends?: string;
     description?: string;
+    create_trigger?: boolean;
+    trigger_operator?: string;
+    trigger_threshold?: number;
+    trigger_pattern?: string;
+    trigger_match_type?: string;
+    trigger_priority?: number;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items/service", {
       method: "POST",
@@ -298,6 +316,12 @@ export const itemsApi = {
     status?: number;
     timeout?: string;
     apply_team_tag?: boolean;
+    create_trigger?: boolean;
+    trigger_operator?: string;
+    trigger_threshold?: number;
+    trigger_pattern?: string;
+    trigger_match_type?: string;
+    trigger_priority?: number;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items/script", {
       method: "POST",
@@ -319,6 +343,12 @@ export const itemsApi = {
     trends?: string;
     status?: number;
     timeout?: string;
+    create_trigger?: boolean;
+    trigger_operator?: string;
+    trigger_threshold?: number;
+    trigger_pattern?: string;
+    trigger_match_type?: string;
+    trigger_priority?: number;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items/db/odbc", {
       method: "POST",
@@ -333,6 +363,12 @@ export const itemsApi = {
     extra_param?: string;
     item_name?: string;
     value_type?: number;
+    create_trigger?: boolean;
+    trigger_operator?: string;
+    trigger_threshold?: number;
+    trigger_pattern?: string;
+    trigger_match_type?: string;
+    trigger_priority?: number;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items/db/agent2", {
       method: "POST",
@@ -360,6 +396,12 @@ export const itemsApi = {
     trends?: string;
     description?: string;
     status?: number;
+    create_trigger?: boolean;
+    trigger_operator?: string;
+    trigger_threshold?: number;
+    trigger_pattern?: string;
+    trigger_match_type?: string;
+    trigger_priority?: number;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items/snmp", {
       method: "POST",
@@ -375,6 +417,12 @@ export const itemsApi = {
     trends?: string;
     description?: string;
     status?: number;
+    create_trigger?: boolean;
+    trigger_operator?: string;
+    trigger_threshold?: number;
+    trigger_pattern?: string;
+    trigger_match_type?: string;
+    trigger_priority?: number;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items/snmptrap", {
       method: "POST",
@@ -392,6 +440,12 @@ export const itemsApi = {
     trends?: string;
     description?: string;
     status?: number;
+    create_trigger?: boolean;
+    trigger_operator?: string;
+    trigger_threshold?: number;
+    trigger_pattern?: string;
+    trigger_match_type?: string;
+    trigger_priority?: number;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items/internal", {
       method: "POST",
@@ -408,6 +462,12 @@ export const itemsApi = {
     trends?: string;
     description?: string;
     status?: number;
+    create_trigger?: boolean;
+    trigger_operator?: string;
+    trigger_threshold?: number;
+    trigger_pattern?: string;
+    trigger_match_type?: string;
+    trigger_priority?: number;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items/trapper", {
       method: "POST",
@@ -425,6 +485,12 @@ export const itemsApi = {
     trends?: string;
     description?: string;
     status?: number;
+    create_trigger?: boolean;
+    trigger_operator?: string;
+    trigger_threshold?: number;
+    trigger_pattern?: string;
+    trigger_match_type?: string;
+    trigger_priority?: number;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items/external", {
       method: "POST",
@@ -443,6 +509,12 @@ export const itemsApi = {
     trends?: string;
     description?: string;
     status?: number;
+    create_trigger?: boolean;
+    trigger_operator?: string;
+    trigger_threshold?: number;
+    trigger_pattern?: string;
+    trigger_match_type?: string;
+    trigger_priority?: number;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items/ipmi", {
       method: "POST",
@@ -467,6 +539,12 @@ export const itemsApi = {
     description?: string;
     status?: number;
     timeout?: string;
+    create_trigger?: boolean;
+    trigger_operator?: string;
+    trigger_threshold?: number;
+    trigger_pattern?: string;
+    trigger_match_type?: string;
+    trigger_priority?: number;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items/ssh", {
       method: "POST",
@@ -487,6 +565,12 @@ export const itemsApi = {
     trends?: string;
     description?: string;
     status?: number;
+    create_trigger?: boolean;
+    trigger_operator?: string;
+    trigger_threshold?: number;
+    trigger_pattern?: string;
+    trigger_match_type?: string;
+    trigger_priority?: number;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items/telnet", {
       method: "POST",
@@ -507,6 +591,12 @@ export const itemsApi = {
     trends?: string;
     description?: string;
     status?: number;
+    create_trigger?: boolean;
+    trigger_operator?: string;
+    trigger_threshold?: number;
+    trigger_pattern?: string;
+    trigger_match_type?: string;
+    trigger_priority?: number;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items/jmx", {
       method: "POST",
@@ -525,6 +615,12 @@ export const itemsApi = {
     trends?: string;
     description?: string;
     status?: number;
+    create_trigger?: boolean;
+    trigger_operator?: string;
+    trigger_threshold?: number;
+    trigger_pattern?: string;
+    trigger_match_type?: string;
+    trigger_priority?: number;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items/calculated", {
       method: "POST",
@@ -541,6 +637,12 @@ export const itemsApi = {
     trends?: string;
     description?: string;
     status?: number;
+    create_trigger?: boolean;
+    trigger_operator?: string;
+    trigger_threshold?: number;
+    trigger_pattern?: string;
+    trigger_match_type?: string;
+    trigger_priority?: number;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items/dependent", {
       method: "POST",
@@ -561,6 +663,12 @@ export const itemsApi = {
     description?: string;
     status?: number;
     timeout?: string;
+    create_trigger?: boolean;
+    trigger_operator?: string;
+    trigger_threshold?: number;
+    trigger_pattern?: string;
+    trigger_match_type?: string;
+    trigger_priority?: number;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items/zabbix-script", {
       method: "POST",
@@ -581,6 +689,12 @@ export const itemsApi = {
     description?: string;
     status?: number;
     timeout?: string;
+    create_trigger?: boolean;
+    trigger_operator?: string;
+    trigger_threshold?: number;
+    trigger_pattern?: string;
+    trigger_match_type?: string;
+    trigger_priority?: number;
   }) =>
     apiFetch<{ message: string; itemid: string }>("/items/browser", {
       method: "POST",

@@ -1,4 +1,5 @@
 import os
+from datetime import UTC, datetime
 
 os.environ.setdefault("SECRET_KEY", "test-secret")
 os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost/test")
@@ -121,7 +122,21 @@ def test_get_item_history():
 
 def test_get_item_history_bad_minutes():
     with patch("api.routes.metrics.metrics_bot", MagicMock()), TestClient(make_app()) as c:
-        r = c.get("/metrics/history/42?minutes=99999")
+        r = c.get("/metrics/history/42?minutes=9999999")
+    assert r.status_code == 400
+
+
+def test_get_item_history_six_months_ok():
+    mock_bot = MagicMock()
+    mock_bot.get_item_history.return_value = {"series": []}
+    with patch("api.routes.metrics.metrics_bot", mock_bot), TestClient(make_app()) as c:
+        r = c.get("/metrics/history/42?minutes=273600")
+    assert r.status_code == 200
+
+
+def test_get_item_history_beyond_six_months_rejected():
+    with patch("api.routes.metrics.metrics_bot", MagicMock()), TestClient(make_app()) as c:
+        r = c.get("/metrics/history/42?minutes=273601")
     assert r.status_code == 400
 
 
@@ -152,6 +167,39 @@ def test_acknowledge_problem_zabbix_fail():
         with patch("api.routes.metrics.get_conn", return_value=MagicMock()):
             with TestClient(make_app()) as c:
                 r = c.post("/metrics/problems/evt1/acknowledge", json={})
+    assert r.status_code == 503
+
+
+# ── unacknowledge ─────────────────────────────────────────────────────────────
+
+
+def test_unacknowledge_problem_root():
+    """Root (Team Lead+) can unacknowledge."""
+    mock_bot = MagicMock()
+    mock_bot.unacknowledge_problem.return_value = True
+    fake_conn = MagicMock()
+    fake_cur = MagicMock()
+    fake_cur.fetchone.return_value = {"created_at": datetime.now(UTC)}
+    fake_conn.cursor.return_value.__enter__ = MagicMock(return_value=fake_cur)
+    fake_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+    with patch("api.routes.metrics.metrics_bot", mock_bot):
+        with patch("api.routes.metrics.get_conn", return_value=fake_conn):
+            with TestClient(make_app()) as c:
+                r = c.post(
+                    "/metrics/problems/evt1/unacknowledge",
+                    json={"hostname": "web01"},
+                )
+    assert r.status_code == 200
+    assert r.json()["unacknowledged_by"] == "admin"
+
+
+def test_unacknowledge_problem_zabbix_fail():
+    mock_bot = MagicMock()
+    mock_bot.unacknowledge_problem.return_value = False
+    with patch("api.routes.metrics.metrics_bot", mock_bot):
+        with patch("api.routes.metrics.get_conn", return_value=MagicMock()):
+            with TestClient(make_app()) as c:
+                r = c.post("/metrics/problems/evt1/unacknowledge", json={})
     assert r.status_code == 503
 
 
@@ -279,6 +327,19 @@ def test_acknowledge_problem_non_root_wrong_team():
                             "severity": 3,
                         },
                     )
+    assert r.status_code == 403
+
+
+def test_unacknowledge_problem_operator_forbidden():
+    """Operator (below Team Lead) cannot unacknowledge."""
+    mock_bot = MagicMock()
+    mock_bot.unacknowledge_problem.return_value = True
+    with patch("api.routes.metrics.metrics_bot", mock_bot):
+        with TestClient(make_app_non_root()) as c:
+            r = c.post(
+                "/metrics/problems/evt1/unacknowledge",
+                json={"hostname": "web01"},
+            )
     assert r.status_code == 403
 
 

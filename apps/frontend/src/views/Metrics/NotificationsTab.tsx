@@ -28,6 +28,7 @@ import { type AlertEvent, api } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { formatDateTime } from "../../app/datetime";
+import { filterLabelSx } from "../../components/FilterBar";
 import { formatAge, SEVERITY_CONFIG, SeverityChip } from "./shared";
 
 const SkeletonRows = ({ rows, cols }: { rows: number; cols: number }) => (
@@ -289,31 +290,47 @@ export const NotificationsTab = () => {
         )}
         <Box sx={{ flex: 1 }} />
         <FormControl size="small" sx={{ minWidth: 110 }}>
-          <InputLabel sx={{ fontSize: "0.78rem" }}>Period</InputLabel>
+          <InputLabel sx={filterLabelSx}>Period</InputLabel>
           <Select
             label="Period"
             value={hours}
             onChange={(e) => setHours(Number(e.target.value))}
-            sx={{ fontSize: "0.78rem" }}
+            sx={filterLabelSx}
           >
-            <MenuItem value={1}>Last 1h</MenuItem>
-            <MenuItem value={6}>Last 6h</MenuItem>
-            <MenuItem value={24}>Last 24h</MenuItem>
-            <MenuItem value={168}>Last 7d</MenuItem>
+            <MenuItem value={1} sx={filterLabelSx}>
+              Last 1h
+            </MenuItem>
+            <MenuItem value={6} sx={filterLabelSx}>
+              Last 6h
+            </MenuItem>
+            <MenuItem value={24} sx={filterLabelSx}>
+              Last 24h
+            </MenuItem>
+            <MenuItem value={168} sx={filterLabelSx}>
+              Last 7d
+            </MenuItem>
           </Select>
         </FormControl>
         <FormControl size="small" sx={{ minWidth: 120 }}>
-          <InputLabel sx={{ fontSize: "0.78rem" }}>Status</InputLabel>
+          <InputLabel sx={filterLabelSx}>Status</InputLabel>
           <Select
             label="Status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as number | "")}
-            sx={{ fontSize: "0.78rem" }}
+            sx={filterLabelSx}
           >
-            <MenuItem value="">All</MenuItem>
-            <MenuItem value={1}>Sent</MenuItem>
-            <MenuItem value={2}>Failed</MenuItem>
-            <MenuItem value={0}>Not sent</MenuItem>
+            <MenuItem value="" sx={filterLabelSx}>
+              All
+            </MenuItem>
+            <MenuItem value={1} sx={filterLabelSx}>
+              Sent
+            </MenuItem>
+            <MenuItem value={2} sx={filterLabelSx}>
+              Failed
+            </MenuItem>
+            <MenuItem value={0} sx={filterLabelSx}>
+              Not sent
+            </MenuItem>
           </Select>
         </FormControl>
         <Tooltip title="Refresh">

@@ -1,13 +1,13 @@
 import logging
 
-from Zabbix_Base import Zabbix_Base, zabbix_err
+from Zabbix_Base import ZabbixBase, zabbix_err
 
 logger = logging.getLogger(__name__)
 
 _ZABBIX_NOT_CONNECTED = "Zabbix API not connected."
 
 
-class DataCollection_Manager(Zabbix_Base):
+class DataCollectionManager(ZabbixBase):
     def __init__(self):
         super().__init__()
         logger.info("DataCollection Manager ready.")
@@ -542,7 +542,7 @@ class DataCollection_Manager(Zabbix_Base):
                     "correlationid": c["correlationid"],
                     "name": c["name"],
                     "description": c.get("description", ""),
-                    "status": c["status"],  # "0"=enabled, "1"=disabled
+                    "status": c["status"],  # status: "0" enabled, "1" disabled
                     "condition_count": len(c.get("filter", {}).get("conditions", [])),
                     "operation_count": len(c.get("operations", [])),
                 }
@@ -552,9 +552,9 @@ class DataCollection_Manager(Zabbix_Base):
             logger.exception("list_correlations failed")
             return []
 
-    # Condition types: 0=old event tag, 1=new event tag, 2=new event tag value, 3=old event tag value
-    # Operators: 0=equals, 1=not equal, 2=like, 3=not like
-    # Operation types: 0=close new event, 1=close old events
+    # Condition types (index order): old event tag, new event tag, new event tag value, old event tag value
+    # Operators (index order): equals, not equal, like, not like
+    # Operation types (index order): close new event, close old events
 
     def create_correlation(
         self,
@@ -641,7 +641,7 @@ class DataCollection_Manager(Zabbix_Base):
                     "name": r["name"],
                     "iprange": r["iprange"],
                     "delay": r["delay"],
-                    "status": r["status"],  # "0"=active, "1"=disabled
+                    "status": r["status"],  # status: "0" active, "1" disabled
                     "nextcheck": int(r.get("nextcheck", 0)),
                     "check_count": len(r.get("dchecks", [])),
                 }

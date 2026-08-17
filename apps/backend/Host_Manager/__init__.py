@@ -1,6 +1,6 @@
 import logging
 
-from Zabbix_Base import Zabbix_Base, zabbix_err
+from Zabbix_Base import ZabbixBase, zabbix_err
 
 from Host_Manager.export import HostExportMixin
 
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 _ZABBIX_NOT_CONNECTED = "Zabbix API not connected."
 
 
-class Host_Manager(HostExportMixin, Zabbix_Base):
+class HostManager(HostExportMixin, ZabbixBase):
     def __init__(self):
         super().__init__()
         logger.info("Host Manager ready.")
@@ -216,14 +216,19 @@ class Host_Manager(HostExportMixin, Zabbix_Base):
         if status is not None:
             params["status"] = status
         if proxyid is not None:
-            if self._zabbix_version >= (7, 0):
-                params["proxyid"] = proxyid if proxyid else "0"
-                params["monitored_by"] = 1 if proxyid and proxyid != "0" else 0
-            else:
-                params["proxy_hostid"] = proxyid if proxyid else "0"
+            params.update(self._proxy_update_params(proxyid))
         if group_ids is not None:
             params["groups"] = [{"groupid": gid} for gid in group_ids]
         return params
+
+    def _proxy_update_params(self, proxyid: str) -> dict:
+        """Build the proxy-related update.host params, matching the pre-7.0/7.0+ field rename."""
+        if self._zabbix_version >= (7, 0):
+            return {
+                "proxyid": proxyid or "0",
+                "monitored_by": 1 if proxyid and proxyid != "0" else 0,
+            }
+        return {"proxy_hostid": proxyid or "0"}
 
     def _update_host_agent_ip(self, host: dict, ip: str) -> None:
         assert self.zapi is not None

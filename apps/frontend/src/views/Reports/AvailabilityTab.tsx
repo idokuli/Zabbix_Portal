@@ -1,4 +1,5 @@
 "use client";
+import CloseIcon from "@mui/icons-material/Close";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import RefreshIcon from "@mui/icons-material/Refresh";
@@ -6,10 +7,16 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   CircularProgress,
   Collapse,
+  FormControl,
   IconButton,
+  InputLabel,
   LinearProgress,
+  MenuItem,
+  Select,
+  type SelectChangeEvent,
   Stack,
   Table,
   TableBody,
@@ -19,11 +26,65 @@ import {
   TableRow,
   Typography,
 } from "@mui/material";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { api } from "../../app/api";
 import { TabHeader } from "../../app/components/TabHeader";
+import { FILTER_BAR_SX, filterLabelSx } from "../../components/FilterBar";
 import { TimeBar } from "./shared";
 import { useReportLoader } from "./useReportLoader";
+
+const MONTH_NAMES = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+// "YYYY-MM" — sortable as a plain string, and trivial to split back into year/month.
+const monthKey = (year: number, month: number) => `${year}-${String(month + 1).padStart(2, "0")}`;
+
+const monthLabel = (key: string) => {
+  const [y, m] = key.split("-").map(Number);
+  return `${MONTH_NAMES[m - 1]} ${y}`;
+};
+
+const monthDiff = (from: string, to: string) => {
+  const [fy, fm] = from.split("-").map(Number);
+  const [ty, tm] = to.split("-").map(Number);
+  return (ty - fy) * 12 + (tm - fm);
+};
+
+// The report's month-range picker allows a span of up to 6 calendar months.
+const MAX_RANGE_MONTHS = 6;
+
+// Last 24 months, newest first, as picker options.
+const MONTH_OPTIONS = (() => {
+  const now = new Date();
+  const opts: string[] = [];
+  for (let i = 0; i < 24; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    opts.push(monthKey(d.getFullYear(), d.getMonth()));
+  }
+  return opts;
+})();
+
+const monthStartEpoch = (key: string) => {
+  const [y, m] = key.split("-").map(Number);
+  return Math.floor(Date.UTC(y, m - 1, 1) / 1000);
+};
+
+const monthEndEpoch = (key: string) => {
+  const [y, m] = key.split("-").map(Number);
+  return Math.floor(Date.UTC(y, m, 1) / 1000) - 1;
+};
 
 // Mode-independent bar fill (chart-series style) + mode-aware text token.
 const availabilityTone = (pct: number) => {
@@ -38,6 +99,8 @@ const availabilityTone = (pct: number) => {
 
 export const AvailabilityTab = () => {
   const [hours, setHours] = useState(24);
+  const [fromMonth, setFromMonth] = useState("");
+  const [toMonth, setToMonth] = useState("");
   const [data, setData] = useState<
     Array<{
       hostid: string;
@@ -50,20 +113,48 @@ export const AvailabilityTab = () => {
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  // Memoized so `load` below only gets a new identity when fromMonth/toMonth
+  // actually change — a plain ternary object literal here would be a fresh
+  // reference every render, making `load` (and its effect in useReportLoader)
+  // re-fire on every render, which sets state, which re-renders, forever.
+  const range = useMemo(
+    () => (fromMonth && toMonth ? { from: fromMonth, to: toMonth } : null),
+    [fromMonth, toMonth],
+  );
+
+  const toMonthOptions = useMemo(
+    () =>
+      fromMonth
+        ? MONTH_OPTIONS.filter((m) => {
+            const d = monthDiff(fromMonth, m);
+            return d >= 0 && d < MAX_RANGE_MONTHS;
+          })
+        : [],
+    [fromMonth],
+  );
+
+  const clearRange = () => {
+    setFromMonth("");
+    setToMonth("");
+  };
+
   const load = useCallback(
     (silent = false) => {
       if (!silent) {
         setLoading(true);
       }
+      const params = range
+        ? { time_from: monthStartEpoch(range.from), time_to: monthEndEpoch(range.to) }
+        : { hours };
       api
-        .getAvailability({ hours })
+        .getAvailability(params)
         .then((r) => setData(r.hosts))
         .catch((err: unknown) => {
           console.error("Failed to load availability data:", err);
         })
         .finally(() => setLoading(false));
     },
-    [hours],
+    [hours, range],
   );
   useReportLoader(load);
 
@@ -73,8 +164,72 @@ export const AvailabilityTab = () => {
         title="Availability Report"
         description="Measure uptime and SLA compliance per host group over a selected time window."
       />
-      <Box sx={{ display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
-        <TimeBar hours={hours} onChange={setHours} />
+      <Box sx={FILTER_BAR_SX}>
+        <TimeBar
+          hours={hours}
+          onChange={(h) => {
+            clearRange();
+            setHours(h);
+          }}
+        />
+        <Typography variant="caption" color="text.disabled">
+          or a custom range —
+        </Typography>
+        <FormControl size="small" sx={{ minWidth: 130 }}>
+          <InputLabel sx={filterLabelSx}>From month</InputLabel>
+          <Select
+            label="From month"
+            value={fromMonth}
+            onChange={(e: SelectChangeEvent) => {
+              const v = e.target.value;
+              setFromMonth(v);
+              // Keep "To" only if it's still within range of the new "From".
+              if (
+                !v ||
+                (toMonth &&
+                  (monthDiff(v, toMonth) < 0 || monthDiff(v, toMonth) >= MAX_RANGE_MONTHS))
+              ) {
+                setToMonth("");
+              }
+            }}
+            sx={filterLabelSx}
+          >
+            <MenuItem value="" sx={filterLabelSx}>
+              —
+            </MenuItem>
+            {MONTH_OPTIONS.map((m) => (
+              <MenuItem key={m} value={m} sx={filterLabelSx}>
+                {monthLabel(m)}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <FormControl size="small" sx={{ minWidth: 130 }} disabled={!fromMonth}>
+          <InputLabel sx={filterLabelSx}>To month</InputLabel>
+          <Select
+            label="To month"
+            value={toMonth}
+            onChange={(e: SelectChangeEvent) => setToMonth(e.target.value)}
+            sx={filterLabelSx}
+          >
+            <MenuItem value="" sx={filterLabelSx}>
+              —
+            </MenuItem>
+            {toMonthOptions.map((m) => (
+              <MenuItem key={m} value={m} sx={filterLabelSx}>
+                {monthLabel(m)}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        {range && (
+          <Chip
+            label={`${monthLabel(range.from)} – ${monthLabel(range.to)}`}
+            size="small"
+            onDelete={clearRange}
+            deleteIcon={<CloseIcon />}
+          />
+        )}
         <Button
           size="small"
           variant="outlined"
@@ -191,7 +346,12 @@ export const AvailabilityTab = () => {
                             ["Availability", `${h.availability_pct.toFixed(3)}%`],
                             ["Downtime", h.downtime_seconds > 0 ? downStr : "—"],
                             ["Problems", String(h.problem_count)],
-                            ["Window", `${hours}h`],
+                            [
+                              "Window",
+                              range
+                                ? `${monthLabel(range.from)} – ${monthLabel(range.to)}`
+                                : `${hours}h`,
+                            ],
                           ].map(([label, value]) => (
                             <>
                               <Typography

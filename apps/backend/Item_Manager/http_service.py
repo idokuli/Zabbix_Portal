@@ -3,10 +3,11 @@
 import logging
 import re
 from typing import TYPE_CHECKING
-from api.schemas.items import HttpItemRequest
+from api.schemas.items import HttpItemRequest, ServiceItemRequest
 
 if TYPE_CHECKING:
     from zabbix_utils import ZabbixAPI
+    from Item_Manager.triggers import _TriggerConfigured
 
 logger = logging.getLogger(__name__)
 
@@ -14,9 +15,9 @@ _ZABBIX_NOT_CONNECTED = "Zabbix API not connected."
 
 
 class HttpServiceItemsMixin:
-    """Mixed into Item_Manager. Assumes `self.zapi` from Zabbix_Base.
+    """Mixed into ItemManager. Assumes `self.zapi` from ZabbixBase.
     Calls self._pick_interface, which lives in CoreItemsMixin — resolved via the
-    final Item_Manager class's MRO at runtime.
+    final ItemManager class's MRO at runtime.
     """
 
     if TYPE_CHECKING:
@@ -35,6 +36,30 @@ class HttpServiceItemsMixin:
             event_name: str = "",
             comments: str = "",
         ) -> tuple[str | None, str | None]: ...
+
+        def maybe_create_trigger(
+            self,
+            hostname: str,
+            item_key: str,
+            item_name: str,
+            value_type: int,
+            create_trigger: bool,
+            trigger_operator: str = ">",
+            trigger_threshold: float | None = None,
+            trigger_pattern: str = "",
+            trigger_match_type: str = "like",
+            trigger_priority: int = 3,
+        ) -> tuple[str | None, str | None]: ...
+
+        def _maybe_create_trigger_logged(
+            self,
+            hostname: str,
+            item_key: str,
+            item_name: str,
+            value_type: int,
+            request: "_TriggerConfigured",
+            log_prefix: str,
+        ) -> None: ...
 
     # Maps service_type slug → (item_key_template, default_name, value_type)
     _SERVICE_MAP: dict[str, tuple[str, str, int]] = {
@@ -153,7 +178,7 @@ class HttpServiceItemsMixin:
                 value_type=value_type,
                 delay=delay or "1m",
                 history=history or "31d",
-                trends=trends or "365d",
+                trends=trends or "0d",
                 url=effective_url,
                 request_method=request_method,
                 status_codes=status_codes,
@@ -178,6 +203,9 @@ class HttpServiceItemsMixin:
                 hostname,
                 item_id,
             )
+            self._maybe_create_trigger_logged(
+                hostname, item_key, item_name, value_type, request, "add_http_item"
+            )
             return item_id, None
         except Exception as e:
             msg = str(e)
@@ -185,20 +213,20 @@ class HttpServiceItemsMixin:
             return None, msg
 
     def add_service_item(
-        self,
-        hostname: str,
-        service_type: str,
-        port: int | None = None,
-        item_name: str = "",
-        team_name: str = "",
-        delay: str = "1m",
-        history: str = "31d",
-        trends: str = "365d",
-        description: str = "",
+        self, request: ServiceItemRequest, team_name: str = ""
     ) -> tuple[str | None, str | None]:
         """Add a simple-check service item (Zabbix type 3).
         service_type: icmp_ping | icmp_loss | icmp_time | http | https | ssh | smtp | ftp | tcp_port
         """
+        hostname = request.hostname
+        service_type = request.service_type
+        port = request.port
+        item_name = request.item_name
+        delay = request.delay
+        history = request.history
+        trends = request.trends
+        description = request.description
+
         if service_type not in self._SERVICE_MAP:
             return None, f"Unknown service type '{service_type}'."
         if not self.zapi:
@@ -246,6 +274,9 @@ class HttpServiceItemsMixin:
                 service_type,
                 hostname,
                 item_id,
+            )
+            self._maybe_create_trigger_logged(
+                hostname, item_key, item_name, value_type, request, "add_service_item"
             )
             return item_id, None
         except Exception as e:

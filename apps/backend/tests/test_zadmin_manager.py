@@ -1,4 +1,4 @@
-"""Tests for ZabbixAdmin_Manager (all mixins)."""
+"""Tests for ZabbixAdminManager (all mixins)."""
 
 import os
 
@@ -16,9 +16,9 @@ import pytest
 @pytest.fixture()
 def mgr():
     with patch("zabbix_utils.ZabbixAPI"):
-        from ZabbixAdmin_Manager import ZabbixAdmin_Manager
+        from ZabbixAdmin_Manager import ZabbixAdminManager
 
-        m = ZabbixAdmin_Manager()
+        m = ZabbixAdminManager()
         m.zapi = MagicMock()
         m._cache = {}
         m._zabbix_version = (7, 0)
