@@ -16,8 +16,15 @@ import i18n from "./i18n/config";
 import { AppShell } from "./layout/AppShell";
 import { createAppTheme } from "./theme";
 
+// compat = true matches what @mui/material-nextjs's AppRouterCacheProvider sets on its
+// own internal cache — without it, Emotion's SSR fallback renders inline <style> tags as
+// React children (since these caches aren't wired into AppRouterCacheProvider's
+// useServerInsertedHTML flush), which the client never renders, causing a hydration
+// mismatch on the very first styled element on any page.
 const ltrCache = createCache({ key: "muiltr" });
+ltrCache.compat = true;
 const rtlCache = createCache({ key: "muirtl", stylisPlugins: [rtlPlugin] });
+rtlCache.compat = true;
 
 const ThemedApp = ({ children }: PropsWithChildren) => {
   const pathname = usePathname();
@@ -45,7 +52,13 @@ const ThemedApp = ({ children }: PropsWithChildren) => {
           <CircularProgress />
         </Box>
       ) : (
-        <ErrorBoundary>{isLogin ? children : <AppShell>{children}</AppShell>}</ErrorBoundary>
+        // key={pathname} remounts the boundary (clearing any tripped error state) on
+        // navigation, so a crash on one page doesn't permanently freeze the whole app —
+        // see CLAUDE.md's note on the MUI Autocomplete null-ref bug for why a crash here
+        // is still possible even with the mitigations in place.
+        <ErrorBoundary key={pathname}>
+          {isLogin ? children : <AppShell>{children}</AppShell>}
+        </ErrorBoundary>
       )}
     </ThemeProvider>
   );

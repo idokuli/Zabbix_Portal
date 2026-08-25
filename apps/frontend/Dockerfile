@@ -26,6 +26,10 @@ WORKDIR /app
 # without it `save-exact`/`update-notifier=false` never apply inside the image,
 # even though they're set for local installs.
 COPY package.json package-lock.json .npmrc ./
+# patches/ must be present before `npm ci` runs — its postinstall script (patch-package)
+# needs it to apply patches/@mui+material+9.2.0.patch. Copied ahead of the full `COPY . .`
+# below so Docker's layer cache still only invalidates this step on real dependency changes.
+COPY patches ./patches
 # npm ci installs exactly what package-lock.json specifies — reproducible and
 # faster than npm install, and fails if the lock file is out of sync.
 RUN npm ci

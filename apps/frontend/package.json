@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
+    "postinstall": "patch-package",
     "dev": "next dev -p 42069",
     "build": "next build",
     "start": "next start -p 42069",
@@ -56,6 +57,7 @@
     "babel-jest": "30.4.1",
     "jest": "30.4.2",
     "jest-environment-jsdom": "30.4.1",
+    "patch-package": "8.0.1",
     "typescript": "7.0.2"
   }
 }

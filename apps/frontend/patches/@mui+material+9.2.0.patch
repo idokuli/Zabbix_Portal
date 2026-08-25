@@ -1,0 +1,48 @@
+diff --git a/node_modules/@mui/material/useAutocomplete/useAutocomplete.js b/node_modules/@mui/material/useAutocomplete/useAutocomplete.js
+index 3203447..41c9226 100644
+--- a/node_modules/@mui/material/useAutocomplete/useAutocomplete.js
++++ b/node_modules/@mui/material/useAutocomplete/useAutocomplete.js
+@@ -314,10 +314,15 @@ function useAutocomplete(props) {
+     }
+ 
+     // does the index exist?
+-    if (index === -1) {
+-      inputRef.current.removeAttribute('aria-activedescendant');
+-    } else {
+-      inputRef.current.setAttribute('aria-activedescendant', `${id}-option-${index}`);
++    // PATCHED (patch-package): inputRef.current can be null here even when
++    // listboxRef.current isn't (they unmount on separate ticks) — guard this
++    // dereference specifically instead of relying on the combined check above.
++    if (inputRef.current != null) {
++      if (index === -1) {
++        inputRef.current.removeAttribute('aria-activedescendant');
++      } else {
++        inputRef.current.setAttribute('aria-activedescendant', `${id}-option-${index}`);
++      }
+     }
+     if (!listboxRef.current) {
+       return;
+diff --git a/node_modules/@mui/material/useAutocomplete/useAutocomplete.mjs b/node_modules/@mui/material/useAutocomplete/useAutocomplete.mjs
+index d5a049f..090dd1e 100644
+--- a/node_modules/@mui/material/useAutocomplete/useAutocomplete.mjs
++++ b/node_modules/@mui/material/useAutocomplete/useAutocomplete.mjs
+@@ -306,10 +306,15 @@ function useAutocomplete(props) {
+     }
+ 
+     // does the index exist?
+-    if (index === -1) {
+-      inputRef.current.removeAttribute('aria-activedescendant');
+-    } else {
+-      inputRef.current.setAttribute('aria-activedescendant', `${id}-option-${index}`);
++    // PATCHED (patch-package): inputRef.current can be null here even when
++    // listboxRef.current isn't (they unmount on separate ticks) — guard this
++    // dereference specifically instead of relying on the combined check above.
++    if (inputRef.current != null) {
++      if (index === -1) {
++        inputRef.current.removeAttribute('aria-activedescendant');
++      } else {
++        inputRef.current.setAttribute('aria-activedescendant', `${id}-option-${index}`);
++      }
+     }
+     if (!listboxRef.current) {
+       return;

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend-dev",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "cd apps/frontend && npm run dev"],
+      "port": 42069
+    }
+  ]
+}

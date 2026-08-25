@@ -3,6 +3,11 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   serverExternalPackages: ["dotenv"],
+  // Lets browser DevTools (and offline decoding of a copied error stack) resolve
+  // minified production stack traces back to real source locations — without this,
+  // a crash reported from a production build is nearly undebuggable from the trace
+  // alone (chunk-relative file:line:col with no function names).
+  productionBrowserSourceMaps: true,
 
   // TypeScript 7's compiler (tsgo) doesn't expose the old Program/LanguageService
   // API Next's built-in type-checker calls directly — this tells Next to shell out
