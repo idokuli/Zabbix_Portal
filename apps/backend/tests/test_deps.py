@@ -17,7 +17,7 @@ os.environ.setdefault("ZABBIX_PASS", "zabbix")
 with patch("zabbix_utils.ZabbixAPI"):
     pass  # noqa: E402
 
-from api.deps import resolve_team, zabbix_call  # noqa: E402
+from api.deps import resolve_team, team_group_names, zabbix_call  # noqa: E402
 
 
 # ── zabbix_call ───────────────────────────────────────────────────────────────
@@ -93,3 +93,71 @@ def test_resolve_team_empty_string_for_rootless_user():
     user = {"sub": "0", "team_id": None}
     with patch("User_Management.get_user_by_id", return_value=None):
         assert resolve_team(user) == ""
+
+
+# ── team_group_names ─────────────────────────────────────────────────────────
+
+
+def test_team_group_names_none_for_root():
+    user = {"sub": "1", "roles": ["root"]}
+    assert team_group_names(user) is None
+
+
+def test_team_group_names_none_for_auditor():
+    user = {"sub": "1", "roles": ["auditor"]}
+    assert team_group_names(user) is None
+
+
+def test_team_group_names_empty_for_no_sub():
+    user = {"sub": "0", "roles": ["operator"]}
+    assert team_group_names(user) == []
+
+
+def test_team_group_names_returns_ordered_team_names():
+    user = {"sub": "1", "roles": ["operator"]}
+    with (
+        patch(
+            "User_Management.get_user_teams_ordered",
+            return_value=[
+                {"id": 1, "name": "Alpha Team", "display_order": 0},
+                {"id": 2, "name": "Beta Team", "display_order": 1},
+            ],
+        ),
+        patch("User_Management.list_team_linked_groups", return_value=[]),
+    ):
+        assert team_group_names(user) == ["Alpha Team", "Beta Team"]
+
+
+def test_team_group_names_includes_linked_groups_grouped_by_team():
+    user = {"sub": "1", "roles": ["operator"]}
+    with (
+        patch(
+            "User_Management.get_user_teams_ordered",
+            return_value=[
+                {"id": 1, "name": "Alpha Team", "display_order": 0},
+                {"id": 2, "name": "Beta Team", "display_order": 1},
+            ],
+        ),
+        patch(
+            "User_Management.list_team_linked_groups",
+            side_effect=lambda team_id: ["Applications"] if team_id == 1 else ["Linux servers"],
+        ),
+    ):
+        assert team_group_names(user) == [
+            "Alpha Team",
+            "Applications",
+            "Beta Team",
+            "Linux servers",
+        ]
+
+
+def test_team_group_names_dedupes_repeated_names():
+    user = {"sub": "1", "roles": ["operator"]}
+    with (
+        patch(
+            "User_Management.get_user_teams_ordered",
+            return_value=[{"id": 1, "name": "Alpha Team", "display_order": 0}],
+        ),
+        patch("User_Management.list_team_linked_groups", return_value=["Alpha Team", "Shared"]),
+    ):
+        assert team_group_names(user) == ["Alpha Team", "Shared"]

@@ -802,6 +802,13 @@ footer {
 <h4>Removing a user from a team</h4>
 <p>Click the trash icon on a member row to remove that user from <em>this team only</em>. Their portal account is not deleted and they can be re-added at any time. To delete a user account entirely, use the Users page.</p>
 
+<h4>Linked Host Groups</h4>
+<p>Each team owns a matching Zabbix host group of the same name, which is what the "Filter by group" dropdowns on the Problems and Hosts pages use — members only see their own team's group(s) there, not every host group in Zabbix.</p>
+<p>If a team should also see a group that doesn't share its name — for example one created directly in Zabbix, or a shared group like "Linux servers" — a Team Lead+ can add it: click <span class="ui">Assign Group</span> at the bottom of that team's card, tick one or more groups in the list (search to narrow it down), and click <span class="ui">Assign</span> — the same way you'd click <span class="ui">Assign Server</span> to add hosts to the team. The card's <strong>Linked Host Groups</strong> list shows what's currently linked; click the × on a chip there to unlink one. Members of that team then see every linked group in "Filter by group" pickers, alongside the team's own auto-created one.</p>
+
+<h4>Group Order</h4>
+<p>Click <span class="ui">Group Order</span> at the top of the Teams page to open a list of your teams with an up/down arrow next to each one. Moving a team up or down changes where its group(s) appear in the "Filter by group" dropdown; changes save immediately, no separate save step. This only makes a visible difference for someone who belongs to two or more teams.</p>
+
 <h3>User Groups</h3>
 <p>Zabbix-side permission groups (separate from portal teams). Manage which Zabbix user groups exist and add/remove members.</p>
 

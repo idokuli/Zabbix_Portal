@@ -759,6 +759,139 @@ def test_get_team_hostnames_error(mc):
     conn.close.assert_called_once()
 
 
+# ── Team display order ───────────────────────────────────────────────────────
+
+
+def test_set_team_display_order_ok(mc):
+    import User_Management as um
+
+    conn, cur = mc
+    cur.rowcount = 1
+    with _patch(conn):
+        result = um.set_team_display_order(1, 3)
+    assert result is True
+    conn.commit.assert_called_once()
+
+
+def test_set_team_display_order_not_found(mc):
+    import User_Management as um
+
+    conn, cur = mc
+    cur.rowcount = 0
+    with _patch(conn):
+        result = um.set_team_display_order(1, 3)
+    assert result is False
+
+
+def test_set_team_display_order_error_rolls_back(mc):
+    import User_Management as um
+
+    conn, cur = mc
+    cur.execute.side_effect = Exception("db error")
+    with _patch(conn):
+        result = um.set_team_display_order(1, 3)
+    assert result is False
+    conn.rollback.assert_called_once()
+
+
+# ── Team-linked host groups ───────────────────────────────────────────────────
+
+
+def test_list_team_linked_groups_ok(mc):
+    import User_Management as um
+
+    conn, cur = mc
+    cur.fetchall.return_value = [{"group_name": "Applications"}, {"group_name": "Linux servers"}]
+    with _patch(conn):
+        result = um.list_team_linked_groups(1)
+    assert result == ["Applications", "Linux servers"]
+    conn.close.assert_called_once()
+
+
+def test_list_team_linked_groups_error(mc):
+    import User_Management as um
+
+    conn, cur = mc
+    cur.execute.side_effect = Exception("db error")
+    with _patch(conn):
+        result = um.list_team_linked_groups(1)
+    assert result == []
+
+
+def test_link_team_group_ok(mc):
+    import User_Management as um
+
+    conn, cur = mc
+    with _patch(conn):
+        result = um.link_team_group(1, "Applications")
+    assert result is True
+    conn.commit.assert_called_once()
+
+
+def test_link_team_group_error_rolls_back(mc):
+    import User_Management as um
+
+    conn, cur = mc
+    cur.execute.side_effect = Exception("db error")
+    with _patch(conn):
+        result = um.link_team_group(1, "Applications")
+    assert result is False
+    conn.rollback.assert_called_once()
+
+
+def test_unlink_team_group_ok(mc):
+    import User_Management as um
+
+    conn, cur = mc
+    cur.rowcount = 1
+    with _patch(conn):
+        result = um.unlink_team_group(1, "Applications")
+    assert result is True
+    conn.commit.assert_called_once()
+
+
+def test_unlink_team_group_not_found(mc):
+    import User_Management as um
+
+    conn, cur = mc
+    cur.rowcount = 0
+    with _patch(conn):
+        result = um.unlink_team_group(1, "Applications")
+    assert result is False
+
+
+def test_unlink_team_group_error_rolls_back(mc):
+    import User_Management as um
+
+    conn, cur = mc
+    cur.execute.side_effect = Exception("db error")
+    with _patch(conn):
+        result = um.unlink_team_group(1, "Applications")
+    assert result is False
+    conn.rollback.assert_called_once()
+
+
+def test_get_user_teams_ordered_ok(mc):
+    import User_Management as um
+
+    conn, cur = mc
+    cur.fetchall.return_value = [{"id": 1, "name": "Alpha", "display_order": 0}]
+    with _patch(conn):
+        result = um.get_user_teams_ordered(2)
+    assert result == [{"id": 1, "name": "Alpha", "display_order": 0}]
+    conn.close.assert_called_once()
+
+
+def test_get_user_teams_ordered_error(mc):
+    import User_Management as um
+
+    conn, cur = mc
+    cur.execute.side_effect = Exception("db error")
+    with _patch(conn):
+        result = um.get_user_teams_ordered(2)
+    assert result == []
+
+
 def test_get_team_name_ok(mc):
     import User_Management as um
 

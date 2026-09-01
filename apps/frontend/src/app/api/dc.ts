@@ -30,7 +30,8 @@ export const dcApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ templateids }),
     }),
-  listHostGroups: () => apiFetch<{ groups: HostGroup[] }>("/dc/host-groups"),
+  listHostGroups: (opts?: { mine?: boolean }) =>
+    apiFetch<{ groups: HostGroup[] }>(`/dc/host-groups${opts?.mine ? "?scope=mine" : ""}`),
   createHostGroup: (name: string) =>
     apiFetch<{ groupid: string; message: string }>("/dc/host-groups", {
       method: "POST",

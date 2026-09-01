@@ -2,13 +2,21 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 import User_Management as um
 from Auth import get_current_user, require_admin, require_root
-from api.deps import live_team_id
+from api.deps import is_global_viewer, live_team_id
 from api.managers import host_bot, sync_bot
 from api.schemas import HostAssignRequest, MemberRequest, TeamRequest
 
 
 class TeamRolesRequest(BaseModel):
     roles: list[str]
+
+
+class TeamDisplayOrderRequest(BaseModel):
+    display_order: int
+
+
+class TeamGroupLinkRequest(BaseModel):
+    group_name: str
 
 
 router = APIRouter(tags=["Teams"])
@@ -20,6 +28,21 @@ def teams_overview(current_user: dict = Depends(get_current_user)):
     roles = current_user.get("roles", [])
     team_filter = None if ("root" in roles or "auditor" in roles) else live_team_id(current_user)
     return {"teams": um.get_overview(team_id=team_filter)}
+
+
+@router.get(
+    "/teams/mine",
+    tags=["Teams"],
+    summary="Caller's own teams, ordered for the group-order reorder list",
+)
+def list_my_teams(current_user: dict = Depends(get_current_user)):
+    """root/auditor manage the order for every team (they have no personal team
+    membership of their own); everyone else only their own team(s)."""
+    if is_global_viewer(current_user):
+        teams = sorted(um.list_teams(), key=lambda t: (t["display_order"], t["name"]))
+        return {"teams": teams}
+    user_id = int(current_user.get("sub", 0) or 0)
+    return {"teams": um.get_user_teams_ordered(user_id) if user_id else []}
 
 
 @router.get("/teams", tags=["Teams"], summary="List teams")
@@ -128,4 +151,53 @@ def set_team_roles(
         raise HTTPException(status_code=403, detail="Cannot grant roles higher than your own.")
     if not um.set_team_roles(team_id, body.roles):
         raise HTTPException(status_code=404, detail="Team not found.")
+
+
+@router.put(
+    "/teams/{team_id}/display-order",
+    tags=["Teams"],
+    summary="Set a team's display order in team-scoped group pickers",
+)
+def set_team_display_order(
+    team_id: int, body: TeamDisplayOrderRequest, current_user: dict = Depends(require_admin)
+):
+    if not um.set_team_display_order(team_id, body.display_order):
+        raise HTTPException(status_code=404, detail="Team not found.")
+    return {"ok": True}
+
+
+@router.get(
+    "/teams/{team_id}/groups",
+    tags=["Teams"],
+    summary="Zabbix host groups explicitly linked to a team",
+)
+def list_team_groups(team_id: int, current_user: dict = Depends(require_admin)):
+    return {"groups": um.list_team_linked_groups(team_id)}
+
+
+@router.post(
+    "/teams/{team_id}/groups",
+    tags=["Teams"],
+    summary="Link a Zabbix host group to a team",
+    status_code=201,
+)
+def link_team_group(
+    team_id: int, body: TeamGroupLinkRequest, current_user: dict = Depends(require_admin)
+):
+    name = body.group_name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Group name is required.")
+    if not um.link_team_group(team_id, name):
+        raise HTTPException(status_code=400, detail="Failed to link host group.")
+    return {"ok": True}
+
+
+@router.delete(
+    "/teams/{team_id}/groups/{group_name}",
+    tags=["Teams"],
+    summary="Unlink a Zabbix host group from a team",
+)
+def unlink_team_group(team_id: int, group_name: str, current_user: dict = Depends(require_admin)):
+    if not um.unlink_team_group(team_id, group_name):
+        raise HTTPException(status_code=404, detail="Link not found.")
     return {"ok": True}

@@ -33,7 +33,7 @@ def list_teams() -> list[dict]:
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT id, name, description FROM teams ORDER BY name")
+            cur.execute("SELECT id, name, description, display_order FROM teams ORDER BY name")
             return [dict(r) for r in cur.fetchall()]
     except Exception:
         logger.exception("list_teams failed")
@@ -364,7 +364,7 @@ def get_overview(team_id: int | None = None) -> list[dict]:
                         WHERE team_id = %s
                         GROUP BY team_id
                     )
-                    SELECT t.id, t.name, t.description,
+                    SELECT t.id, t.name, t.description, t.display_order,
                            COALESCE(ua.users, '[]'::json) AS users,
                            COALESCE(ha.hosts, '[]'::json) AS hosts
                     FROM teams t
@@ -394,7 +394,7 @@ def get_overview(team_id: int | None = None) -> list[dict]:
                         FROM host_assignments
                         GROUP BY team_id
                     )
-                    SELECT t.id, t.name, t.description,
+                    SELECT t.id, t.name, t.description, t.display_order,
                            COALESCE(ua.users, '[]'::json) AS users,
                            COALESCE(ha.hosts, '[]'::json) AS hosts
                     FROM teams t
@@ -514,6 +514,104 @@ def set_team_roles(team_id: int, roles: list[str]) -> bool:
         conn.rollback()
         logger.exception("set_team_roles failed")
         return False
+    finally:
+        conn.close()
+
+
+def set_team_display_order(team_id: int, display_order: int) -> bool:
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE teams SET display_order = %s WHERE id = %s", (display_order, team_id)
+            )
+            updated = cur.rowcount > 0
+        conn.commit()
+        return updated
+    except Exception:
+        conn.rollback()
+        logger.exception("set_team_display_order failed")
+        return False
+    finally:
+        conn.close()
+
+
+def list_team_linked_groups(team_id: int) -> list[str]:
+    """Zabbix host group names explicitly linked to this team, beyond its own
+    auto-created same-named group (see team_host_groups in Database.py)."""
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT group_name FROM team_host_groups WHERE team_id = %s ORDER BY group_name",
+                (team_id,),
+            )
+            return [row["group_name"] for row in cur.fetchall()]
+    except Exception:
+        logger.exception("list_team_linked_groups failed")
+        return []
+    finally:
+        conn.close()
+
+
+def link_team_group(team_id: int, group_name: str) -> bool:
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO team_host_groups (team_id, group_name) VALUES (%s, %s)
+                   ON CONFLICT (team_id, group_name) DO NOTHING""",
+                (team_id, group_name),
+            )
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        logger.exception("link_team_group failed")
+        return False
+    finally:
+        conn.close()
+
+
+def unlink_team_group(team_id: int, group_name: str) -> bool:
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM team_host_groups WHERE team_id = %s AND group_name = %s",
+                (team_id, group_name),
+            )
+            deleted = cur.rowcount > 0
+        conn.commit()
+        return deleted
+    except Exception:
+        conn.rollback()
+        logger.exception("unlink_team_group failed")
+        return False
+    finally:
+        conn.close()
+
+
+def get_user_teams_ordered(user_id: int) -> list[dict]:
+    """Full team rows (id, name, display_order) this user belongs to, ordered by
+    display_order then name — feeds the Teams page's "Reorder groups" list."""
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT t.id, t.name, t.display_order
+                FROM user_team_memberships utm
+                JOIN teams t ON t.id = utm.team_id
+                WHERE utm.user_id = %s
+                ORDER BY t.display_order, t.name
+                """,
+                (user_id,),
+            )
+            return [dict(r) for r in cur.fetchall()]
+    except Exception:
+        logger.exception("get_user_teams_ordered failed")
+        return []
     finally:
         conn.close()
 

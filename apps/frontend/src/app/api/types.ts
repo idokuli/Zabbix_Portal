@@ -272,6 +272,7 @@ export type Team = {
   id: number;
   name: string;
   description: string;
+  display_order: number;
   users: TeamUser[];
   hosts: string[];
   roles: string[];

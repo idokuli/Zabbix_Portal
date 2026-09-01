@@ -44,6 +44,50 @@ def _client():
     return TestClient(make_app(router), raise_server_exceptions=True)
 
 
+def _client_as(user: dict):
+    from api.routes.teams import router
+
+    app = make_app(router)
+    app.dependency_overrides[get_current_user] = lambda: user
+    return TestClient(app, raise_server_exceptions=True)
+
+
+# ── GET /teams/mine ──────────────────────────────────────────────────────────
+
+
+def test_list_my_teams_root_returns_all_sorted_by_order_then_name():
+    with patch("api.routes.teams.um") as um:
+        um.list_teams.return_value = [
+            {"id": 1, "name": "Beta", "display_order": 0},
+            {"id": 2, "name": "Alpha", "display_order": 1},
+            {"id": 3, "name": "Zulu", "display_order": 0},
+        ]
+        r = _client().get("/teams/mine")
+    assert r.status_code == 200
+    names = [t["name"] for t in r.json()["teams"]]
+    # display_order 0 group sorts by name first (Beta, Zulu), then order 1 (Alpha)
+    assert names == ["Beta", "Zulu", "Alpha"]
+
+
+def test_list_my_teams_non_root_returns_own_teams_only():
+    non_root_user = {"id": 2, "sub": "2", "username": "op", "roles": ["operator"], "team_id": 1}
+    with patch("api.routes.teams.um") as um:
+        um.get_user_teams_ordered.return_value = [{"id": 1, "name": "Alpha", "display_order": 0}]
+        r = _client_as(non_root_user).get("/teams/mine")
+    assert r.status_code == 200
+    assert r.json()["teams"] == [{"id": 1, "name": "Alpha", "display_order": 0}]
+    um.get_user_teams_ordered.assert_called_once_with(2)
+
+
+def test_list_my_teams_non_root_no_sub_returns_empty():
+    non_root_user = {"id": 2, "username": "op", "roles": ["operator"], "team_id": 1}
+    with patch("api.routes.teams.um") as um:
+        r = _client_as(non_root_user).get("/teams/mine")
+    assert r.status_code == 200
+    assert r.json()["teams"] == []
+    um.get_user_teams_ordered.assert_not_called()
+
+
 # ── GET /teams ────────────────────────────────────────────────────────────────
 
 
@@ -241,4 +285,69 @@ def test_set_team_roles_not_found_404():
     with patch("api.routes.teams.um") as um:
         um.set_team_roles.return_value = False
         r = _client().put("/teams/1/roles", json={"roles": ["member"]})
+    assert r.status_code == 404
+
+
+# ── PUT /teams/{team_id}/display-order ────────────────────────────────────────
+
+
+def test_set_team_display_order_success():
+    with patch("api.routes.teams.um") as um:
+        um.set_team_display_order.return_value = True
+        r = _client().put("/teams/1/display-order", json={"display_order": 3})
+    assert r.status_code == 200
+    um.set_team_display_order.assert_called_once_with(1, 3)
+
+
+def test_set_team_display_order_not_found_404():
+    with patch("api.routes.teams.um") as um:
+        um.set_team_display_order.return_value = False
+        r = _client().put("/teams/1/display-order", json={"display_order": 3})
+    assert r.status_code == 404
+
+
+# ── /teams/{team_id}/groups ─────────────────────────────────────────────────
+
+
+def test_list_team_groups_200():
+    with patch("api.routes.teams.um") as um:
+        um.list_team_linked_groups.return_value = ["Applications", "Linux servers"]
+        r = _client().get("/teams/1/groups")
+    assert r.status_code == 200
+    assert r.json() == {"groups": ["Applications", "Linux servers"]}
+
+
+def test_link_team_group_success():
+    with patch("api.routes.teams.um") as um:
+        um.link_team_group.return_value = True
+        r = _client().post("/teams/1/groups", json={"group_name": "Applications"})
+    assert r.status_code == 201
+    um.link_team_group.assert_called_once_with(1, "Applications")
+
+
+def test_link_team_group_blank_name_400():
+    with patch("api.routes.teams.um"):
+        r = _client().post("/teams/1/groups", json={"group_name": "   "})
+    assert r.status_code == 400
+
+
+def test_link_team_group_manager_failure_400():
+    with patch("api.routes.teams.um") as um:
+        um.link_team_group.return_value = False
+        r = _client().post("/teams/1/groups", json={"group_name": "Applications"})
+    assert r.status_code == 400
+
+
+def test_unlink_team_group_success():
+    with patch("api.routes.teams.um") as um:
+        um.unlink_team_group.return_value = True
+        r = _client().delete("/teams/1/groups/Applications")
+    assert r.status_code == 200
+    um.unlink_team_group.assert_called_once_with(1, "Applications")
+
+
+def test_unlink_team_group_not_found_404():
+    with patch("api.routes.teams.um") as um:
+        um.unlink_team_group.return_value = False
+        r = _client().delete("/teams/1/groups/Applications")
     assert r.status_code == 404

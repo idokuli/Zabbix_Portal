@@ -16,7 +16,7 @@ A full-stack DevOps UI for managing Zabbix hosts, items, triggers, teams, and us
 - JWT-based login with role-based access control
 - **Portal LDAP authentication** — users sign in with LDAP/AD credentials; accounts are created automatically on first login (JIT provisioning) with the `operator` role
 - Multi-role users — a user can hold multiple roles simultaneously
-- Teams — group users and host assignments together; a user can belong to multiple teams simultaneously and sees the union of all their teams' hosts
+- Teams — group users and host assignments together; a user can belong to multiple teams simultaneously and sees the union of all their teams' hosts. The "Filter by group" pickers on Problems and Hosts are scoped to the caller's own team-owned host group(s) rather than every group platform-wide: each team's auto-created same-named group (matching ZabbixSync's team↔host-group naming convention), plus any additional pre-existing Zabbix host groups a Team Lead+ explicitly links via the **Linked Host Groups** section on that team's card. The Teams page's **Group Order** dialog (Team Lead+) lets you reorder your teams with up/down arrows to control which team's group(s) show first for members of 2+ teams
 - Expandable user rows in TeamCard — click any member to see their login name, display name (LDAP full name), email, and source (Local / LDAP / Zabbix)
 - Role cascade (Windows-style) — selecting a higher role auto-selects lower ones
 - Users page — root sees all users platform-wide; team leads see their team
@@ -350,6 +350,10 @@ All paths require a `Bearer` JWT unless noted. "Operator+" = root / team_lead / 
 | DELETE | `/teams/{team_id}`                  | Root       | Delete a team |
 | POST   | `/teams/{team_id}/hosts`            | Team Lead+ | Assign a host to a team |
 | DELETE | `/teams/{team_id}/hosts/{hostname}` | Team Lead+ | Remove a host from a team |
+| PUT    | `/teams/{team_id}/display-order`    | Team Lead+ | Set a team's rank in team-scoped group pickers (lower shows first) |
+| GET    | `/teams/{team_id}/groups`           | Team Lead+ | List Zabbix host groups explicitly linked to a team |
+| POST   | `/teams/{team_id}/groups`           | Team Lead+ | Link a Zabbix host group to a team |
+| DELETE | `/teams/{team_id}/groups/{group_name}` | Team Lead+ | Unlink a Zabbix host group from a team |
 
 ### Users
 
@@ -386,6 +390,8 @@ Template groups, host groups, templates, maintenance windows, event correlation,
 | Discovery rules | `GET /dc/discovery-rules` | `POST /dc/discovery-rules` | — | `DELETE /dc/discovery-rules/{druleid}` | — |
 
 All `GET`s require any authenticated user; all `POST`/`PUT`/`DELETE`s require Team Lead+.
+
+`GET /dc/host-groups` accepts an optional `?scope=mine`, used by the Problems and Hosts "Filter by group" pickers to restrict (and order) the result to the caller's own team-owned group(s) instead of every host group platform-wide — see the Teams section below and `PUT /teams/{team_id}/display-order`. Omitted for admin pages (Data Collection, Maintenance, User Groups) that manage every group.
 
 ### Reports (read-only)
 

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from Auth import get_current_user, require_admin, require_hostgroup_write
+from api.deps import team_group_names
 from api.managers import dc_bot
 
 router = APIRouter(tags=["DataCollection"])
@@ -84,8 +85,20 @@ def set_template_group_members(
 
 
 @router.get("/dc/host-groups", tags=["DataCollection"], summary="List host groups")
-def list_host_groups(current_user: dict = Depends(get_current_user)):
-    return {"groups": dc_bot.list_host_groups()}
+def list_host_groups(scope: str | None = None, current_user: dict = Depends(get_current_user)):
+    """scope="mine" restricts (and orders) the result to the caller's own team-owned
+    group(s) — used by team-facing filter pickers (Problems, Hosts). Omit scope for
+    the unrestricted, alphabetical list admin pages (Data Collection, Maintenance,
+    User Groups) need to manage every group platform-wide."""
+    groups = dc_bot.list_host_groups()
+    if scope == "mine":
+        names = team_group_names(current_user)
+        if names is not None:
+            order = {name: i for i, name in enumerate(names)}
+            groups = sorted(
+                (g for g in groups if g["name"] in order), key=lambda g: order[g["name"]]
+            )
+    return {"groups": groups}
 
 
 @router.post(

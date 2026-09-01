@@ -124,6 +124,41 @@ def test_list_host_groups():
     assert "groups" in r.json()
 
 
+def test_list_host_groups_scope_mine_filters_and_orders():
+    mock, app = _bot()
+    mock.list_host_groups.return_value = [
+        {"groupid": "1", "name": "Applications"},
+        {"groupid": "2", "name": "Beta Team"},
+        {"groupid": "3", "name": "Alpha Team"},
+    ]
+    with (
+        patch("api.routes.data_collection.dc_bot", mock),
+        patch(
+            "api.routes.data_collection.team_group_names",
+            return_value=["Alpha Team", "Beta Team"],
+        ),
+        TestClient(app) as c,
+    ):
+        r = c.get("/dc/host-groups?scope=mine")
+    assert r.status_code == 200
+    names = [g["name"] for g in r.json()["groups"]]
+    assert names == ["Alpha Team", "Beta Team"]
+
+
+def test_list_host_groups_scope_mine_unrestricted_for_root():
+    mock, app = _bot()
+    all_groups = [{"groupid": "1", "name": "Applications"}, {"groupid": "2", "name": "Beta Team"}]
+    mock.list_host_groups.return_value = all_groups
+    with (
+        patch("api.routes.data_collection.dc_bot", mock),
+        patch("api.routes.data_collection.team_group_names", return_value=None),
+        TestClient(app) as c,
+    ):
+        r = c.get("/dc/host-groups?scope=mine")
+    assert r.status_code == 200
+    assert r.json()["groups"] == all_groups
+
+
 def test_create_host_group_success():
     mock, app = _bot()
     mock.create_host_group.return_value = ("8", None)

@@ -15,6 +15,7 @@ __all__ = [
     "zabbix_err",
     "live_team_id",
     "team_hostname_filter",
+    "team_group_names",
     "resolve_team",
     "team_tag",
     "zabbix_call",
@@ -74,6 +75,30 @@ def team_hostname_filter(current_user: dict) -> set[str] | None:
             return {row["hostname"] for row in cur.fetchall()}
     finally:
         conn.close()
+
+
+def team_group_names(current_user: dict) -> list[str] | None:
+    """Names of every Zabbix host group this user's team(s) own — each team's own
+    auto-created same-named group (see ZabbixSync.push_team()) plus any groups
+    explicitly linked via team_host_groups (see User_Management.link_team_group()).
+    Ordered by each team's admin-set display_order for users in 2+ teams, with a
+    team's linked groups grouped right after its own name.
+    Returns None for root/auditor (unrestricted — see every host group).
+    Returns an empty list when the user has no team memberships.
+    """
+    if is_global_viewer(current_user):
+        return None
+    user_id = int(current_user.get("sub", 0) or 0)
+    if not user_id:
+        return []
+    names: list[str] = []
+    seen: set[str] = set()
+    for team in um.get_user_teams_ordered(user_id):
+        for name in (team["name"], *um.list_team_linked_groups(team["id"])):
+            if name not in seen:
+                seen.add(name)
+                names.append(name)
+    return names
 
 
 @contextmanager

@@ -2,6 +2,7 @@
 
 import AddIcon from "@mui/icons-material/Add";
 import PersonAddOutlinedIcon from "@mui/icons-material/PersonAddOutlined";
+import SwapVertIcon from "@mui/icons-material/SwapVert";
 import {
   Alert,
   Box,
@@ -15,6 +16,7 @@ import {
   DialogTitle,
   Divider,
   FormControl,
+  FormControlLabel,
   Grid,
   InputLabel,
   MenuItem,
@@ -29,13 +31,21 @@ import {
 } from "@mui/material";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useState } from "react";
-import { api, type Host, type Team, type TeamUser, type UserRow } from "../../app/api";
+import {
+  api,
+  type Host,
+  type HostGroup,
+  type Team,
+  type TeamUser,
+  type UserRow,
+} from "../../app/api";
 import { ConfirmDelete } from "../../app/components/ConfirmDelete";
 import { StatTicker } from "../../app/components/StatTicker";
 import { useAuth } from "../../app/context/AuthContext";
 import { useRefreshTick } from "../../app/context/RefreshContext";
 import { useSync } from "../../app/context/SyncContext";
 import { FilterSearchField } from "../../components/FilterBar";
+import { GroupOrderDialog } from "./GroupOrderDialog";
 import { TeamCard } from "./TeamCard";
 
 type Snack = { msg: string; sev: "success" | "error" };
@@ -781,6 +791,133 @@ const AssignHostsDialog = ({
   </Dialog>
 );
 
+const LinkGroupSelectRow = ({
+  group,
+  checked,
+  onToggle,
+}: {
+  group: HostGroup;
+  checked: boolean;
+  onToggle: () => void;
+}) => (
+  <FormControlLabel
+    sx={{
+      m: 0,
+      pl: 1,
+      pr: 1.5,
+      py: 0.25,
+      display: "flex",
+      bgcolor: checked ? "action.selected" : "transparent",
+      "&:hover": { bgcolor: "action.hover" },
+      "&:not(:last-child)": { borderBottom: "1px solid", borderColor: "divider" },
+    }}
+    control={<Checkbox checked={checked} onChange={onToggle} size="small" />}
+    label={
+      <Typography variant="body2" sx={{ fontSize: "0.83rem", fontWeight: 500 }}>
+        {group.name}
+      </Typography>
+    }
+  />
+);
+
+const AssignGroupsToTeamDialog = ({
+  teamId,
+  teamName,
+  onClose,
+  assignableGroups,
+  selectedGroups,
+  setSelectedGroups,
+  search,
+  setSearch,
+  onAssign,
+}: {
+  teamId: number | null;
+  teamName: string | undefined;
+  onClose: () => void;
+  assignableGroups: HostGroup[];
+  selectedGroups: string[];
+  setSelectedGroups: Dispatch<SetStateAction<string[]>>;
+  search: string;
+  setSearch: (v: string) => void;
+  onAssign: () => void;
+}) => {
+  const filtered = assignableGroups.filter((g) =>
+    g.name.toLowerCase().includes(search.toLowerCase()),
+  );
+  return (
+    <Dialog open={teamId !== null} onClose={onClose} fullWidth maxWidth="xs">
+      <DialogTitle>
+        Assign Host Groups{teamName ? ` — ${teamName}` : ""}
+        {selectedGroups.length > 0 && (
+          <Typography component="span" variant="body2" color="primary.main" sx={{ ml: 1 }}>
+            ({selectedGroups.length})
+          </Typography>
+        )}
+      </DialogTitle>
+      <DialogContent sx={{ pt: "4px !important" }}>
+        <FilterSearchField
+          fullWidth
+          placeholder="Search groups…"
+          value={search}
+          onChange={setSearch}
+          sx={{ mb: 1 }}
+        />
+        {assignableGroups.length === 0 ? (
+          <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+            No other host groups available to link.
+          </Typography>
+        ) : (
+          <Box
+            sx={{
+              maxHeight: 280,
+              overflowY: "auto",
+              border: "1px solid",
+              borderColor: "divider",
+            }}
+          >
+            {filtered.map((g) => (
+              <LinkGroupSelectRow
+                key={g.groupid}
+                group={g}
+                checked={selectedGroups.includes(g.name)}
+                onToggle={() =>
+                  setSelectedGroups((prev) =>
+                    prev.includes(g.name) ? prev.filter((x) => x !== g.name) : [...prev, g.name],
+                  )
+                }
+              />
+            ))}
+          </Box>
+        )}
+        {assignableGroups.length > 0 && (
+          <Box sx={{ display: "flex", justifyContent: "space-between", mt: 1, mb: 0.5 }}>
+            <Button
+              size="small"
+              onClick={() => setSelectedGroups(assignableGroups.map((g) => g.name))}
+              disabled={selectedGroups.length === assignableGroups.length}
+            >
+              Select all
+            </Button>
+            <Button
+              size="small"
+              onClick={() => setSelectedGroups([])}
+              disabled={selectedGroups.length === 0}
+            >
+              Clear
+            </Button>
+          </Box>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="contained" onClick={onAssign} disabled={selectedGroups.length === 0}>
+          Assign
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
 const ChangePasswordDialog = ({
   changePwUser,
   newPw,
@@ -820,11 +957,13 @@ const TeamsHeader = ({
   isSuperadmin,
   onNewUser,
   onNewTeam,
+  onGroupOrder,
 }: {
   isAdmin: boolean;
   isSuperadmin: boolean;
   onNewUser: () => void;
   onNewTeam: () => void;
+  onGroupOrder: () => void;
 }) => (
   <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", mb: 2 }}>
     <Box>
@@ -834,6 +973,11 @@ const TeamsHeader = ({
       </Typography>
     </Box>
     <Box sx={{ display: "flex", gap: 1 }}>
+      {isAdmin && (
+        <Button variant="outlined" startIcon={<SwapVertIcon />} onClick={onGroupOrder} size="small">
+          Group Order
+        </Button>
+      )}
       {isAdmin && (
         <Button
           variant="outlined"
@@ -886,9 +1030,11 @@ const TeamCardsGrid = ({
   onUnassignHost,
   onAssignHostRequest,
   onAddMemberRequest,
+  onAssignGroupRequest,
   hostStatusColor,
   onRolesUpdated,
   showToast,
+  linkedGroupsByTeam,
 }: {
   teams: Team[];
   isSuperadmin: boolean;
@@ -900,9 +1046,11 @@ const TeamCardsGrid = ({
   onUnassignHost: (teamId: number, hostname: string) => void;
   onAssignHostRequest: (teamId: number) => void;
   onAddMemberRequest: (teamId: number) => void;
+  onAssignGroupRequest: (teamId: number) => void;
   hostStatusColor: (hostname: string) => "success" | "default";
   onRolesUpdated: () => void;
   showToast: (msg: string, sev: "success" | "error") => void;
+  linkedGroupsByTeam: Record<number, string[]>;
 }) => (
   <Grid container spacing={3}>
     {teams.map((team) => (
@@ -917,12 +1065,14 @@ const TeamCardsGrid = ({
           onUnassignHost={onUnassignHost}
           onAssignHost={() => onAssignHostRequest(team.id)}
           onAddMember={() => onAddMemberRequest(team.id)}
+          onAssignGroup={() => onAssignGroupRequest(team.id)}
           hostStatusColor={hostStatusColor}
           hostOtherTeams={(hostname) =>
             teams.filter((t) => t.id !== team.id && t.hosts.includes(hostname)).map((t) => t.name)
           }
           onRolesUpdated={onRolesUpdated}
           showToast={showToast}
+          linkedGroups={linkedGroupsByTeam[team.id] ?? []}
         />
       </Grid>
     ))}
@@ -962,6 +1112,7 @@ export const Teams = () => {
   const { lastSync } = useSync();
   const [teams, setTeams] = useState<Team[]>([]);
   const [allHosts, setAllHosts] = useState<Host[]>([]);
+  const [allHostGroups, setAllHostGroups] = useState<HostGroup[]>([]);
   const [allUsers, setAllUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [snack, setSnack] = useState<Snack | null>(null);
@@ -969,6 +1120,7 @@ export const Teams = () => {
   // ── Dialog visibility ────────────────────────────────────────────────
   const [teamDialogOpen, setTeamDialogOpen] = useState(false);
   const [userDialogOpen, setUserDialogOpen] = useState(false);
+  const [groupOrderOpen, setGroupOrderOpen] = useState(false);
   const [assignDialogTeamId, setAssignDialogTeamId] = useState<number | null>(null);
   const [addMemberDialogTeamId, setAddMemberDialogTeamId] = useState<number | null>(null);
   const [confirmRemoveMember, setConfirmRemoveMember] = useState<{
@@ -998,20 +1150,32 @@ export const Teams = () => {
   const [selectedMembers, setSelectedMembers] = useState<number[]>([]);
   const [changePwUser, setChangePwUser] = useState<TeamUser | null>(null);
   const [newPw, setNewPw] = useState("");
+  const [linkedGroupsByTeam, setLinkedGroupsByTeam] = useState<Record<number, string[]>>({});
+  const [linkGroupDialogTeamId, setLinkGroupDialogTeamId] = useState<number | null>(null);
+  const [selectedLinkGroups, setSelectedLinkGroups] = useState<string[]>([]);
+  const [linkGroupSearch, setLinkGroupSearch] = useState("");
 
   const load = useCallback(async (silent = false) => {
     if (!silent) {
       setLoading(true);
     }
     try {
-      const [overview, hostsRes, usersRes] = await Promise.all([
+      const [overview, hostsRes, usersRes, groupsRes] = await Promise.all([
         api.getTeamsOverview(),
         api.listHosts(),
         api.listUsers(),
+        api.listHostGroups(),
       ]);
       setTeams(overview.teams);
       setAllHosts(hostsRes.hosts);
       setAllUsers(usersRes.users);
+      setAllHostGroups(groupsRes.groups);
+      const linkedEntries = await Promise.all(
+        overview.teams.map(
+          async (t): Promise<[number, string[]]> => [t.id, (await api.getTeamGroups(t.id)).groups],
+        ),
+      );
+      setLinkedGroupsByTeam(Object.fromEntries(linkedEntries));
     } catch {
       setSnack({ msg: "Failed to load teams.", sev: "error" });
     } finally {
@@ -1045,6 +1209,14 @@ export const Teams = () => {
   const assignableGroups: [string, GroupEntry][] = Object.entries(groupHostMap)
     .filter(([, g]) => g.hosts.length > 0)
     .sort((a, b) => a[1].name.localeCompare(b[1].name));
+
+  // ── Derived: host groups not yet linked to the team being edited ───────
+  const linkGroupDialogTeam = teams.find((t) => t.id === linkGroupDialogTeamId);
+  const alreadyLinkedGroupNames = new Set([
+    linkGroupDialogTeam?.name,
+    ...(linkGroupDialogTeamId !== null ? (linkedGroupsByTeam[linkGroupDialogTeamId] ?? []) : []),
+  ]);
+  const assignableLinkGroups = allHostGroups.filter((g) => !alreadyLinkedGroupNames.has(g.name));
 
   // ── Derived: users not yet in the team being edited ──────────────────
   const addMemberTeam = teams.find((t) => t.id === addMemberDialogTeamId);
@@ -1145,6 +1317,31 @@ export const Teams = () => {
     setAssignMode("hosts");
   };
 
+  const closeLinkGroupDialog = () => {
+    setLinkGroupDialogTeamId(null);
+    setSelectedLinkGroups([]);
+    setLinkGroupSearch("");
+  };
+
+  const handleAssignGroups = async () => {
+    if (linkGroupDialogTeamId === null || selectedLinkGroups.length === 0) {
+      return;
+    }
+    try {
+      await Promise.all(
+        selectedLinkGroups.map((name) => api.linkTeamGroup(linkGroupDialogTeamId, name)),
+      );
+      setSnack({
+        msg: `${selectedLinkGroups.length} group${selectedLinkGroups.length > 1 ? "s" : ""} linked.`,
+        sev: "success",
+      });
+      closeLinkGroupDialog();
+      void load();
+    } catch (e) {
+      setSnack({ msg: (e as Error).message, sev: "error" });
+    }
+  };
+
   const handleAssignHost = async () => {
     if (assignDialogTeamId === null) {
       return;
@@ -1208,6 +1405,7 @@ export const Teams = () => {
           setUserDialogOpen(true);
         }}
         onNewTeam={() => setTeamDialogOpen(true)}
+        onGroupOrder={() => setGroupOrderOpen(true)}
       />
 
       {/* Stats */}
@@ -1231,6 +1429,7 @@ export const Teams = () => {
           isSuperadmin={isSuperadmin}
           isAdmin={isAdmin}
           currentUserTeamId={currentUser?.team_id}
+          linkedGroupsByTeam={linkedGroupsByTeam}
           onDeleteTeam={(id) => setConfirmDeleteTeamId(id)}
           onRemoveFromTeam={(userId, teamId) => setConfirmRemoveMember({ userId, teamId })}
           onChangePassword={(u) => {
@@ -1246,6 +1445,11 @@ export const Teams = () => {
           onAddMemberRequest={(teamId) => {
             setAddMemberDialogTeamId(teamId);
             setMemberSearch("");
+          }}
+          onAssignGroupRequest={(teamId) => {
+            setLinkGroupDialogTeamId(teamId);
+            setSelectedLinkGroups([]);
+            setLinkGroupSearch("");
           }}
           hostStatusColor={hostStatusColor}
           onRolesUpdated={() => void load(true)}
@@ -1267,6 +1471,13 @@ export const Teams = () => {
         teamDesc={teamDesc}
         setTeamDesc={setTeamDesc}
         onCreate={() => void handleCreateTeam()}
+      />
+
+      {/* ── Group order dialog ── */}
+      <GroupOrderDialog
+        open={groupOrderOpen}
+        onClose={() => setGroupOrderOpen(false)}
+        showToast={(msg, sev) => setSnack({ msg, sev })}
       />
 
       {/* ── Create user dialog ── */}
@@ -1324,6 +1535,19 @@ export const Teams = () => {
         setGroupSearch={setGroupSearch}
         teams={teams}
         onAssign={() => void handleAssignHost()}
+      />
+
+      {/* ── Assign host groups dialog ── */}
+      <AssignGroupsToTeamDialog
+        teamId={linkGroupDialogTeamId}
+        teamName={linkGroupDialogTeam?.name}
+        onClose={closeLinkGroupDialog}
+        assignableGroups={assignableLinkGroups}
+        selectedGroups={selectedLinkGroups}
+        setSelectedGroups={setSelectedLinkGroups}
+        search={linkGroupSearch}
+        setSearch={setLinkGroupSearch}
+        onAssign={() => void handleAssignGroups()}
       />
 
       {/* ── Change password dialog ── */}

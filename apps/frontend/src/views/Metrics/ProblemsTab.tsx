@@ -953,7 +953,7 @@ export const ProblemsTab = ({ initialHost = "" }: { initialHost?: string }) => {
       setLoading(true);
     }
     setLoadError(null);
-    Promise.all([api.getProblems(), api.listHosts(), api.listHostGroups()])
+    Promise.all([api.getProblems(), api.listHosts(), api.listHostGroups({ mine: true })])
       .then(([pr, hr, gr]) => {
         setProblems(pr.problems);
         setHosts(hr.hosts);

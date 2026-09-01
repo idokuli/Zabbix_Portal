@@ -48,10 +48,12 @@ type TeamCardProps = {
   onUnassignHost: (teamId: number, hostname: string) => void;
   onAssignHost: () => void;
   onAddMember: () => void;
+  onAssignGroup: () => void;
   hostStatusColor: (hostname: string) => "success" | "default";
   hostOtherTeams: (hostname: string) => string[];
   onRolesUpdated: () => void;
   showToast: (msg: string, sev: "success" | "error") => void;
+  linkedGroups: string[];
 };
 
 const sourceLabel = (src?: string) =>
@@ -72,10 +74,12 @@ export const TeamCard = ({
   onUnassignHost,
   onAssignHost,
   onAddMember,
+  onAssignGroup,
   hostStatusColor,
   hostOtherTeams,
   onRolesUpdated,
   showToast,
+  linkedGroups,
 }: TeamCardProps) => {
   const [expandedUserId, setExpandedUserId] = useState<number | null>(null);
   const [serversOpen, setServersOpen] = useState(false);
@@ -94,6 +98,16 @@ export const TeamCard = ({
       showToast(e instanceof Error ? e.message : String(e), "error");
     } finally {
       setSavingRoles(false);
+    }
+  };
+
+  const handleUnlinkGroup = async (groupName: string) => {
+    try {
+      await teamsApi.unlinkTeamGroup(team.id, groupName);
+      showToast(`"${groupName}" unlinked from ${team.name}.`, "success");
+      onRolesUpdated();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : String(e), "error");
     }
   };
 
@@ -442,16 +456,48 @@ export const TeamCard = ({
                 </Box>
               )}
             </Box>
+
+            <Divider />
+
+            <Box>
+              <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: 1 }}>
+                Linked Host Groups
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                Beyond this team's own "{team.name}" group, link other Zabbix host groups this team
+                should also see in "Filter by group" pickers.
+              </Typography>
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                {linkedGroups.length === 0 ? (
+                  <Typography variant="caption" color="text.disabled">
+                    No additional groups linked.
+                  </Typography>
+                ) : (
+                  linkedGroups.map((g) => (
+                    <Chip
+                      key={g}
+                      label={g}
+                      size="small"
+                      onDelete={() => void handleUnlinkGroup(g)}
+                      sx={{ fontSize: "0.7rem" }}
+                    />
+                  ))
+                )}
+              </Box>
+            </Box>
           </>
         )}
 
         {canManage && (
-          <Box sx={{ display: "flex", gap: 1, mt: "auto" }}>
+          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: "auto" }}>
             <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={onAddMember}>
               Add Member
             </Button>
             <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={onAssignHost}>
               Assign Server
+            </Button>
+            <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={onAssignGroup}>
+              Assign Group
             </Button>
           </Box>
         )}

@@ -1,8 +1,11 @@
 import { apiFetch } from "./fetch";
 import type { Team } from "./types";
 
+export type MyTeam = { id: number; name: string; display_order: number };
+
 export const teamsApi = {
   getTeamsOverview: () => apiFetch<{ teams: Team[] }>("/teams/overview"),
+  getMyTeams: () => apiFetch<{ teams: MyTeam[] }>("/teams/mine"),
   createTeam: (payload: { name: string; description?: string }) =>
     apiFetch<{ id: number; name: string; description: string }>("/teams", {
       method: "POST",
@@ -37,5 +40,22 @@ export const teamsApi = {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ roles }),
+    }),
+  setTeamDisplayOrder: (teamId: number, displayOrder: number) =>
+    apiFetch<{ ok: boolean }>(`/teams/${teamId}/display-order`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ display_order: displayOrder }),
+    }),
+  getTeamGroups: (teamId: number) => apiFetch<{ groups: string[] }>(`/teams/${teamId}/groups`),
+  linkTeamGroup: (teamId: number, groupName: string) =>
+    apiFetch<{ ok: boolean }>(`/teams/${teamId}/groups`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ group_name: groupName }),
+    }),
+  unlinkTeamGroup: (teamId: number, groupName: string) =>
+    apiFetch<{ ok: boolean }>(`/teams/${teamId}/groups/${encodeURIComponent(groupName)}`, {
+      method: "DELETE",
     }),
 };

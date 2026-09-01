@@ -370,7 +370,7 @@ export const Hosts = () => {
       .then((r) => setProxies(r.proxies))
       .catch(() => {});
     api
-      .listHostGroups()
+      .listHostGroups({ mine: true })
       .then((r) => setHostGroups(r.groups))
       .catch(() => {});
   }, []);

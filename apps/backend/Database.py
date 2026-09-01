@@ -90,6 +90,15 @@ CREATE TABLE IF NOT EXISTS host_assignments (
     UNIQUE(hostname, team_id)
 );
 
+-- Explicit team -> Zabbix-host-group links, on top of the implicit same-name group
+-- ZabbixSync.push_team() auto-creates for every team. Lets a team see/filter by a
+-- pre-existing group (e.g. one created directly in Zabbix) that doesn't share its name.
+CREATE TABLE IF NOT EXISTS team_host_groups (
+    team_id    INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    group_name VARCHAR(255) NOT NULL,
+    PRIMARY KEY (team_id, group_name)
+);
+
 CREATE TABLE IF NOT EXISTS dashboard_layouts (
     id         SERIAL PRIMARY KEY,
     owner_type VARCHAR(10) NOT NULL CHECK (owner_type IN ('user', 'team')),
@@ -282,6 +291,12 @@ DELETE FROM notification_history WHERE clock < EXTRACT(EPOCH FROM NOW() - INTERV
 
 -- Team-level roles: members inherit these on login (union with their personal roles).
 ALTER TABLE teams ADD COLUMN IF NOT EXISTS roles TEXT[] DEFAULT '{}';
+
+-- Admin-set display order for a team's own Zabbix host group in team-scoped pickers
+-- (e.g. the Problems/Hosts "Filter by group" dropdown) — lower sorts first. Only
+-- matters for users in 2+ teams, where it controls the order their teams' groups
+-- appear in; single-team users see just their one group regardless.
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 0;
 
 -- Service-status alert rules: 'item' (numeric threshold) or 'service' (health-monitor string check).
 ALTER TABLE alert_rules ADD COLUMN IF NOT EXISTS rule_type VARCHAR(16) NOT NULL DEFAULT 'item';
